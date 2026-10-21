@@ -51,7 +51,7 @@
   const button = (label, action, className = 'outline') => { const node = el('button', label, className); node.type = 'button'; node.addEventListener('click', action); return node; };
   const states = ['draft','submitted','changes_requested','approved','merged'];
   const taskStates = ['proposed','open','in_progress','blocked','completed','archived'];
-  const labels = {open_proposal:'Contribution',area_proposal:'Proposed area',record_annotation:'Clarification',entry_bundle:'Historical entry and linked evidence',layer_candidate:'Layer candidate',filter_proposal:'Filter proposal',citation_correction:'Citation correction',date_correction:'Date correction',location_correction:'Location correction',duplicate_proposal:'Duplicate proposal',qa_report:'QA report',stewardship_report:'Stewardship or documentation'};
+  const labels = {record_update:'Metadata update',open_proposal:'Contribution',area_proposal:'Proposed area',record_annotation:'Clarification',entry_bundle:'Historical entry and linked evidence',layer_candidate:'Layer candidate',filter_proposal:'Filter proposal',citation_correction:'Citation correction',date_correction:'Date correction',location_correction:'Location correction',duplicate_proposal:'Duplicate proposal',qa_report:'QA report',stewardship_report:'Stewardship or documentation'};
   const headings = {area_proposal:'Area',record_annotation:'Clarify',entry_bundle:'Entry',layer_candidate:'Layer',filter_proposal:'Filter',citation_correction:'Citation',date_correction:'Date',location_correction:'Location',duplicate_proposal:'Duplicate',qa_report:'Test',stewardship_report:'Stewardship'};
   const rights = ['unknown','public_domain','licensed','permission','restricted'];
   const uses = ['citation_only','paraphrase','excerpt','media'];
@@ -251,7 +251,11 @@
   function buildIntakeEnvelope(){
     const explanation=byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
-    if(revisionOriginal&&revisionOriginal.type!=='open_proposal')return{...structuredClone(revisionOriginal),summary:explanation};
+    if(revisionOriginal&&revisionOriginal.type!=='open_proposal'){
+      const revised={...structuredClone(revisionOriginal),summary:explanation};
+      if(revised.type==='record_update')revised.payload.change_message=explanation;
+      return revised;
+    }
     const prior=revisionOriginal?structuredClone(revisionOriginal):null;
     const payload=prior?prior.payload:{explanation,geometry:null};
     payload.explanation=explanation;
@@ -388,6 +392,7 @@
       let original;try{original=JSON.parse(s.raw_json);}catch{}
       if(original?.payload){root.append(intakeText(original.payload.explanation));if(original.payload.sources_text)root.append(rawDisclosure('Sources',original.payload.sources_text));root.append(metadata([['Evidence','Unverified']]));}
     }
+    if(s.type==='record_update'&&s.proposal?.change_message)root.append(el('h4','Message'),intakeText(s.proposal.change_message));
     if(!s.application?.applicable)root.append(el('p','Review only','small'));
     if(s.targets?.length)root.append(rawDisclosure('Targets',s.targets));root.append(rawDisclosure('Original',s.raw_json));
     const history=el('details',undefined,'workflow-details');history.append(el('summary','History'));const list=el('ol');[...(s.revisions||[]),...(s.events||[])].forEach(event=>list.append(el('li',pretty(event))));if(!list.children.length)list.append(el('li','No events'));history.append(list);root.append(history);

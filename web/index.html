@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="app.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration.js"></script></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="app.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration.js"></script><script defer src="record-edit-model.js"></script><script defer src="record-editor.js"></script></head>
 <body>
 <a class="skip-link" href="#mapToolsButton">Tools</a>
 <header class="masthead">
@@ -145,6 +145,24 @@
     <p id="registrationStatus" class="small" role="status" hidden></p>
     <p id="registrationError" class="notice" role="alert" tabindex="-1" hidden></p>
     <div id="registrationReceipt" class="registration-receipt" role="status" tabindex="-1" hidden></div>
+  </div>
+</dialog>
+<dialog id="recordEditorDialog" class="record-editor" aria-labelledby="recordEditorTitle">
+  <div class="popout-head"><h2 id="recordEditorTitle">Edit</h2><button id="closeRecordEditor" class="close-control" type="button" aria-label="Close editor"><span aria-hidden="true">×</span></button></div>
+  <div class="record-editor-content">
+    <p id="recordEditorName" class="record-editor-name"></p>
+    <div class="record-editor-service"><p id="recordEditorStatus" class="small" role="status"></p><button id="reloadRecordEditor" class="textbutton" type="button" hidden>Retry</button></div>
+    <form id="recordEditorForm" novalidate>
+      <label for="recordChangeMessage">Change message<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
+      <div id="recordEditorFields"></div>
+      <button id="previewRecordEdit" class="primary" type="submit">Preview</button>
+    </form>
+    <div id="recordEditorErrors" role="alert" tabindex="-1" hidden></div>
+    <section id="recordEditorPreview" aria-labelledby="recordEditorPreviewTitle" tabindex="-1" hidden>
+      <h3 id="recordEditorPreviewTitle">Preview</h3><p id="recordEditorPreviewMode" class="small"></p><div id="recordEditorDiff"></div>
+      <button id="submitRecordEdit" class="primary" type="button" disabled>Submit</button>
+    </section>
+    <div id="recordEditorReceipt" role="status" tabindex="-1" hidden></div>
   </div>
 </dialog>
 <noscript><div class="noscript">Enable JavaScript to use the map.</div></noscript>

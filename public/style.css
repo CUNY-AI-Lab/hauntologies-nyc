@@ -172,3 +172,34 @@ html,body,.workspace{overflow:clip}
   #filtersPanel .close-control::before{inset:8px}
   #filtersPanel .close-control::after{top:8px;right:8px}
 }
+
+/* Metadata proposals are contained within the editor overlay. */
+.recordlist .place-card .place-contribute,.recordlist .place-card .place-edit{display:inline-flex;width:auto;align-items:center;justify-content:center;min-height:44px}
+.recordlist .place-card .place-edit{min-width:64px;margin:0 0 12px;padding:8px 12px;border:1px solid #625a4e;background:#151512}
+#recordEditorDialog{width:min(460px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:0;background:var(--paper);color:var(--ink);overflow:auto;overscroll-behavior:contain}
+#recordEditorDialog .popout-head{position:sticky;top:0;z-index:2;background:var(--paper)}
+#recordEditorDialog h2{font:500 16px/1.4 Arial,Helvetica,sans-serif}
+#recordEditorDialog .record-editor-content{padding:16px;min-width:0}
+#recordEditorDialog .record-editor-name{font-size:15px;overflow-wrap:anywhere;margin:0 0 12px}
+#recordEditorDialog .record-editor-service{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+#recordEditorDialog .record-editor-service p{margin:0;flex:1}
+#recordEditorDialog .record-editor-service:has(p:empty) {display:none}
+#recordEditorDialog form{display:grid;gap:14px}
+#recordEditorDialog details{border-top:1px solid var(--line)}
+#recordEditorDialog summary{cursor:pointer;min-height:44px;display:list-item;list-style-position:inside;padding:10px 0;font-size:13px}
+#recordEditorDialog .record-edit-group{display:grid;gap:12px;padding:4px 0 16px}
+#recordEditorDialog label{min-width:0;font-size:12px}
+#recordEditorDialog :is(input,select,textarea,button){min-height:44px;scroll-margin-block:16px}
+#recordEditorDialog :is(input,select,textarea){font-size:16px}
+#recordEditorDialog form>.primary,#recordEditorDialog #submitRecordEdit{justify-self:start;min-width:96px}
+#recordEditorDialog .record-edit-link{display:inline-flex;align-items:center;min-height:44px;font-size:12px}
+#recordEditorDialog #recordEditorErrors{margin:14px 0;border-left:2px solid var(--orange);padding:10px 12px;font-size:13px}
+#recordEditorDialog #recordEditorErrors ul{margin:0;padding-left:16px}
+#recordEditorDialog #recordEditorPreview,#recordEditorDialog #recordEditorReceipt{margin:20px 0}
+#recordEditorDialog #recordEditorPreview h3,#recordEditorDialog #recordEditorReceipt h3{margin:0 0 12px;font-size:16px}
+#recordEditorDialog .record-edit-diff{border-top:1px solid var(--line);padding:12px 0}
+#recordEditorDialog .record-edit-diff h4{margin:0 0 8px}
+#recordEditorDialog .record-edit-diff dl{margin:0;display:grid;gap:4px}
+#recordEditorDialog .record-edit-diff dt{font-size:11px;color:var(--muted)}
+#recordEditorDialog .record-edit-diff dd{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
+#recordEditorDialog #recordEditorReceipt p{overflow-wrap:anywhere;font-size:12px}

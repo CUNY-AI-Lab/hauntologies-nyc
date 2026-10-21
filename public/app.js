@@ -199,6 +199,8 @@ function addContributionAction(card,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!hostedRecords.some(x=>x.id===r.id)))return;
  const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
  button.addEventListener('click',()=>{switchPanel('draftPanel');$('sidecarTitle').textContent='Submit';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
+ const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
+ edit.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}})));card.append(edit);
 }
 function placeFacts(r){
  const p=PlaceSummary.view(r);
