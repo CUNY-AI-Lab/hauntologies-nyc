@@ -1,0 +1,19 @@
+import fs from 'node:fs/promises';
+const config=JSON.parse(await fs.readFile(new URL('../dist/server/wrangler.json',import.meta.url),'utf8'));
+const db=JSON.parse(await fs.readFile(new URL('../wrangler.d1.json',import.meta.url),'utf8'));
+Object.assign(config,{
+  name:'hauntologies-nyc',
+  topLevelName:'hauntologies-nyc',
+  account_id:db.account_id,
+  main:'demo-worker.mjs',
+  workers_dev:false,
+  preview_urls:false,
+  d1_databases:db.d1_databases.map(({migrations_dir,...binding})=>binding),
+  assets:{...config.assets,run_worker_first:['/api','/api/*','/data/source-inventory.json']},
+  vars:{...config.vars,CAIL_ENABLED:'false'}
+});
+await fs.copyFile(new URL('../deployment/demo-gate.mjs',import.meta.url),new URL('../dist/server/demo-gate.mjs',import.meta.url));
+await fs.copyFile(new URL('../server/registration.mjs',import.meta.url),new URL('../dist/server/registration.mjs',import.meta.url));
+await fs.writeFile(new URL('../dist/server/demo-worker.mjs',import.meta.url),"import handler from './index.js';\nimport {createDemoWorker} from './demo-gate.mjs';\nimport {handleRegistration} from './registration.mjs';\nexport default createDemoWorker(handler,handleRegistration);\n");
+await fs.writeFile(new URL('../dist/server/wrangler.demo.json',import.meta.url),JSON.stringify(config,null,2)+'\n');
+console.log('Prepared hauntologies-nyc with DB binding and registration; contribution/review APIs blocked, public and preview routes disabled.');

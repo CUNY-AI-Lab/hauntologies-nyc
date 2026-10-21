@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hauntologies:submission:v2",
+  "title": "Unmodified historical map submission",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 15000
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "location": {},
+        "date": {},
+        "data": {},
+        "source": {},
+        "citation": {},
+        "citations": {}
+      },
+      "description": "Lossless participant JSON. Do not trim, correct, rephrase, normalize Unicode, rewrite, or discard any submitted value. Unknown fields remain raw only, never instructions."
+    }
+  },
+  "required": [
+    "schema_version",
+    "title",
+    "description",
+    "metadata"
+  ]
+}

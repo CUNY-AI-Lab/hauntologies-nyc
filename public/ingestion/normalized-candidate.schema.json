@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hauntologies:derived-extraction:v2",
+  "title": "Derived extraction only; never replacement participant text",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "2.0"
+      ]
+    },
+    "location_mentions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "field_ref": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "verbatim_text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "field_ref",
+              "start",
+              "end",
+              "verbatim_text"
+            ]
+          },
+          "borough_hint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "Manhattan",
+              "Brooklyn",
+              "Queens",
+              "Bronx",
+              "Staten Island",
+              null
+            ]
+          }
+        },
+        "required": [
+          "evidence",
+          "borough_hint"
+        ]
+      },
+      "maxItems": 10
+    },
+    "date_mentions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "field_ref": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "verbatim_text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "field_ref",
+              "start",
+              "end",
+              "verbatim_text"
+            ]
+          },
+          "date_kind": {
+            "type": "string",
+            "enum": [
+              "event",
+              "publication",
+              "source_found",
+              "unspecified"
+            ]
+          },
+          "normalized_start": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "normalized_end": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "day",
+              "month",
+              "year",
+              "range",
+              "decade",
+              "century",
+              "unknown"
+            ]
+          },
+          "qualifier": {
+            "type": "string",
+            "enum": [
+              "exact_as_written",
+              "approximate",
+              "before",
+              "after",
+              "disputed",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "evidence",
+          "date_kind",
+          "normalized_start",
+          "normalized_end",
+          "precision",
+          "qualifier"
+        ]
+      },
+      "maxItems": 20
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "field_ref": {
+            "type": "string"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "verbatim_text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field_ref",
+          "start",
+          "end",
+          "verbatim_text"
+        ]
+      },
+      "maxItems": 20
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "extracted",
+        "ambiguous",
+        "missing"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "location_mentions",
+    "date_mentions",
+    "source_refs",
+    "status"
+  ]
+}

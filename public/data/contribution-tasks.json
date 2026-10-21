@@ -1,0 +1,631 @@
+{
+  "schema_version": "1.0",
+  "status_note": "All 23 current seed opportunities remain proposed and unassigned. Private source-document and local reconciliation metadata are omitted from this source export; no task approval or completion is implied.",
+  "implementation_choices": {
+    "section": "Display groupings added for navigation; not canonical machine enums.",
+    "type": "Display labels for contribution categories; not backend submission enums, authority, or permission grants."
+  },
+  "tasks": [
+    {
+      "task_id": "HNY-001",
+      "bounded_task": "Reconcile NYC layer inventory",
+      "role": "Layer researcher",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 30,
+        "max": 45,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Catalog reconciliation with missing/stale fields and explicit already-verified references",
+      "reviewer_role": "mapping reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Separate aerial capture from publication/georeferencing dates",
+        "Record missing fields as unknown",
+        "No activation"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Maps and layers",
+      "type": "Layer research"
+    },
+    {
+      "task_id": "HNY-002",
+      "bounded_task": "Resolve one layer rights chain",
+      "role": "Rights researcher",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 25,
+        "max": 40,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Rights worksheet with terms URLs, permitted use and unresolved conflicts",
+      "reviewer_role": "rights reviewer",
+      "dependencies": [
+        "HNY-001"
+      ],
+      "acceptance_criteria": [
+        "Do not equate public access with permission",
+        "Unresolved rights leave layer disabled"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Maps and layers",
+      "type": "Rights research"
+    },
+    {
+      "task_id": "HNY-003",
+      "bounded_task": "Verify one layer coverage",
+      "role": "Map QA contributor",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 30,
+        "max": 50,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Coverage and sample-verification log",
+      "reviewer_role": "mapping reviewer",
+      "dependencies": [
+        "HNY-001"
+      ],
+      "acceptance_criteria": [
+        "Image decode plus geographic-content inspection",
+        "Do not bulk download",
+        "Record untested browser CORS honestly"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Maps and layers",
+      "type": "QA report"
+    },
+    {
+      "task_id": "HNY-004",
+      "bounded_task": "Find one non-aerial map",
+      "role": "Archive researcher",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 30,
+        "max": 45,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "One candidate item citation and metadata record",
+      "reviewer_role": "mapping reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Do not treat archived NYPL Map Warper embeds as live",
+        "Raw image or IIIF is not automatically georeferenced",
+        "No fabricated tile endpoint"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Maps and layers",
+      "type": "Layer research"
+    },
+    {
+      "task_id": "HNY-005",
+      "bounded_task": "Test unavailable layer fallback",
+      "role": "Map QA contributor",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 25,
+        "max": 40,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Repro steps and expected/observed behavior",
+      "reviewer_role": "mapping reviewer",
+      "dependencies": [
+        "HNY-001"
+      ],
+      "acceptance_criteria": [
+        "List remains usable",
+        "No silent substitution of historical period",
+        "Disabled explanation and attribution remain legible"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Maps and layers",
+      "type": "QA report"
+    },
+    {
+      "task_id": "HNY-006",
+      "bounded_task": "Specify period uncertainty filters",
+      "role": "Interaction contributor",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 20,
+        "max": 35,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Filter truth table with six synthetic records",
+      "reviewer_role": "data reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Closed period overlap start<=filterEnd and end>=filterStart",
+        "Unknown explicit option",
+        "No fabricated date bounds",
+        "One state shared by map/list"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Filters and uncertainty",
+      "type": "Filter proposal"
+    },
+    {
+      "task_id": "HNY-007",
+      "bounded_task": "Check layer and claim independence",
+      "role": "Map QA contributor",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 15,
+        "max": 25,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Three scenarios and label proposal",
+      "reviewer_role": "mapping reviewer",
+      "dependencies": [
+        "HNY-006"
+      ],
+      "acceptance_criteria": [
+        "Layer date separate from claim historical period",
+        "Filters do not imply source endorsement"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Filters and uncertainty",
+      "type": "QA report"
+    },
+    {
+      "task_id": "HNY-008",
+      "bounded_task": "Document one reported haunting",
+      "role": "Source researcher",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 30,
+        "max": 45,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "One Entries row plus report Source use",
+      "reviewer_role": "evidence reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Story explicitly attributed",
+        "Report date distinct from alleged event",
+        "Index is lead not supernatural evidence"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Historical research",
+      "type": "Historical evidence"
+    },
+    {
+      "task_id": "HNY-009",
+      "bounded_task": "Trace one vanished business",
+      "role": "Source researcher",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 40,
+        "max": 60,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Entry and existence/change sources, or bounded archival-gap question",
+      "reviewer_role": "evidence reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Missing modern listing does not prove disappearance",
+        "If change unsupported, do not assert it"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Historical research",
+      "type": "Historical evidence"
+    },
+    {
+      "task_id": "HNY-010",
+      "bounded_task": "Bound one census gap",
+      "role": "Archive researcher",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 30,
+        "max": 45,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Archival-gap Entry, SearchLog and source locator",
+      "reviewer_role": "evidence reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Distinguish documented missing volumes from no search match",
+        "State historical jurisdiction/coverage limits",
+        "No unsupported intentional-erasure claim"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Historical research",
+      "type": "Archival-gap evidence"
+    },
+    {
+      "task_id": "HNY-011",
+      "bounded_task": "Verify three source locators",
+      "role": "Citation checker",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 20,
+        "max": 30,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Three citation checks with proposed diffs",
+      "reviewer_role": "evidence reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Preserve original source refs",
+        "Actual consulted date",
+        "Unknown metadata explicit"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Corrections and rights",
+      "type": "Citation correction"
+    },
+    {
+      "task_id": "HNY-013",
+      "bounded_task": "Clarify one ambiguous date",
+      "role": "Date researcher",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 15,
+        "max": 25,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Entry field diff and dated source locator",
+      "reviewer_role": "evidence reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Unknown stays null",
+        "Circa bounds explained",
+        "No invalid one-sided v1.0 interval"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Corrections and rights",
+      "type": "Date correction"
+    },
+    {
+      "task_id": "HNY-016",
+      "bounded_task": "Test keyboard contribution path",
+      "role": "Accessibility tester",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 25,
+        "max": 40,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Steps, focus observations, failures and version",
+      "reviewer_role": "accessibility reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Visible focus",
+        "No trap",
+        "Labeled errors",
+        "Result reachable without map dragging"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Accessibility and documentation",
+      "type": "QA report"
+    },
+    {
+      "task_id": "HNY-017",
+      "bounded_task": "Check unlocated list parity",
+      "role": "Accessibility tester",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 20,
+        "max": 30,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Expected counts versus observed map/list counts",
+      "reviewer_role": "accessibility reviewer",
+      "dependencies": [
+        "HNY-006"
+      ],
+      "acceptance_criteria": [
+        "Null geometry remains in list",
+        "Marker count may differ and is labeled",
+        "Uncertainty conveyed beyond color"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Accessibility and documentation",
+      "type": "QA report"
+    },
+    {
+      "task_id": "HNY-018",
+      "bounded_task": "Check one mobile viewport",
+      "role": "Device tester",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 20,
+        "max": 30,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Device/browser/version report and screenshots if rights permit",
+      "reviewer_role": "QA reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "No inaccessible offscreen control",
+        "Text readable",
+        "Zoom does not hide submit/errors",
+        "Do not claim physical-device testing for emulation"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Accessibility and documentation",
+      "type": "QA report"
+    },
+    {
+      "task_id": "HNY-019",
+      "bounded_task": "Write one contribution walkthrough",
+      "role": "Documentation contributor",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 25,
+        "max": 40,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Plain-text walkthrough linked to current fields",
+      "reviewer_role": "documentation reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Distinguish local export from shared receipt",
+        "No real identities",
+        "Include unknown location/date example"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Accessibility and documentation",
+      "type": "Documentation"
+    },
+    {
+      "task_id": "HNY-020",
+      "bounded_task": "Document reviewer decision rubric",
+      "role": "Documentation contributor",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 25,
+        "max": 40,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Checklist aligned to v1.0 enums",
+      "reviewer_role": "editorial reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Review is not automatic validation",
+        "No self-approval",
+        "Decision names precise revision and rationale"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Accessibility and documentation",
+      "type": "Documentation"
+    },
+    {
+      "task_id": "HNY-021",
+      "bounded_task": "Triage five submissions",
+      "role": "Queue steward",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 20,
+        "max": 30,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Queue handoff with submission IDs and next action",
+      "reviewer_role": "triage reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Do not edit originals",
+        "No factual approval or permissions changes",
+        "Private identities omitted from shared summary"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Queue and release stewardship",
+      "type": "Stewardship report"
+    },
+    {
+      "task_id": "HNY-022",
+      "bounded_task": "Prepare one shift handoff",
+      "role": "Queue steward",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 10,
+        "max": 20,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Timestamped shift report and next-shift checklist",
+      "reviewer_role": "release steward",
+      "dependencies": [
+        "HNY-021"
+      ],
+      "acceptance_criteria": [
+        "No arbitrary external outreach",
+        "No private identity disclosure",
+        "Distinguish pending, failed and uncertain job outcomes"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Queue and release stewardship",
+      "type": "Stewardship report"
+    },
+    {
+      "task_id": "HNY-023",
+      "bounded_task": "Audit three review histories",
+      "role": "Review coordinator",
+      "skill_level": "intermediate",
+      "estimated_minutes": {
+        "min": 25,
+        "max": 40,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Audit findings and correction proposals",
+      "reviewer_role": "editorial reviewer",
+      "dependencies": [
+        "HNY-020"
+      ],
+      "acceptance_criteria": [
+        "Role label not authentication",
+        "Stale approval flagged",
+        "No retroactive manufactured approvals"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Queue and release stewardship",
+      "type": "Review audit"
+    },
+    {
+      "task_id": "HNY-024",
+      "bounded_task": "Rehearse safe apply failures",
+      "role": "Release QA contributor",
+      "skill_level": "advanced",
+      "estimated_minutes": {
+        "min": 45,
+        "max": 60,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Test matrix with actual pass/fail/not-run evidence",
+      "reviewer_role": "release reviewer",
+      "dependencies": [
+        "HNY-020"
+      ],
+      "acceptance_criteria": [
+        "No live mutations",
+        "One approved operation applies once",
+        "Reconcile uncertain outcome before retry",
+        "No submitted code execution"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Queue and release stewardship",
+      "type": "Release QA"
+    },
+    {
+      "task_id": "HNY-025",
+      "bounded_task": "Rehearse verification and rollback",
+      "role": "Release QA contributor",
+      "skill_level": "advanced",
+      "estimated_minutes": {
+        "min": 40,
+        "max": 60,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "Release manifest, before/after comparison and rollback receipt",
+      "reviewer_role": "release reviewer",
+      "dependencies": [
+        "HNY-024",
+        "HNY-017"
+      ],
+      "acceptance_criteria": [
+        "Only affected release restored",
+        "Original evidence retained",
+        "Unrelated later changes not lost",
+        "Do not mark merged before checks pass"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Queue and release stewardship",
+      "type": "Release QA"
+    },
+    {
+      "task_id": "HNY-026",
+      "bounded_task": "Inventory new contribution opportunities",
+      "role": "Documentation contributor",
+      "skill_level": "beginner",
+      "estimated_minutes": {
+        "min": 15,
+        "max": 25,
+        "kind": "planning_estimate"
+      },
+      "evidence_deliverable": "New TaskLedger proposals with stable IDs",
+      "reviewer_role": "triage reviewer",
+      "dependencies": [
+        "HNY-021"
+      ],
+      "acceptance_criteria": [
+        "No duplicate tasks",
+        "No invented assignments",
+        "Separate opportunity from accepted deliverable"
+      ],
+      "status": "proposed",
+      "assignee": null,
+      "source_references": [],
+      "next_action": null,
+      "linked_submissions": [],
+      "section": "Queue and release stewardship",
+      "type": "Task proposal"
+    }
+  ]
+}

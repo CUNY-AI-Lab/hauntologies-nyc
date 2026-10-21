@@ -1,0 +1,11 @@
+{
+  "account_id": "452c33847cf5cb1e46f391fca32fd1b5",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hauntologies-nyc",
+      "database_id": "df7f1e92-e339-4e25-ac30-989dd68d8dfc",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

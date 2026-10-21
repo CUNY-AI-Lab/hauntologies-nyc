@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="app.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration.js"></script></head>
+<body>
+<a class="skip-link" href="#mapToolsButton">Tools</a>
+<header class="masthead">
+  <div class="brand"><p class="eyebrow">Halloween Hackathon</p><h1>Hauntologies of New York</h1><p id="programCredits" class="program-credits"><span>Graduate Center</span><span>M.A. Program in Digital Humanities</span><span>M.S. Program in Data Analysis and Visualization</span></p></div>
+  <nav class="header-tools" aria-label="Map controls"><button class="outline" id="mapToolsButton" type="button" aria-controls="mapTools" aria-expanded="false">Tools</button><button class="outline" id="filtersButton" type="button" aria-controls="filtersPanel" aria-expanded="false">Filters <span id="filtersActiveCount" class="filter-active-count" hidden>0</span></button><button class="outline" id="layersButton" type="button" aria-controls="layersPanel" aria-expanded="false">Layers</button></nav>
+</header>
+<nav class="contribution-navigation" aria-label="Participation"><button class="outline" id="registerButton" type="button" aria-haspopup="dialog" aria-controls="registrationDialog">Register</button><button class="outline" id="toolsButton" type="button" aria-controls="toolsMenu" aria-expanded="false">Contribute</button></nav>
+<nav id="toolsMenu" class="tools-menu" aria-label="Contributions" hidden>
+  <button id="tasksTool" type="button" aria-controls="researchSidecar">Tasks</button>
+  <button id="submitTool" type="button" aria-controls="researchSidecar">Submit</button>
+  <button id="reviewTool" type="button" aria-controls="researchSidecar">Review</button>
+</nav>
+<main class="workspace">
+  <section class="mapspace" aria-label="Map"><div class="mapwrap"><div id="map" role="region" aria-label="New York map" tabindex="0"></div></div></section>
+  <button id="recenterMap" class="outline recenter-map" type="button" aria-label="Recenter New York City" title="Recenter New York City"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="6"/></svg><span>NYC</span></button>
+  <aside id="mapTools" class="map-tools popout" aria-labelledby="mapToolsTitle" hidden>
+    <div class="popout-head"><h2 id="mapToolsTitle" tabindex="-1">Tools</h2><button id="closeMapTools" class="close-control" type="button" aria-label="Close"><span aria-hidden="true">×</span></button></div>
+    <div class="popout-content">
+      <div class="map-actions">
+        <button id="placesTool" class="outline" type="button" aria-controls="researchSidecar">Places</button>
+        <div id="zoomTools" class="zoom-tools" role="group" aria-label="Zoom"></div>
+        <button id="showAll" type="button" hidden>NYC</button><button id="resetMap" type="button" hidden>Recenter</button>
+      </div>
+    </div>
+  </aside>
+  <aside id="layersPanel" class="map-tools layers-popout popout" aria-labelledby="layersTitle" hidden>
+    <div class="popout-head"><h2 id="layersTitle" tabindex="-1">Layers</h2><button id="closeLayers" class="close-control" type="button" aria-label="Close layers"><span aria-hidden="true">×</span></button></div>
+    <div class="popout-content">
+      <label for="layerSelect">Map<select id="layerSelect"><option value="none">Streets</option></select></label>
+      <div id="yearStrip" hidden></div>
+      <div id="opacityControl" class="opacitycontrol" hidden><label for="opacity">Map opacity <output id="opacityValue" for="opacity">100%</output></label><input id="opacity" type="range" min="0" max="100" value="100" disabled></div>
+      <section class="map-legend" aria-labelledby="legendTitle"><h3 id="legendTitle">Legend</h3><ul id="mapLegend"></ul></section>
+
+      <div id="mapScope" class="mapScope" hidden></div><div id="mapStatus" class="map-status" role="status"></div>
+      <span id="yearBadge" hidden></span><p id="layerHelp" hidden></p>
+    </div>
+  </aside>
+  <aside id="filtersPanel" class="filters-popout popout" aria-labelledby="filtersTitle" hidden>
+    <div class="popout-head"><h2 id="filtersTitle" tabindex="-1">Filters</h2><button id="closeFilters" class="close-control" type="button" aria-label="Close"><span aria-hidden="true">×</span></button></div>
+    <div class="popout-content">
+<label class="search-label" for="search">Search</label><input id="search" placeholder="Place, claim, or source" type="search" autocomplete="off">
+<details id="filterDetails" class="filter-details" open><summary hidden>Filters</summary>
+<div class="filter-grid">
+<label for="filterBorough">Borough<select id="filterBorough"><option value="all">All boroughs</option><option>Manhattan</option><option>Brooklyn</option><option>Queens</option><option>Bronx</option><option>Staten Island</option></select></label>
+<label for="filterType">Place type<select id="filterType"><option value="all">All place types</option></select></label>
+<label for="filterStatus">Collection<select id="filterStatus"><option value="all">All records</option><option value="featured" id="featuredOption" hidden>Five borough starters</option><option value="demolished">Demolition list</option><option value="haunting">Ghost story</option><option value="pilot">Place</option><option value="draft">Local drafts</option><option value="pending">Pending server review</option><option value="submitted">Approved submissions</option><option value="unlocated">Unlocated records</option></select></label>
+<label for="filterEvidence">Evidence<select id="filterEvidence"><option value="all">All evidence</option></select></label>
+<label for="filterReview">Review<select id="filterReview"><option value="all">All review states</option></select></label>
+<label for="filterGeo">Location certainty<select id="filterGeo"><option value="all">All locations</option></select></label>
+<label class="wide" for="filterPeriod">Period<select id="filterPeriod"><option value="all">All periods</option><option value="known">Known period</option><option value="unknown">Unknown period</option><option value="custom">Year range</option></select></label>
+<div class="period-bounds wide" id="periodBounds"><label for="periodStart">From year<input id="periodStart" type="number" step="1" placeholder="e.g. 1900" aria-describedby="periodHelp"></label><label for="periodEnd">Through year<input id="periodEnd" type="number" step="1" placeholder="e.g. 1950" aria-describedby="periodHelp"></label></div>
+<p class="filter-help wide" id="periodHelp" hidden>Historical claim dates, not source publication or imagery dates. Unknown periods remain explicitly unknown.</p>
+</div></details>
+<div class="result-actions"><button id="resetFilters" class="textbutton" type="button">Reset</button><button id="fitFiltered" class="textbutton" type="button">Fit</button></div>
+<p id="filterCount" class="count" aria-live="polite"></p>
+    </div>
+  </aside>
+  <aside id="researchSidecar" class="research popout" aria-labelledby="sidecarTitle" hidden>
+    <div class="sidecar-head popout-head"><h2 id="sidecarTitle" tabindex="-1">Places</h2><button id="closeResearch" class="close-control" type="button" aria-label="Close"><span aria-hidden="true">×</span></button></div>
+    <nav class="tabs" aria-label="Panels" hidden><button id="caseTab" class="active" data-panel="casePanel">Places</button><button id="draftTab" data-panel="draftPanel">Submit</button><button id="sourcesTab" data-panel="sourcesPanel">Sources</button></nav>
+<section id="casePanel" class="panel active" tabindex="-1">
+
+<div id="inventorySummary" class="inventory-summary" hidden></div>
+<div id="recordList" class="recordlist" aria-label="Mapped records"></div>
+<section class="unlocated-section" aria-labelledby="unlocatedHeading"><h3 id="unlocatedHeading">Unlocated</h3><div id="unlocatedList" class="recordlist"></div></section>
+<details class="starter-cases" hidden><summary>Five borough starting points</summary><div id="featuredCases" hidden></div></details>
+<article id="detail" tabindex="-1" aria-label="Selected record"></article>
+</section>
+<section id="draftPanel" class="panel"><section id="contributionWorkspace" class="contribution-workspace" aria-labelledby="contributionWorkspaceTitle">
+  <h2 id="contributionWorkspaceTitle" hidden>Submit</h2>
+  <p id="workflowConnection" class="workflow-connection" role="status"></p>
+  <div class="workflow-tabs" role="group" aria-label="Contribution views" hidden>
+    <button type="button" class="active" data-workflow-view="submissionView" aria-pressed="true">Submit</button>
+    <button type="button" data-workflow-view="reviewView" aria-pressed="false">Review</button>
+  </div>
+  <section id="taskView" class="workflow-view" hidden aria-labelledby="taskTitle">
+    <h3 id="taskTitle" tabindex="-1">Create a task</h3>
+    <form id="createTaskForm">
+      <label for="newTaskTitle">Task<input id="newTaskTitle" required maxlength="200" placeholder="What needs to be done?"></label>
+      <label for="newTaskDescription">Description<textarea id="newTaskDescription" rows="3" required maxlength="4000"></textarea></label>
+      <div class="fieldpair"><label for="newTaskSection">Section<select id="newTaskSection"><option>Research and sources</option><option>Corrections and rights</option><option>Maps and locations</option><option>Design and accessibility</option><option>Documentation</option></select></label><label for="newTaskSkill">Skill level<select id="newTaskSkill"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label></div>
+      <label for="newTaskStatus">Task status<select id="newTaskStatus"><option value="proposed">Proposed</option><option value="open">Open</option></select></label>
+      <button type="submit" class="primary">Create task</button>
+      <p id="createTaskResult" role="status"></p>
+    </form>
+    <h3>Shared tasks</h3><button type="button" id="refreshSharedTasks" class="outline">Refresh tasks</button><p id="sharedTaskCount" class="count" aria-live="polite"></p><p id="sharedTaskStatus" role="status"></p><div id="taskLedger" class="task-ledger"></div><section id="earlierLocalTasks" hidden></section>
+  </section>
+  <section id="submissionView" class="workflow-view" aria-labelledby="typedFormTitle">
+    <h3 id="typedFormTitle" class="sr-only" tabindex="-1">Submit</h3>
+    <div id="workflowErrors" class="workflow-errors" role="alert" tabindex="-1" hidden></div>
+    <form id="typedContributionForm" novalidate>
+      <p id="revisionContext" class="notice" hidden></p>
+      <label for="contributionSummary">What would you like to contribute?<textarea id="contributionSummary" rows="5" required></textarea></label>
+      <div id="freeformRecordContext" class="buttonrow" hidden><span id="freeformRecordLabel" role="status"></span><button id="removeFreeformRecord" class="textbutton" type="button">Remove</button></div>
+      <details id="freeformContext" class="workflow-details"><summary>Sources</summary>
+        <label for="freeformSources">References or sources<textarea id="freeformSources" rows="3"></textarea></label>
+      </details>
+      <div id="typedCompatibilityFields" hidden inert>
+      <label for="contributionFlow">Contribution<select id="contributionFlow"><option value="new">New point or area</option><option value="clarify">Clarify a record</option><option value="other">Other contribution</option></select></label>
+      <div id="clarificationTargetGroup" hidden><label for="clarificationTarget">Existing record<select id="clarificationTarget"><option value="">Choose a record</option></select></label><p id="clarificationTargetHelp" class="small" role="status"></p></div>
+      <label id="contributionTaskGroup" for="contributionTask">Linked task<select id="contributionTask"><option value="">No task selected</option></select></label>
+      <label id="contributionTypeGroup" for="contributionType">Contribution type<select id="contributionType">
+        <option value="qa_report">QA report</option><option value="stewardship_report">Stewardship or documentation</option><option value="layer_candidate">Layer candidate</option><option value="filter_proposal">Filter proposal</option><option value="citation_correction">Citation correction</option><option value="date_correction">Date correction</option><option value="location_correction">Location correction</option><option value="duplicate_proposal">Duplicate proposal</option><option value="entry_bundle">Historical entry and linked evidence</option>
+      </select></label>
+      <label for="contributionTitle">Title<input id="contributionTitle" placeholder="One concrete contribution"></label>
+      <fieldset id="typedPayloadFields" class="workflow-fieldset"><legend>Contribution details</legend></fieldset>
+      <fieldset id="contributionSourcesGroup" class="workflow-fieldset"><legend>Sources</legend><div id="submissionSources"></div><button id="addSubmissionSource" type="button" class="outline">Add source</button></fieldset>
+      <details id="contributionTargetsGroup" class="workflow-details"><summary>Targets</summary><label for="contributionTargetPick">Current hosted record<select id="contributionTargetPick"><option value="">No hosted targets available</option></select></label><button id="useContributionTarget" type="button" class="outline" disabled>Use record</button><div id="targetSnapshot"></div><div id="submissionTargets"></div><button id="addSubmissionTarget" type="button" class="outline">Add target</button></details>
+      <details id="contributionAttachmentsGroup" class="workflow-details"><summary>Attachments</summary><div id="submissionAttachments"></div><button id="addSubmissionAttachment" type="button" class="outline">Add attachment</button></details>
+      <label class="consent-line"><input id="publicCreditConsent" type="checkbox"> Credit me with approved material.</label>
+      <label for="publicCreditLabel">Optional public credit<input id="publicCreditLabel" placeholder="Leave blank for no public credit" disabled autocomplete="off"></label>
+        <button id="exportContribution" class="outline" type="button">Export</button>
+      </div>
+      <div class="buttonrow"><button id="previewContribution" class="primary" type="submit">Preview</button><button id="cancelRevision" class="textbutton" type="button" hidden>Cancel</button></div>
+    </form>
+    <section id="contributionPreview" class="workflow-preview" aria-labelledby="previewContributionTitle" tabindex="-1" hidden></section>
+    <div id="contributionReceipt" class="workflow-receipt" role="status" tabindex="-1" hidden></div>
+  </section>
+  <section id="reviewView" class="workflow-view" hidden aria-labelledby="reviewQueueTitle">
+    <h3 id="reviewQueueTitle" class="sr-only" tabindex="-1">Review</h3>
+    <p id="reviewCapabilityNotice" class="notice"></p>
+    <button type="button" id="refreshContributions" class="outline">Refresh</button>
+    <p id="queueSummary" class="count" aria-live="polite"></p>
+    <label for="queueState">Status<select id="queueState"><option value="all">All review states</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="changes_requested">Needs information</option><option value="approved">Approved</option><option value="merged">Merged</option></select></label>
+    <div id="contributionQueue" class="submission-queue"></div>
+    <article id="submissionDetail" class="submission-detail" tabindex="-1" hidden></article>
+    <section class="workflow-jobs" aria-labelledby="jobHeading"><h3 id="jobHeading">Jobs</h3><div id="applicationJobs"></div></section>
+  </section>
+</section>
+<section id="sourcesPanel" class="panel" hidden><div id="sourceAudit"></div><div id="selectedLayerInfo"></div><button id="fitLayer" type="button">Fit</button><div id="layerLedger"></div></section>
+</aside></main>
+<button id="openResearch" aria-controls="researchSidecar" aria-expanded="false" hidden>Places</button>
+<dialog id="registrationDialog" class="registration-dialog" aria-labelledby="registrationTitle">
+  <div class="popout-head"><h2 id="registrationTitle">Register</h2><button id="closeRegistration" class="close-control" type="button" aria-label="Close registration"><span aria-hidden="true">×</span></button></div>
+  <div class="registration-content">
+    <div class="registration-event"><p><time datetime="2026-10-30">October 30, 2026</time><br>3–6 pm Eastern<br>DH Lounge 5307</p><p>DH MA / DAV MS</p></div>
+    <form id="registrationForm">
+      <label for="registrationName">Name<input id="registrationName" name="name" autocomplete="name" maxlength="120" required></label>
+      <label for="registrationEmail">Email<input id="registrationEmail" name="email" type="email" autocomplete="email" maxlength="254" required></label>
+      <button id="submitRegistration" class="primary" type="submit">Register</button>
+    </form>
+    <p id="registrationStatus" class="small" role="status" hidden></p>
+    <p id="registrationError" class="notice" role="alert" tabindex="-1" hidden></p>
+    <div id="registrationReceipt" class="registration-receipt" role="status" tabindex="-1" hidden></div>
+  </div>
+</dialog>
+<noscript><div class="noscript">Enable JavaScript to use the map.</div></noscript>
+</body></html>
