@@ -18,7 +18,7 @@ function project(record){
  result.display_reason=view.description;
  result.display_source_url=view.sourceUrl;
  result.location_text=view.location;
- for(const key of ['source_title','source_type','source_citation','source_locator','source_date'])if(Object.hasOwn(record,key)&&(typeof record[key]==='string'||record[key]===null))result[key]=record[key];
+ for(const key of ['source_url','source_title','source_type','source_citation','source_locator','source_date'])if(Object.hasOwn(record,key)&&(typeof record[key]==='string'||record[key]===null))result[key]=record[key];
  if(Array.isArray(record.sources))result.sources=record.sources.map(source=>source&&typeof source==='object'&&!Array.isArray(source)?referenceMetadata(source,referenceKeys):{});
  if(record.image&&typeof record.image==='object'&&!Array.isArray(record.image))result.image=referenceMetadata(record.image,imageKeys);
  const before=AtlasModel.normalize(record),after=AtlasModel.normalize(result);

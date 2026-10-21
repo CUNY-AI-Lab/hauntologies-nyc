@@ -148,3 +148,9 @@ test('target change before revision transaction keeps the previous immutable rev
  const response=await call(h,'revise',{idempotency_key:key(),submission_id:created.submission.id,expected_revision:1,submission_json:JSON.stringify(envelope(resolved,{title:'Later proposal'}))});status(response,409);
  assert.equal(count(h,'workflow_revisions'),1);assert.equal((await h.store.getRevision(created.submission.id,1)).raw_json,created.request.submission_json);assert.equal(count(h,'workflow_receipts'),1);
 });
+
+test('primary source URL stays paired with its original title rather than a display shortcut',()=>{
+ const record={id:'synthetic-source-pair',title:'Synthetic place',source_url:'https://example.org/catalog',source_title:'Synthetic catalog',display_source_url:'https://example.org/place'};
+ const original=JSON.stringify(record),snapshot=Model.snapshot(record);
+ assert.equal(snapshot.source_url,record.source_url);assert.equal(snapshot.source_citation,record.source_title);assert.equal(JSON.stringify(record),original);
+});

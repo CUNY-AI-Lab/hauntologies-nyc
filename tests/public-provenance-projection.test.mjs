@@ -18,7 +18,7 @@ test('public provenance retains reference and image metadata without private not
   const imageKeys=new Set(['url','sourceUrl','creator','credit','license','licenseUrl','caption','alt']);
   for(let i=0;i<full.length;i++){
    assert.equal(published[i].id,full[i].id);
-   for(const key of ['source_title','source_type','source_citation','source_locator','source_date'])if(Object.hasOwn(full[i],key)&&(typeof full[i][key]==='string'||full[i][key]===null))assert.equal(published[i][key],full[i][key]);
+   for(const key of ['source_url','source_title','source_type','source_citation','source_locator','source_date'])if(Object.hasOwn(full[i],key)&&(typeof full[i][key]==='string'||full[i][key]===null))assert.equal(published[i][key],full[i][key]);
    for(const forbidden of ['original_submission','original_text','historical_context','interpretation','evidence_summary','source_quality','data_quality_flags','checked_date','rights_or_license'])assert.equal(Object.hasOwn(published[i],forbidden),false,full[i].id+' '+forbidden);
    for(const [index,source]of (published[i].sources||[]).entries()){
     assert(Object.keys(source).every(k=>sourceKeys.has(k)));assert.equal(source.url,full[i].sources[index].url);assert.equal(source.title,full[i].sources[index].title);assert.equal(Object.hasOwn(source,'note'),false);
