@@ -40,6 +40,7 @@ function switchPanel(id){
 }
 $('toolsButton').addEventListener('click',()=>{const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
+document.addEventListener('pointerdown',e=>{if(!$('filtersPanel').hidden&&!$('filtersPanel').contains(e.target)&&!e.target.closest('.header-tools'))closeTools(true)},{capture:true});
 $('mapToolsButton').addEventListener('click',()=>{const open=$('mapTools').hidden;closeTools();toolOpener='mapToolsButton';$('mapTools').hidden=!open;$('mapToolsButton').setAttribute('aria-expanded',String(open));if(open)$('mapToolsTitle').focus()});
 $('layersButton').addEventListener('click',()=>{const open=$('layersPanel').hidden;closeTools();toolOpener='layersButton';$('layersPanel').hidden=!open;$('layersButton').setAttribute('aria-expanded',String(open));if(open)$('layersTitle').focus()});
 $('placesTool').addEventListener('click',()=>{switchPanel('casePanel');$('sidecarTitle').focus()});
@@ -119,7 +120,7 @@ const facetControls={filterBorough:'boroughs',filterType:'placeTypes',filterEvid
 const facetLabels={filterEvidence:{reported_story:'Reported story',source_list:'Source list',source_grounded:'Historical case',archival_gap:'Archival question',unknown:'Unknown'},filterReview:{legacy:'Review not recorded',owner_approved:'Owner approved',unknown:'Unknown'},filterGeo:{approximate:'Approximate'}};
 function populateFacets(){
  const facets=AtlasModel.facets(allRecords());
- const collection=$('filterStatus'),previous=collection.value;collection.replaceChildren(new Option('All records','all'));for(const cat of [...new Set(allRecords().map(r=>r.category))]){const rows=allRecords().filter(r=>r.category===cat);collection.add(new Option(layerName(rows[0]),cat))}const featuredRows=allRecords().filter(r=>r.featured);if(featuredRows.length){const option=new Option('Five borough starters','featured');option.id='featuredOption';collection.add(option)}collection.value=[...collection.options].some(o=>o.value===previous)?previous:'all';
+ const collection=$('filterStatus'),previous=collection.value;collection.replaceChildren(new Option('All','all'));for(const cat of [...new Set(allRecords().map(r=>r.category))]){const rows=allRecords().filter(r=>r.category===cat);collection.add(new Option(layerName(rows[0]),cat))}const featuredRows=allRecords().filter(r=>r.featured);if(featuredRows.length){const option=new Option('Five borough starters','featured');option.id='featuredOption';collection.add(option)}collection.value=[...collection.options].some(o=>o.value===previous)?previous:'all';
  for(const [id,key] of Object.entries(facetControls)){
   const el=$(id),old=el.value;el.replaceChildren(new Option('All','all'));
   for(const item of facets[key])el.add(new Option(facetLabels[id]?.[item.value]||item.label,item.value));

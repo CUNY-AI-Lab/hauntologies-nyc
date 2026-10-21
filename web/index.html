@@ -39,22 +39,22 @@
     </div>
   </aside>
   <aside id="filtersPanel" class="filters-popout popout" aria-labelledby="filtersTitle" hidden>
-    <div class="popout-head"><h2 id="filtersTitle" tabindex="-1">Filters</h2><button id="closeFilters" class="close-control" type="button" aria-label="Close"><span aria-hidden="true">×</span></button></div>
+    <div class="popout-head"><h2 id="filtersTitle" tabindex="-1">Filters</h2><button id="closeFilters" class="close-control" type="button" aria-label="Close filters"><span aria-hidden="true">×</span></button></div>
     <div class="popout-content">
-<label class="search-label" for="search">Search</label><input id="search" placeholder="Place, claim, or source" type="search" autocomplete="off">
+<label class="search-label" for="search">Search</label><input id="search" placeholder="Search" type="search" autocomplete="off" aria-label="Search places, claims or sources">
 <details id="filterDetails" class="filter-details" open><summary hidden>Filters</summary>
 <div class="filter-grid">
-<label for="filterBorough">Borough<select id="filterBorough"><option value="all">All boroughs</option><option>Manhattan</option><option>Brooklyn</option><option>Queens</option><option>Bronx</option><option>Staten Island</option></select></label>
-<label for="filterType">Place type<select id="filterType"><option value="all">All place types</option></select></label>
-<label for="filterStatus">Collection<select id="filterStatus"><option value="all">All records</option><option value="featured" id="featuredOption" hidden>Five borough starters</option><option value="demolished">Demolition list</option><option value="haunting">Ghost story</option><option value="pilot">Place</option><option value="draft">Local drafts</option><option value="pending">Pending server review</option><option value="submitted">Approved submissions</option><option value="unlocated">Unlocated records</option></select></label>
-<label for="filterEvidence">Evidence<select id="filterEvidence"><option value="all">All evidence</option></select></label>
-<label for="filterReview">Review<select id="filterReview"><option value="all">All review states</option></select></label>
-<label for="filterGeo">Location certainty<select id="filterGeo"><option value="all">All locations</option></select></label>
-<label class="wide" for="filterPeriod">Period<select id="filterPeriod"><option value="all">All periods</option><option value="known">Known period</option><option value="unknown">Unknown period</option><option value="custom">Year range</option></select></label>
-<div class="period-bounds wide" id="periodBounds"><label for="periodStart">From year<input id="periodStart" type="number" step="1" placeholder="e.g. 1900" aria-describedby="periodHelp"></label><label for="periodEnd">Through year<input id="periodEnd" type="number" step="1" placeholder="e.g. 1950" aria-describedby="periodHelp"></label></div>
+<label for="filterBorough">Borough<select id="filterBorough"><option value="all">All</option><option>Manhattan</option><option>Brooklyn</option><option>Queens</option><option>Bronx</option><option>Staten Island</option></select></label>
+<label for="filterGeo">Location<select id="filterGeo" aria-label="Location certainty"><option value="all">All</option></select></label>
+<label for="filterType">Type<select id="filterType" aria-label="Place type"><option value="all">All</option></select></label>
+<label for="filterStatus">Collection<select id="filterStatus"><option value="all">All</option><option value="featured" id="featuredOption" hidden>Five borough starters</option><option value="demolished">Demolition list</option><option value="haunting">Ghost story</option><option value="pilot">Place</option><option value="draft">Local drafts</option><option value="pending">Pending server review</option><option value="submitted">Approved submissions</option><option value="unlocated">Unlocated records</option></select></label>
+<label for="filterEvidence">Evidence<select id="filterEvidence"><option value="all">All</option></select></label>
+<label for="filterReview">Review<select id="filterReview"><option value="all">All</option></select></label>
+<label class="wide" for="filterPeriod">Period<select id="filterPeriod"><option value="all">All</option><option value="known">Known period</option><option value="unknown">Unknown period</option><option value="custom">Year range</option></select></label>
+<div class="period-bounds wide" id="periodBounds"><label for="periodStart">From<input id="periodStart" type="number" step="1" placeholder="1900" aria-label="From year" aria-describedby="periodHelp"></label><label for="periodEnd">Through<input id="periodEnd" type="number" step="1" placeholder="1950" aria-label="Through year" aria-describedby="periodHelp"></label></div>
 <p class="filter-help wide" id="periodHelp" hidden>Historical claim dates, not source publication or imagery dates. Unknown periods remain explicitly unknown.</p>
 </div></details>
-<div class="result-actions"><button id="resetFilters" class="textbutton" type="button">Reset</button><button id="fitFiltered" class="textbutton" type="button">Fit</button></div>
+<div class="result-actions"><button id="resetFilters" class="outline" type="button" aria-label="Reset filters">Reset</button><button id="fitFiltered" class="primary" type="button" aria-label="Fit map to results">Fit</button></div>
 <p id="filterCount" class="count" aria-live="polite"></p>
     </div>
   </aside>
