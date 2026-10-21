@@ -1,5 +1,7 @@
 'use strict';
 (() => {
+  // The minimal map omits the legacy local-entry controls.
+  if (!document.getElementById('submitHostedEntry')) return;
  let settings={configured:false,status:'checking'},previews=[],approved=[],currentKey=null,currentRaw=null;
  const escape=esc;
  const api=async(path,{body}={})=>{const r=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json'}:{},...(body?{body:JSON.stringify(body)}:{})});let d;try{d=await r.json()}catch{throw Error('service_unavailable')}if(!r.ok)throw Error(d.error||'service_unavailable');return d};

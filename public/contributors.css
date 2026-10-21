@@ -1,0 +1,123 @@
+.contributors-footer {
+  position: fixed;
+  z-index: 1050;
+  left: calc(max(20px, env(safe-area-inset-left)) + 84px);
+  bottom: max(var(--dock-bottom, 32px), env(safe-area-inset-bottom));
+}
+
+#contributorsButton {
+  position: relative;
+  isolation: isolate;
+  min-width: 106px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink, #e9e3d7);
+  font: 400 12px/1.4 Arial, Helvetica, sans-serif;
+  white-space: nowrap;
+}
+
+#contributorsButton::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 6px 0;
+  border: 1px solid #827563;
+  background: #11110f;
+  pointer-events: none;
+}
+
+#contributorsButton::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  background: linear-gradient(45deg, #746652 0 43%, #bba78a 44% 54%, #080908 55%);
+  pointer-events: none;
+}
+
+#contributorsButton:hover::before {
+  background: #27231c;
+  border-color: #c1a47d;
+}
+
+#contributorsDialog {
+  width: min(304px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  border: 1px solid #827563;
+  border-radius: 0;
+  background: #121412;
+  color: #e9e3d7;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+#contributorsDialog::backdrop { background: #0009; }
+
+#contributorsDialog .contributors-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 8px 3px 16px;
+  border-bottom: 1px solid #454238;
+}
+
+#contributorsDialog h2 {
+  margin: 0;
+  font: 400 16px/1.4 Arial, Helvetica, sans-serif;
+}
+
+#contributorsDialog .contributors-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #e9e3d7;
+  font: 400 24px/1 Arial, Helvetica, sans-serif;
+}
+
+#contributorsDialog .contributors-close:hover { background: #27231c; }
+
+#contributorsDialog .contributors-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+  font: 400 14px/1.5 Arial, Helvetica, sans-serif;
+}
+
+#contributorsDialog .contributors-list li { margin: 0; padding: 0; }
+
+#contributorsButton:focus-visible,
+#contributorsDialog .contributors-close:focus-visible {
+  outline: 2px solid #ffd39e;
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  .contributors-footer { left: calc(max(12px, env(safe-area-inset-left)) + 84px); }
+}
+
+@media (max-width: 560px) {
+  :root { --panel-bottom: calc(var(--attribution-height, 24px) + 104px); }
+  .contributors-footer {
+    left: max(12px, env(safe-area-inset-left));
+    bottom: max(calc(var(--dock-bottom, 32px) + 44px), calc(env(safe-area-inset-bottom) + 44px));
+  }
+}

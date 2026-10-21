@@ -1,5 +1,7 @@
 'use strict';
 (() => {
+  // The minimal map omits the legacy local-entry controls.
+  if (!document.getElementById('entryJson')) return;
   let preview=null,confirmedHash=null;
   const BOUNDARY_URL='https://data.cityofnewyork.us/City-Government/Borough-Boundaries-water-areas-included-/wh2p-dxnf';
   const readBoundaries=NycGeometry.ready;

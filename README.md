@@ -18,9 +18,11 @@ Deploy that prepared release only when deployment is authorized:
 npx wrangler deploy --config dist/server/wrangler.live.json
 ```
 
-The public map is already approved and live at https://hauntologies-nyc.ailab-452.workers.dev. Release preparation preserves its public `workers.dev` route and keeps preview URLs disabled. Private contribution and review APIs remain blocked by the Worker gate.
+The public map is already approved and live at https://hauntologies-nyc.ailab-452.workers.dev. Release preparation preserves its public `workers.dev` route and keeps preview URLs disabled. Private contribution and review APIs remain blocked by the Worker gate. The disabled-by-default Access adapter and exact activation requirements are documented in [Contribution access](docs/contribution-access.md).
 
 The existing D1 binding is `DB`. Schema migrations contain no participant rows. Registration tests use synthetic local SQLite fixtures; no attendee or submission data is included. Do not use production data in repository issues, tests, or fixtures.
+
+The metadata editor supports field corrections and up to ten new references per proposal, with a required change message and immutable revision history. Review uses exact proposed values and requires independent authorization; changes do not automatically overwrite map records.
 
 AI is disabled. Contribution and review endpoints retain their authentication boundary. The deployment gate exposes only the intended event-registration write path and blocks the other APIs; existing hosting identity headers are not trusted by the public Worker.
 

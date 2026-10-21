@@ -24,6 +24,8 @@
   ].map(Object.freeze);
   const byKey=new Map(fields.map(field=>[field.key,field]));
   const sourceKeys=['url','title','citation','locator','source_date_original','accessed_on','rights_status','rights_statement','public_use','evidence_note','note','source_type','repository','credit','license'];
+  const sourceFields=Object.freeze(sourceKeys.map(key=>Object.freeze(text(key,key.replace(/_/g,' '),'Sources',key==='url'?2048:6000,key==='url'?'url':['citation','rights_statement','evidence_note','note'].includes(key)?'textarea':'text'))));
+  const maxSourceAdditions=10;
   const own=(object,key)=>object&&Object.hasOwn(object,key);
   const first=(...pairs)=>{for(const [object,key]of pairs)if(own(object,key)&&object[key]!==undefined)return structuredClone(object[key]);return null;};
   function collections(input){const record=input?.record_id&&input.record?input.record:input||{},raw=record.raw||record;return{sources:Array.isArray(record.derived?.canonical_sources)?record.derived.canonical_sources:Array.isArray(raw.sources)?raw.sources:Array.isArray(raw.metadata?.sources)?raw.metadata.sources:[],aliases:Array.isArray(raw.aliases)?raw.aliases:[]};}
@@ -65,6 +67,24 @@
   const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
   function changes(before,after){return Object.keys(before).filter(key=>(byKey.has(key)||dynamicField(key))&&!equal(before[key],after[key])).map(field=>({field,before:structuredClone(before[field]),after:structuredClone(after[field])}));}
   function safeUrl(value){try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password;}catch{return false;}}
+  function validateSourceAdditions(additions=[]){
+    const errors=[],issue=(field,code,message)=>errors.push({field,code,message});
+    if(!Array.isArray(additions)||additions.length>maxSourceAdditions){issue('source_additions','bounded_source_additions','Propose at most ten new source references.');return{valid:false,errors};}
+    for(const [index,source]of additions.entries()){
+      const path='source_additions.'+index;
+      if(!source||typeof source!=='object'||Array.isArray(source)){issue(path,'source_object_required','Each new source must be an object of optional text fields.');continue;}
+      for(const key of Object.keys(source))if(!sourceKeys.includes(key))issue(path+'.'+key,'unknown_source_field','This source field is not supported.');
+      for(const field of sourceFields){
+        if(!own(source,field.key))continue;
+        const value=source[field.key];
+        if(value===null)continue;
+        if(typeof value!=='string'||value.length>field.maxLength)issue(path+'.'+field.key,'source_text_required','Use text within the field limit, or null.');
+        else if(field.type==='url'&&value!==''&&!safeUrl(value))issue(path+'.'+field.key,'unsafe_url','Use an HTTP(S) URL without credentials, an empty string or null.');
+      }
+      if(!['url','title','citation','locator','evidence_note','note','repository'].some(key=>own(source,key)&&typeof source[key]==='string'&&source[key].trim()))issue(path,'source_reference_required','Include a title, citation, locator, source note, repository or URL.');
+    }
+    return{valid:errors.length===0,errors};
+  }
   function dateBounds(value){
     if(typeof value!=='string'||!/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/.test(value))return null;
     const [year,month,day]=value.split('-').map(Number);
@@ -73,11 +93,12 @@
     if(day!==undefined&&(day<1||day>maxDay))return null;
     return [year*10000+(month||1)*100+(day||1),year*10000+(month||12)*100+(day||maxDay)];
   }
-  function validateChanges(proposed,{snapshot:before,change_message}={}){
-    const errors=[],after=structuredClone(before||{}),changed=new Set();
+  function validateChanges(proposed,{snapshot:before,change_message,source_additions=[]}={}){
+    const errors=[...validateSourceAdditions(source_additions).errors],after=structuredClone(before||{}),changed=new Set();
     const issue=(field,code,message)=>errors.push({field,code,message});
     if(typeof change_message!=='string'||!change_message.trim()||change_message.length>2000)issue('change_message','change_message_required','Describe the change in 1–2000 characters.');
-    if(!Array.isArray(proposed)||proposed.length<1||proposed.length>100){issue('changes','changes_required','Propose between one and 100 changed fields.');return{valid:false,errors,after};}
+    if(!Array.isArray(proposed)||proposed.length>100){issue('changes','changes_required','List at most 100 changed fields.');return{valid:false,errors,after};}
+    if(!proposed.length&&(!Array.isArray(source_additions)||!source_additions.length))issue('changes','changes_required','Propose a changed field or a new source reference.');
     for(const [index,change]of proposed.entries()){
       const path='changes.'+index;
       if(!change||typeof change!=='object'||Array.isArray(change)||Object.keys(change).length!==3||!['field','before','after'].every(key=>own(change,key))){issue(path,'invalid_change','Use exactly field, before and after.');continue;}
@@ -112,5 +133,5 @@
     }
     return{valid:errors.length===0,errors,after};
   }
-  root.RecordEditModel=Object.freeze({fields:Object.freeze(fields),fieldsFor,snapshot,changes,validateChanges});
+  root.RecordEditModel=Object.freeze({fields:Object.freeze(fields),fieldsFor,snapshot,changes,sourceFields,maxSourceAdditions,validateSourceAdditions,validateChanges});
 })(typeof window!=='undefined'?window:globalThis);

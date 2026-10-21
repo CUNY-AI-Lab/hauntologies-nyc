@@ -27,7 +27,7 @@ function envelope(resolved,updates={title:'Proposed title'},message='  Correct t
 const count=(h,table)=>h.db.native.prepare('SELECT COUNT(*) AS n FROM '+table).get().n;
 async function submit(h,value){const request={idempotency_key:key(),submission_json:JSON.stringify(value,null,2)},response=await call(h,'submit',request);status(response,201);return{...response.body,request}}
 const reviewBody=s=>({idempotency_key:key(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(CHECKS.map(k=>[k,'pass'])),rationale:'Synthetic independent review of the proposed data only.'});
-async function seedHosted(h){const raw_json=JSON.stringify({title:'Hosted original',description:'  Exact original\n😀  ',metadata:{sources:synthetic.sources,untouched:{arbitrary:'source data'}}}),derived_json=JSON.stringify({location:{status:'missing',latitude:null,longitude:null,reason:'Unresolved'}});const row={id:'hosted_fixture',owner_id:'owner',preview_id:'fixture_preview',raw_json,raw_hash:await hash(raw_json),derived_json,preview_hash:'fixture',approved_at:'2026-10-21T22:00:00Z'};h.db.native.prepare('INSERT INTO approved_records (id,owner_id,preview_id,raw_json,raw_hash,derived_json,preview_hash,approved_at) VALUES (?,?,?,?,?,?,?,?)').run(...Object.values(row));return row}
+async function seedHosted(h){const raw_json=JSON.stringify({title:'Hosted original',description:'  Exact original\n😀  ',metadata:{sources:synthetic.sources,untouched:{arbitrary:'source data'}}}),derived_json=JSON.stringify({location:{status:'missing',latitude:null,longitude:null,reason:'Unresolved'}});const row={id:'hosted_fixture',owner_id:'author',preview_id:'fixture_preview',raw_json,raw_hash:await hash(raw_json),derived_json,preview_hash:'fixture',approved_at:'2026-10-21T22:00:00Z'};h.db.native.prepare('INSERT INTO approved_records (id,owner_id,preview_id,raw_json,raw_hash,derived_json,preview_hash,approved_at) VALUES (?,?,?,?,?,?,?,?)').run(...Object.values(row));return row}
 
 test('browser and Node use identical fields and lossless snapshots for all 209 authoritative records',()=>{
  const browser={window:{},URL,structuredClone};vm.createContext(browser);for(const file of ['atlas-model.js','place-summary.js','record-edit-model.js'])vm.runInContext(readFileSync(new URL('../public/'+file,import.meta.url),'utf8'),browser);
@@ -158,4 +158,75 @@ test('primary source URL stays paired with its original title rather than a disp
 test('source titles remain distinct from unrecorded bibliographic citations',()=>{
  const record={id:'synthetic-label',title:'Place',metadata:{source:{url:'https://example.org/item',title:'Original batch label'}}};
  const snapshot=Model.snapshot(record);assert.equal(snapshot.source_title,'Original batch label');assert.equal(snapshot.source_citation,null);
+});
+
+function withSources(resolved,sources,updates={}){const value=envelope(resolved,updates);value.payload.source_additions=structuredClone(sources);return value;}
+
+test('source-addition helpers share browser/server rules and preserve optional fields exactly',()=>{
+ const browser={window:{},URL,structuredClone};vm.createContext(browser);for(const file of ['atlas-model.js','place-summary.js','record-edit-model.js'])vm.runInContext(readFileSync(new URL('../public/'+file,import.meta.url),'utf8'),browser);
+ const additions=[{citation:'  Archive café 😀\nBox 4; folio 9  ',url:null,note:'',source_date_original:null},{title:'Paper map',locator:'Shelf 2',rights_status:'unknown',url:''},{url:'https://example.org/catalog'}],raw=JSON.stringify(additions);
+ assert.equal(Model.validateSourceAdditions().valid,true);assert.equal(Model.maxSourceAdditions,10);assert.equal(Object.isFrozen(Model.sourceFields),true);
+ assert.equal(JSON.stringify(browser.window.RecordEditModel.sourceFields),JSON.stringify(Model.sourceFields));
+ const options={snapshot:Model.snapshot(synthetic),change_message:'Add archival references.',source_additions:additions};
+ assert.equal(Model.validateChanges([],options).valid,true);assert.equal(JSON.stringify(browser.window.RecordEditModel.validateChanges([],options)),JSON.stringify(Model.validateChanges([],options)));
+ assert.equal(JSON.stringify(additions),raw);assert.equal(Model.validateChanges([],{...options,source_additions:[]}).valid,false);
+ for(const field of Model.sourceFields)assert.equal(field.type==='url'?field.maxLength===2048:field.maxLength===6000,true);
+});
+
+test('citation-only source proposals save exact originals and additions with review diff and stable replay receipt',async t=>{
+ const h=harness(t),resolved=await target(h),original=JSON.stringify(resolved),additions=[{citation:'  Offline archive; box 2\nfolio 4 😀  ',url:null,note:'',source_date_original:null},{title:'A paper source',locator:'Shelf 8'}];
+ const value=withSources(resolved,additions),created=await submit(h,value),s=created.submission;
+ assert.equal(s.status,'submitted');assert.equal(s.validation.valid,true);assert.equal(s.raw_json,created.request.submission_json);assert.deepEqual(s.proposal.source_additions,additions);
+ assert.deepEqual(s.proposal.editable_before,s.proposal.editable_after);assert.deepEqual(s.proposal.field_diff,[]);
+ assert.deepEqual(s.diff,additions.map((source,index)=>({record_id:synthetic.id,operation:'propose_source_addition',field:'source_additions.'+index,before:null,after:source})));
+ assert.equal(Object.hasOwn(s.proposal.source_additions[1],'url'),false);assert.equal(s.proposal.source_additions[0].url,null);assert.equal(s.proposal.source_additions[0].note,'');
+ assert.deepEqual(s.application,{applicable:false,reason:'record_update_review_only',operations:[]});assert.deepEqual(s.proposal.target.record,synthetic);assert.equal(JSON.stringify(resolved),original);assert.deepEqual((await target(h)).record,synthetic);
+ const replay=await call(h,'submit',created.request);status(replay,200);assert.equal(replay.body.receipt.id,created.receipt.id);assert.equal(count(h,'workflow_revisions'),1);
+ status(await call(h,'submit',{...created.request,submission_json:created.request.submission_json+'\n'}),409);
+ assert.equal(count(h,'approved_records'),0);assert.equal(count(h,'workflow_jobs'),0);
+});
+
+test('new-source validation rejects malformed scalars, all-blank refs, unknown keys and unsafe URLs before saving',async t=>{
+ const h=harness(t),resolved=await target(h),invalid=[null,{},'citation',17,true,[null],[false],[[]],[{}],[{citation:' \n ',url:null}],[{license:'unknown'}],[{citation:'Citation',actor:'forged'}],[{citation:'Citation',title:'x'.repeat(6001)}],[{url:'https://example.org/'+ 'x'.repeat(2048)}],Array.from({length:11},()=>({citation:'Reference'}))];
+ for(const field of Model.sourceFields)for(const value of [false,17,[],{}])invalid.push([{citation:'A real citation',[field.key]:value}]);
+ for(const url of ['javascript:alert(1)','data:text/plain,reference','file:///tmp/source','https://person:secret@example.org','https://name@example.org','not a URL',' \n '])invalid.push([{citation:'Citation',url}]);
+ invalid.push([JSON.parse('{"citation":"Citation","__proto__":{"actor":"forged"}}')]);
+ for(const additions of invalid){assert.equal(Model.validateSourceAdditions(additions).valid,false,JSON.stringify(additions));const value=withSources(resolved,additions);status(await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify(value)}),400)}
+ for(const message of ['', '  ', 'x'.repeat(2001)]){const value=withSources(resolved,[{citation:'Citation'}]);value.summary=message;value.payload.change_message=message;status(await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify(value)}),400)}
+ assert.equal(count(h,'workflow_submissions'),0);assert.equal(count(h,'workflow_receipts'),0);
+});
+
+test('ten new references and a retained-source correction coexist without replacing or synthesizing original data',async t=>{
+ const h=harness(t),hosted=await seedHosted(h),resolved=await target(h,hosted.id),additions=Array.from({length:10},(_,index)=>({citation:'  New reference '+index+'  ',locator:index===0?'x'.repeat(6000):null}));
+ const value=withSources(resolved,additions,{'sources.1.locator':'New proposed locator'}),created=await submit(h,value),s=created.submission;
+ assert.equal(s.diff.length,11);assert.equal(s.diff[0].operation,'propose_field_update');assert.deepEqual(s.proposal.source_additions,additions);
+ assert.deepEqual(s.proposal.target.record.raw.metadata.sources,synthetic.sources);assert.equal(s.proposal.target.record.raw.metadata.sources[0].extra.retain,'all unknown fields');
+ assert.equal(s.proposal.editable_after['sources.1.locator'],'New proposed locator');assert.equal(Object.hasOwn(s.proposal.editable_after,'sources.2.citation'),false);
+ const persisted=await h.store.getRecord(hosted.id);assert.equal(persisted.raw_json,hosted.raw_json);assert.equal(persisted.derived_json,hosted.derived_json);assert.equal(count(h,'workflow_jobs'),0);
+});
+
+test('source addition approval is independent, revision-bound and never applicable; revised retries preserve history',async t=>{
+ const h=harness(t,{authorization:{reviewers:['author','reviewer'],publishers:['publisher']}}),resolved=await target(h),created=await submit(h,withSources(resolved,[{citation:'First exact citation',url:null}])),s=created.submission;
+ status(await call(h,'review',reviewBody(s)),403);
+ const reviewed=await call(h,'review',reviewBody(s),{actor:'reviewer'});status(reviewed,200);
+ const apply=await call(h,'apply',{idempotency_key:key(),submission_id:s.id,expected_revision:s.revision,approval_hash:reviewed.body.submission.approval.approval_hash},{actor:'publisher'});status(apply,409);assert.equal(apply.body.error,'record_update_review_only');
+ const revisedValue=withSources(resolved,[{citation:'Second exact citation',url:null}]),request={idempotency_key:key(),submission_id:s.id,expected_revision:1,submission_json:JSON.stringify(revisedValue,null,2)},revised=await call(h,'revise',request);status(revised,200);
+ assert.equal(revised.body.submission.revision,2);assert.equal(revised.body.submission.status,'draft');assert.equal(revised.body.submission.approval,null);assert.notEqual(revised.body.submission.diff_hash,s.diff_hash);assert.notEqual(revised.body.submission.payload_hash,s.payload_hash);
+ assert.equal((await h.store.getRevision(s.id,1)).raw_json,created.request.submission_json);assert.equal((await h.store.getRevision(s.id,2)).raw_json,request.submission_json);
+ const replay=await call(h,'revise',request);status(replay,200);assert.equal(replay.body.receipt.id,revised.body.receipt.id);assert.equal(count(h,'workflow_revisions'),2);
+ status(await call(h,'review',reviewBody(s),{actor:'reviewer'}),409);assert.deepEqual((await target(h)).record,synthetic);assert.equal(count(h,'workflow_jobs'),0);assert.equal(count(h,'approved_records'),0);
+});
+
+test('source additions cannot bypass stale target, forged-before or atomic save checks',async t=>{
+ const h=harness(t),resolved=await target(h),value=withSources(resolved,[{citation:'Citation'}]);
+ for(const field of ['expected_hash','expected_version']){const stale=structuredClone(value);stale.targets[0][field]=field==='expected_hash'?'a'.repeat(64):99;status(await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify(stale)}),409)}
+ const forged=withSources(resolved,[{citation:'Citation'}],{title:'Proposed title'});forged.payload.changes[0].before='Invented';status(await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify(forged)}),409);
+ const hosted=await seedHosted(h),hostedValue=withSources(await target(h,hosted.id),[{citation:'Another citation'}]);h.db.beforeBatch=()=>h.db.native.prepare('UPDATE approved_records SET raw_json=? WHERE id=?').run(JSON.stringify({title:'Concurrent source update'}),hosted.id);
+ const result=await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify(hostedValue)});status(result,409);assert.equal(result.body.error,'version_conflict');assert.equal(count(h,'workflow_revisions'),0);assert.equal(count(h,'workflow_receipts'),0);
+});
+
+test('omitted source additions retain the existing field-only payload and review diff contract',async t=>{
+ const h=harness(t),resolved=await target(h),old=envelope(resolved),explicit=structuredClone(old);explicit.payload.source_additions=[];
+ const a=await call(h,'preview',{submission_json:JSON.stringify(old)}),b=await call(h,'preview',{submission_json:JSON.stringify(explicit)});status(a,200);status(b,200);
+ assert.deepEqual(a.body.preview.diff,b.body.preview.diff);assert.equal(a.body.preview.diff_hash,b.body.preview.diff_hash);assert.equal(Object.hasOwn(a.body.preview.envelope.payload,'source_additions'),false);assert.deepEqual(a.body.preview.proposal.source_additions,[]);
 });

@@ -188,6 +188,7 @@ html,body,.workspace{overflow:clip}
 #recordEditorDialog details{border-top:1px solid var(--line)}
 #recordEditorDialog summary{cursor:pointer;min-height:44px;display:list-item;list-style-position:inside;padding:10px 0;font-size:13px}
 #recordEditorDialog .record-edit-group{display:grid;gap:12px;padding:4px 0 16px}
+#recordEditorDialog .record-source-action{justify-self:start;min-width:80px}
 #recordEditorDialog label{min-width:0;font-size:12px}
 #recordEditorDialog :is(input,select,textarea,button){min-height:44px;scroll-margin-block:16px}
 #recordEditorDialog :is(input,select,textarea){font-size:16px}
