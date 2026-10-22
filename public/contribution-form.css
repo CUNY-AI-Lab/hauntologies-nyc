@@ -7,6 +7,9 @@
 .contribution-place-choice label { margin: 0; }
 #freeformRecordContext { margin: 0; align-items: center; }
 #freeformRecordLabel { min-width: 0; overflow-wrap: anywhere; }
+.contribution-coordinates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.contribution-coordinates label { min-width: 0; margin: 0 0 10px; }
+.contribution-coordinates input { width: 100%; min-height: 44px; }
 #workflowConnection:empty { display: none; }
 #workflowConnection [data-access-actions] { display: inline-flex; gap: 12px; margin-left: 10px; }
 #contributionAttributes, #stagedContributionImages { display: grid; gap: 12px; }

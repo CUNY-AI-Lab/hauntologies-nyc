@@ -89,6 +89,13 @@
         <label id="freeformPlacePicker" for="freeformPlaceSelect" hidden>Existing place<select id="freeformPlaceSelect"><option value="">Choose a place</option></select></label>
       </div>
       <div id="freeformRecordContext" class="buttonrow" hidden><span id="freeformRecordLabel" role="status"></span><button id="removeFreeformRecord" class="textbutton" type="button">Remove</button></div>
+      <details id="freeformLocation" class="workflow-details"><summary>Location</summary>
+        <div class="contribution-coordinates">
+          <label for="contributionLatitude">Latitude<input id="contributionLatitude" type="number" step="any" min="-90" max="90" inputmode="decimal"></label>
+          <label for="contributionLongitude">Longitude<input id="contributionLongitude" type="number" step="any" min="-180" max="180" inputmode="decimal"></label>
+        </div>
+        <div class="buttonrow"><button id="chooseContributionPoint" type="button" class="outline">Choose on map</button><button id="cancelContributionPoint" type="button" class="textbutton" disabled>Cancel</button></div>
+      </details>
       <details id="freeformContext" class="workflow-details"><summary>Sources</summary>
         <label for="freeformSources">Links or references<textarea id="freeformSources" rows="3"></textarea></label>
       </details>

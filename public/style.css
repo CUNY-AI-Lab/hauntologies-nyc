@@ -249,3 +249,5 @@ html,body,.workspace{overflow:clip}
   #layersPanel select,#researchSidecar select,#recordEditorDialog select{height:44px;min-height:44px;font-size:16px;font-weight:400;padding:7px 8px}
   #filtersPanel .close-control::after{bottom:8px;left:8px}
 }
+.proposed-point{border:2px dashed #ffcf94;background:#171510;color:#fff0d9;border-radius:50%;text-align:center;font:22px/26px Arial,Helvetica,sans-serif;box-shadow:0 0 0 3px #171510aa}
+.contribution-picking #map{cursor:crosshair}

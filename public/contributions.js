@@ -273,8 +273,41 @@
   let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
   const draftStorageKey='hauntologies-contribution-draft';let draftRevisionBlocked=null;
   const isOpenForm=()=>!revisionOriginal||revisionOriginal.type==='open_proposal';
-  function draftValue(){return {version:1,explanation:byId('contributionSummary').value,sources:byId('freeformSources').value,attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
-  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.explanation||value.sources||value.attributes.length||value.record_id)sessionStorage.setItem(draftStorageKey,JSON.stringify(value));else sessionStorage.removeItem(draftStorageKey);}catch{}}
+  const pointShape=point=>point&&typeof point.latitude==='number'&&typeof point.longitude==='number'&&Number.isFinite(point.latitude)&&Number.isFinite(point.longitude)&&Math.abs(point.latitude)<=90&&Math.abs(point.longitude)<=180;
+  const pointForm=()=>isOpenForm()&&!revisionOriginal&&!revisionOf&&!draftRevisionBlocked&&byId('contributionPlaceMode').value==='new'&&!openRequestedRecordId&&!openTargets.length;
+  function pointFields(){return {latitude:byId('contributionLatitude').value,longitude:byId('contributionLongitude').value};}
+  function readPoint(checkBorough=true){
+    const fields=pointFields();if(fields.latitude.trim()===''||fields.longitude.trim()==='')return null;
+    const point={latitude:Number(fields.latitude),longitude:Number(fields.longitude)};
+    if(!pointShape(point))return null;
+    if(checkBorough&&window.NycGeometry?.available&&!window.NycGeometry.findBorough(point.latitude,point.longitude))return null;
+    return point;
+  }
+  function pointGeometry(){const point=readPoint(false);return point?{type:'Point',coordinates:[point.longitude,point.latitude]}:null;}
+  function pointError(){
+    if(!pointForm())return null;const fields=pointFields();
+    if(!fields.latitude.trim()&&!fields.longitude.trim()&&!byId('contributionLatitude').validity.badInput&&!byId('contributionLongitude').validity.badInput)return null;
+    if(!fields.latitude.trim()||!fields.longitude.trim())return {field:'payload.geometry',message:'Enter both latitude and longitude, or cancel the point'};
+    if(!readPoint(false))return {field:'payload.geometry',message:'Enter valid latitude and longitude'};
+    if(!readPoint())return {field:'payload.geometry',message:'Choose a point in New York City'};
+    return null;
+  }
+  function showPoint(){const point=pointForm()?readPoint():null;byId('cancelContributionPoint').disabled=!pointFields().latitude&&!pointFields().longitude&&!byId('contributionLatitude').validity.badInput&&!byId('contributionLongitude').validity.badInput;window.dispatchEvent(new CustomEvent('contributions-point-changed',{detail:{point:point?{...point}:null}}));return point;}
+  function setPointFields(point){byId('contributionLatitude').value=point?.latitude??'';byId('contributionLongitude').value=point?.longitude??'';}
+  function canRequestPoint(){return pointForm()&&!pendingWrite&&!busy&&!imageBatch&&!imageBusy&&!imageProcessing;}
+  window.ContributionPoint=Object.freeze({
+    get:()=>{const point=pointForm()?readPoint():null;return point?{...point}:null;},
+    show:showPoint,
+    request(point,{replace=false}={}){
+      if(!canRequestPoint()||!pointShape(point)||(window.NycGeometry?.available&&!window.NycGeometry.findBorough(point.latitude,point.longitude)))return false;
+      const fields=pointFields(),hasInput=fields.latitude!==''||fields.longitude!==''||byId('contributionLatitude').validity.badInput||byId('contributionLongitude').validity.badInput;
+      if(!replace&&hasInput&&!readPoint(false))return false;
+      if(replace||!readPoint(false))setPointFields(point);
+      invalidatePreview();saveDraft();byId('draftTab').click();switchView('submissionView',false);byId('freeformLocation').open=true;showPoint();byId('contributionSummary').focus();return true;
+    }
+  });
+  function draftValue(){return {version:1,explanation:byId('contributionSummary').value,sources:byId('freeformSources').value,attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
+  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude)sessionStorage.setItem(draftStorageKey,JSON.stringify(value));else sessionStorage.removeItem(draftStorageKey);}catch{}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
       const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets))sessionStorage.removeItem(draftStorageKey);
@@ -282,6 +315,8 @@
   }
   function restoreDraftFields(value){
     byId('contributionSummary').value=value.explanation;byId('freeformSources').value=value.sources;byId('contributionAttributes').replaceChildren();for(const attribute of value.attributes)addAttribute(attribute);
+    const coordinates=value.geometry?.type==='Point'?value.geometry.coordinates:null,point=Array.isArray(coordinates)&&coordinates.length===2?{latitude:coordinates[1],longitude:coordinates[0]}:null;setPointFields(pointShape(point)?point:null);
+    if(value.point_fields&&['latitude','longitude'].every(key=>typeof value.point_fields[key]==='string'&&value.point_fields[key].length<=64)){byId('contributionLatitude').value=value.point_fields.latitude;byId('contributionLongitude').value=value.point_fields.longitude;}
     byId('contributionPlaceMode').value=value.place_mode;openRequestedRecordId=value.record_id;openTargetLabel=value.title;showOpenReference();
   }
   async function restoreRevisionDraft(){
@@ -293,7 +328,8 @@
   }
   function restoreDraft(){
     try{const value=JSON.parse(sessionStorage.getItem(draftStorageKey)||'null');if(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string')return;
-      restoreDraftFields(value);if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision)){draftRevisionBlocked=value.revision;restoreRevisionDraft();}
+      if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
+      restoreDraftFields(value);if(draftRevisionBlocked){restoreRevisionDraft();}
       else if(value.record_id)chooseOpenReference(value.record_id,value.title);
     }catch{}
   }
@@ -305,11 +341,11 @@
     byId('freeformRecordContext').setAttribute('aria-busy',String(openTargetPending));
     if(visible)byId('contributionPlaceMode').value='existing';
     byId('freeformPlacePicker').hidden=byId('contributionPlaceMode').value!=='existing';
-    populatePlaceChoices();
+    byId('freeformLocation').hidden=!pointForm();populatePlaceChoices();showPoint();
   }
   function resetOpenContext(){
     ++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;openTaskIds=[];openSourcesInitial='';openSourcesDisplayInitial='';openExplanationInitial='';openExplanationDisplayInitial='';
-    byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
+    byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;byId('freeformLocation').open=false;setPointFields(null);byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
   }
   function populatePlaceChoices(){
     const select=byId('freeformPlaceSelect'),records=typeof allRecords==='function'?allRecords():window.NYC_INVENTORY?.records||[];
@@ -422,7 +458,7 @@
       return revised;
     }
     const prior=revisionOriginal?structuredClone(revisionOriginal):null;
-    const payload=prior?prior.payload:{explanation,geometry:null};
+    const payload=prior?prior.payload:{explanation,geometry:pointForm()?pointGeometry():null};
     payload.explanation=explanation;
     const sourcesText=byId('freeformSources').value;
     if(!prior||sourcesText!==openSourcesDisplayInitial)payload.sources_text=sourcesText===''?null:sourcesText;
@@ -464,6 +500,7 @@
     if(isOpenForm()){
       if(path==='summary'||path==='payload.explanation')return byId('contributionSummary');
       if(path==='payload.sources_text')return byId('freeformSources');
+      if(path==='payload.geometry'||path.startsWith('payload.geometry.'))return byId('contributionLatitude');
       if(path==='targets'||path.startsWith('targets.'))return byId('freeformPlaceSelect');
       const attribute=path.match(/^payload\.attributes\.(\d+)(?:\.(name|value))?$/);if(attribute)return byId('contributionAttributes').children[Number(attribute[1])]?.querySelector('[data-attribute="'+(attribute[2]||'name')+'"]');
       return null;
@@ -514,10 +551,12 @@
     const changes=Array.isArray(diff)?diff:[diff];changes.forEach(change=>{const row=el('div',undefined,'diff-row');row.append(el('strong',change.field||change.path||change.record_id||'Proposed change'));const pair=el('div',undefined,'diff-pair');[['Before',change.before],['After',change.after]].forEach(([label,value])=>{const cell=el('div');cell.append(el('small',label),el('pre',value===undefined?'Not specified':pretty(value)));pair.append(cell);});row.append(pair);if(change.field===undefined&&change.before===undefined&&change.after===undefined)row.append(rawDisclosure('Details',change));root.append(row);});return root;}
   function editorialChecks(submission){const root=el('div',undefined,'editorial-checks');root.append(el('h4','Checks'));const checks=submission?.approval?.checks||submission?.checks||{};const list=el('dl',undefined,'workflow-metadata');['evidence_check','geography_check','rights_check','duplicate_check'].forEach(k=>list.append(el('dt',k.replace('_check','')),el('dd',checks[k]||submission?.approval?.[k]||'pending')));list.append(el('dt','Privacy review'),el('dd',checks.privacy_check||submission?.approval?.privacy_check||submission?.approval?.privacy_review||'pending'));root.append(list);return root;}
   function intakeText(value){const node=el('p',value);node.style.whiteSpace='pre-wrap';return node;}
+  function locationDetails(payload){const coordinates=payload?.geometry?.type==='Point'?payload.geometry.coordinates:null;return Array.isArray(coordinates)&&coordinates.length===2?metadata([['Proposed latitude',coordinates[1]],['Proposed longitude',coordinates[0]]]):null;}
   function renderPreview(envelope,result,raw){
     const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3','Preview'));root.firstChild.id='previewContributionTitle';
     if(envelope.type==='open_proposal'){
       root.append(intakeText(envelope.payload.explanation));if(result.local)root.append(el('p','Local preview','small'));
+      const location=locationDetails(envelope.payload);if(location)root.append(location);
       if(envelope.payload.attributes?.length)root.append(disclosure('Details',metadata(envelope.payload.attributes.map(a=>[a.name,a.value]))));
       if(openTargetLabel)root.append(el('p',openTargetLabel));
       if(envelope.payload.sources_text)root.append(rawDisclosure('Sources',envelope.payload.sources_text));
@@ -537,6 +576,7 @@
     if(isOpenForm()&&explanation.length>15000)errors.push({field:'summary',message:'Use 15,000 characters or fewer'});
     if(imageBatch){imageStatus('Contribution saved. Images not saved',true);return;}
     if(isOpenForm()&&byId('contributionPlaceMode').value==='existing'&&!openRequestedRecordId&&!openTargets.length)errors.push({field:'targets',message:'Choose an existing place'});
+    const locationError=pointError();if(locationError)errors.push(locationError);
     for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
     if(errors.length){renderErrors(errors);return;}let envelope,raw;
     try{envelope=buildEnvelope();raw=JSON.stringify(envelope,null,2);}catch(error){renderErrors([{field:error.field,message:error.message}]);return;}
@@ -589,7 +629,7 @@
   function renderSubmission(s){const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.append(el('h3','Review'),el('strong',s.title||s.id),metadata([['Submission',s.id],['Revision',s.revision],['Status',statusLabel(s.status)]]),disclosure('Details',metadata([['Type',labels[s.type]||s.type],['Credit',s.public_credit?.consent?s.public_credit.label:'None'],['Created',s.created_at],['Updated',s.updated_at],['Payload hash',s.payload_hash],['Diff hash',s.diff_hash]]),validationView(s.validation)),diffView(s.diff),editorialChecks(s));
     if(s.type==='open_proposal'){
       let original;try{original=JSON.parse(s.raw_json);}catch{}
-      if(original?.payload){root.append(intakeText(original.payload.explanation));if(original.payload.sources_text)root.append(rawDisclosure('Sources',original.payload.sources_text));if(original.payload.attributes?.length)root.append(disclosure('Details',metadata(original.payload.attributes.map(a=>[a.name,a.value]))));root.append(metadata([['Evidence','Unverified']]));}
+      if(original?.payload){root.append(intakeText(original.payload.explanation));const location=locationDetails(original.payload);if(location)root.append(location);if(original.payload.sources_text)root.append(rawDisclosure('Sources',original.payload.sources_text));if(original.payload.attributes?.length)root.append(disclosure('Details',metadata(original.payload.attributes.map(a=>[a.name,a.value]))));root.append(metadata([['Evidence','Unverified']]));}
     }
     renderPrivateImages(root,s.attachments);
     if(s.type==='record_update'&&s.proposal?.change_message)root.append(el('h4','Message'),intakeText(s.proposal.change_message));
@@ -672,6 +712,9 @@
   byId('contributionPlaceMode').addEventListener('change',()=>{if(byId('contributionPlaceMode').value==='new'){++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;}showOpenReference();invalidatePreview();});
   byId('freeformPlaceSelect').addEventListener('change',()=>{const select=byId('freeformPlaceSelect');if(select.value)chooseOpenReference(select.value,select.selectedOptions[0].textContent);else{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;showOpenReference();invalidatePreview();}});
   byId('addContributionAttribute').addEventListener('click',()=>{addAttribute()?.focus();invalidatePreview();saveDraft();});
+  for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('input',()=>{invalidatePreview();saveDraft();showPoint();});
+  byId('chooseContributionPoint').addEventListener('click',()=>{if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
+  byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
   window.addEventListener('contributions-clarify-requested',event=>{
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
     clearRevision();for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('contributionSummary').focus();

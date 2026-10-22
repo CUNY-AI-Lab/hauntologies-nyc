@@ -18,6 +18,32 @@ function setHostedRecords(records){hostedRecords=records;populateFacets();render
 const hasPoint=r=>Boolean(AtlasModel.normalize(r).geometry);
 const markers=new Map();
 let uncertaintyLayer;
+let proposedPointMarker=null,contributionPicking=false;
+function clearProposedPoint(){if(proposedPointMarker&&map)map.removeLayer(proposedPointMarker);proposedPointMarker=null;}
+function stopContributionPicking(){
+ contributionPicking=false;document.body.classList.remove('contribution-picking');
+ if($('mapStatus').textContent==='Choose a location')updateLayerStatus();
+}
+function showProposedPoint(point){
+ clearProposedPoint();
+ if(!map||!point||!Number.isFinite(point.latitude)||!Number.isFinite(point.longitude)||$('researchSidecar').hidden||!$('draftPanel').classList.contains('active'))return;
+ proposedPointMarker=L.marker([point.latitude,point.longitude],{interactive:false,keyboard:false,zIndexOffset:800,icon:L.divIcon({className:'proposed-point',html:'<span aria-hidden="true">+</span>',iconSize:[30,30],iconAnchor:[15,15]})}).addTo(map);
+ proposedPointMarker.getElement()?.setAttribute('aria-label','Proposed location');
+}
+function emptyMapTarget(target){
+ return target instanceof Element&&$('map').contains(target)&&!$('map').inert&&!document.querySelector('dialog[open]')&&!target.closest('.leaflet-marker-icon,.leaflet-popup,.leaflet-tooltip,.leaflet-interactive,.leaflet-control,button,a,input,select,textarea,[role="button"]');
+}
+function requestContributionPoint(latlng,replace=false){
+ const accepted=window.ContributionPoint?.request({latitude:latlng.lat,longitude:latlng.lng},{replace});
+ if(accepted){stopContributionPicking();toolOpener='map';}
+ else if(window.ContributionPoint)$('mapStatus').textContent='Location unavailable for this contribution';
+ return accepted;
+}
+window.addEventListener('contributions-point-changed',event=>showProposedPoint(event.detail?.point));
+window.addEventListener('contributions-point-pick-requested',()=>{
+ if(!map)return;closeTools();contributionPicking=true;document.body.classList.add('contribution-picking');$('mapStatus').textContent='Choose a location';$('map').focus();
+});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contributionPicking){event.preventDefault();stopContributionPicking();$('draftTab').click();$('chooseContributionPoint')?.focus();}});
 const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'Demolition list':['haunting','reported_haunting'].includes(r.category)?'Ghost story':r.category==='archival_gap'?'Archival gap':r.category==='vanished_place'?'Vanished place':r.category==='pending'?'Pending review':r.category==='submitted'?'Submitted record':'Place';
 function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&String(lat).trim()!==''&&String(lon).trim()!==''&&Number(lat)>=40.45&&Number(lat)<=40.98&&Number(lon)>=-74.30&&Number(lon)<=-73.65}
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
@@ -46,6 +72,7 @@ function setSidecarModal(active){
  if(!sidecar.contains(document.activeElement))$('sidecarTitle').focus({preventScroll:true});
 }
 function closeTools(focus=false){
+ clearProposedPoint();stopContributionPicking();
  setSidecarModal(false);
  for(const id of toolPanels)$(id).hidden=true;
  for(const id of ['toolsButton','filtersButton','mapToolsButton','layersButton','openResearch'])$(id).setAttribute('aria-expanded','false');
@@ -61,6 +88,7 @@ function switchPanel(id){
  $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Submit';
  if(id==='casePanel'){toolOpener='mapToolsButton';$('mapToolsButton').setAttribute('aria-expanded','true');}
  setSidecarModal(id==='draftPanel');
+ if(id==='draftPanel')window.ContributionPoint?.show();
 }
 $('toolsButton').addEventListener('click',()=>{const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
@@ -78,7 +106,7 @@ for(const [button,view,title] of [['submitTool','submissionView','Submit'],['rev
 $('openResearch').addEventListener('click',()=>switchPanel('casePanel'));
 for(const id of ['closeResearch','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&toolPanels.some(id=>!$(id).hidden)){e.preventDefault();closeTools(true);map?.closePopup()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.defaultPrevented&&!document.querySelector('dialog[open]')&&toolPanels.some(id=>!$(id).hidden)){e.preventDefault();closeTools(true);map?.closePopup()}});
 // A tool is a keyboard surface. Keep its controls reachable without tabbing into obscured pins.
 document.addEventListener('keydown',e=>{
  if(e.key!=='Tab'||document.querySelector('dialog[open]'))return;
@@ -142,7 +170,46 @@ function changeYear(id){
  imagery.on('load',()=>{if(token!==loadToken)return;layerLoading=false;layerSlow=false;updateLayerStatus()});
  imagery.addTo(map);updateLayerStatus();
 }
-if(window.L){map=L.map('map',{zoomControl:false,minZoom:9,maxZoom:20,maxBounds:[[40.43,-74.33],[40.99,-73.61]],maxBoundsViscosity:.8,scrollWheelZoom:false}).setView([40.71,-73.98],10);const zoom=L.control.zoom({position:'topright'}).addTo(map);$('zoomTools').append(zoom.getContainer());for(const id of toolPanels){L.DomEvent.disableClickPropagation($(id));L.DomEvent.disableScrollPropagation($(id))}map.createPane('history');map.getPane('history').style.zIndex=250;map.createPane('researchPoints');map.getPane('researchPoints').style.zIndex=450;L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{className:'street-basemap',maxNativeZoom:19,maxZoom:20,noWrap:true,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'}).on('tileerror',()=>{baseErrors++;$('mapStatus').textContent='Street map unavailable'}).addTo(map);pointLayer=(L.markerClusterGroup?L.markerClusterGroup({animate:false,clusterPane:'researchPoints',maxClusterRadius:44,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:cluster=>L.divIcon({html:'<span>'+cluster.getChildCount()+'</span>',className:'research-cluster',iconSize:[44,44]})}):L.layerGroup()).addTo(map);uncertaintyLayer=L.layerGroup().addTo(map);map.on('click',e=>{if(!picking)return;const f=$('contributionForm');f.elements.latitude.value=e.latlng.lat.toFixed(6);f.elements.longitude.value=e.latlng.lng.toFixed(6);picking=false;document.body.classList.remove('picking');$('pickPoint').textContent='Choose on map';$('formStatus').textContent='Point selected';switchPanel('draftPanel')});map.on('moveend',updateLayerStatus);changeYear('none');fetch('data/nyc-borough-boundaries.geojson').then(r=>r.json()).then(data=>L.geoJSON(data,{style:{color:'#7c817a',weight:1,fillColor:'#202721',fillOpacity:.13},interactive:false}).addTo(map)).catch(()=>{})}else{$('mapStatus').textContent='Map unavailable'}
+if(window.L){map=L.map('map',{zoomControl:false,minZoom:9,maxZoom:20,maxBounds:[[40.43,-74.33],[40.99,-73.61]],maxBoundsViscosity:.8,doubleClickZoom:true,tapHold:false,scrollWheelZoom:true,wheelDebounceTime:80,wheelPxPerZoomLevel:120,zoomSnap:.25,zoomDelta:1,zoomAnimation:!matchMedia('(prefers-reduced-motion: reduce)').matches}).setView([40.71,-73.98],10);const zoom=L.control.zoom({position:'topright'}).addTo(map);$('zoomTools').append(zoom.getContainer());for(const id of toolPanels){L.DomEvent.disableClickPropagation($(id));L.DomEvent.disableScrollPropagation($(id))}map.createPane('history');map.getPane('history').style.zIndex=250;map.createPane('researchPoints');map.getPane('researchPoints').style.zIndex=450;L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{className:'street-basemap',maxNativeZoom:19,maxZoom:20,noWrap:true,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'}).on('tileerror',()=>{baseErrors++;$('mapStatus').textContent='Street map unavailable'}).addTo(map);pointLayer=(L.markerClusterGroup?L.markerClusterGroup({animate:false,clusterPane:'researchPoints',maxClusterRadius:44,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:cluster=>L.divIcon({html:'<span>'+cluster.getChildCount()+'</span>',className:'research-cluster',iconSize:[44,44]})}):L.layerGroup()).addTo(map);uncertaintyLayer=L.layerGroup().addTo(map);map.on('click',e=>{if(!picking)return;const f=$('contributionForm');f.elements.latitude.value=e.latlng.lat.toFixed(6);f.elements.longitude.value=e.latlng.lng.toFixed(6);picking=false;document.body.classList.remove('picking');$('pickPoint').textContent='Choose on map';$('formStatus').textContent='Point selected';switchPanel('draftPanel')});map.on('moveend',updateLayerStatus);changeYear('none');fetch('data/nyc-borough-boundaries.geojson').then(r=>r.json()).then(data=>L.geoJSON(data,{style:{color:'#7c817a',weight:1,fillColor:'#202721',fillOpacity:.13},interactive:false}).addTo(map)).catch(()=>{})}else{$('mapStatus').textContent='Map unavailable'}
+if(map){
+ let lastInteractivePress=null;
+ $('map').addEventListener('pointerdown',event=>{
+  if(event.target.closest('.leaflet-marker-icon,.leaflet-interactive,.leaflet-popup,.leaflet-control'))lastInteractivePress={x:event.clientX,y:event.clientY,at:performance.now()};
+ },{capture:true,passive:true});
+ // Leaflet owns wheel normalization and zoom state. Modified gestures retain browser zoom.
+ $('map').addEventListener('wheel',event=>{
+  if(event.ctrlKey||event.metaKey||Math.abs(event.deltaX)>Math.abs(event.deltaY)||event.target.closest('.leaflet-popup,.leaflet-control,input,select,textarea'))event.stopImmediatePropagation();
+ },{capture:true,passive:true});
+ $('map').addEventListener('dblclick',event=>{
+  // A first marker click may move/remove its node before the second click arrives.
+  const fromInteractive=lastInteractivePress&&performance.now()-lastInteractivePress.at<800&&Math.hypot(event.clientX-lastInteractivePress.x,event.clientY-lastInteractivePress.y)<=8;
+  if(fromInteractive||event.target.closest('.leaflet-marker-icon,.leaflet-interactive,.leaflet-popup,.leaflet-control,button,a,input,select,textarea'))event.stopImmediatePropagation();
+  lastInteractivePress=null;
+ },{capture:true});
+ let hold=null,suppressClickUntil=0;
+ const pointers=new Set();
+ function cancelHold(){if(hold)clearTimeout(hold.timer);hold=null;}
+ document.addEventListener('pointerdown',event=>{pointers.add(event.pointerId);if(pointers.size>1)cancelHold();},{capture:true,passive:true});
+ $('map').addEventListener('pointerdown',event=>{
+  cancelHold();
+  if(event.button!==0||event.isPrimary===false||pointers.size!==1||event.ctrlKey||event.metaKey||event.altKey||event.shiftKey||!emptyMapTarget(event.target))return;
+  const candidate={id:event.pointerId,x:event.clientX,y:event.clientY,latlng:map.mouseEventToLatLng(event),timer:null};
+  hold=candidate;candidate.timer=setTimeout(()=>{
+   if(hold!==candidate||!pointers.has(candidate.id)||!emptyMapTarget(event.target))return;
+   hold=null;suppressClickUntil=performance.now()+1000;
+   requestContributionPoint(candidate.latlng,contributionPicking);
+  },650);
+ },{passive:true});
+ document.addEventListener('pointermove',event=>{if(hold&&event.pointerId===hold.id&&Math.hypot(event.clientX-hold.x,event.clientY-hold.y)>8)cancelHold();},{capture:true,passive:true});
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])document.addEventListener(type,event=>{pointers.delete(event.pointerId);if(hold?.id===event.pointerId)cancelHold();},{capture:true,passive:true});
+ document.addEventListener('wheel',cancelHold,{capture:true,passive:true});
+ window.addEventListener('blur',()=>{cancelHold();pointers.clear()});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelHold();pointers.clear()}});
+ map.on('movestart zoomstart',cancelHold);
+ $('map').addEventListener('contextmenu',event=>{if(hold||performance.now()<suppressClickUntil){event.preventDefault();event.stopImmediatePropagation();}});
+ $('map').addEventListener('click',event=>{if(performance.now()<suppressClickUntil){event.preventDefault();event.stopImmediatePropagation();}},{capture:true});
+ map.on('click',event=>{if(contributionPicking&&emptyMapTarget(event.originalEvent?.target)){L.DomEvent.stop(event.originalEvent);requestContributionPoint(event.latlng,true)}});
+}
 if(map){const credit=map.attributionControl.getContainer(),syncCredit=()=>document.documentElement.style.setProperty('--attribution-height',Math.ceil(credit.getBoundingClientRect().height)+'px');new ResizeObserver(syncCredit).observe(credit);syncCredit()}
 $('pickPoint')?.addEventListener('click',()=>{if(!map)return;picking=!picking;document.body.classList.toggle('picking',picking);$('pickPoint').textContent=picking?'Cancel selection':'Choose on map';$('formStatus').textContent=picking?'Click the public location on the map.':'';if(picking){closeTools();$('map').focus()}});
 const facetControls={filterBorough:'boroughs',filterType:'placeTypes',filterEvidence:'evidence',filterReview:'reviews',filterGeo:'geoStatuses'};
