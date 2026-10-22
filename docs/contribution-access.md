@@ -16,7 +16,7 @@ Use additive, namespaced tables for users, password credentials, sessions, verif
 
 Sessions use Secure, HttpOnly, SameSite host-only cookies with a one-hour limit initially. Enforce the exact map origin and CSRF defenses. Session/user IDs are server-generated and immutable. New account actors use a distinct map-specific namespace; they must never imitate old Access/CUNY actor IDs. The gate removes client identity headers before deriving an actor from a verified session. Private responses remain no-store.
 
-Verification/reset tokens are purpose-bound, expiring and consumed once; safe storage and concurrent consumption must be tested. Reset changes the credential and revokes existing sessions. Generic responses and durable IP/account rate controls limit enumeration and mail abuse. Passwords and tokens never enter analytics, URLs outside the fixed confirmation flow, browser storage, screenshots or ordinary logs. Local Worker runtime tests must establish KDF cost and request limits before activation.
+Verification/reset tokens are purpose-bound, expiring and consumed once; safe storage and concurrent consumption must be tested. Reset emails go only to the address stored on the account, resolved server-side from the reset request. Never accept a separate recipient or redirect address from the requester. Reset changes the credential and revokes existing sessions. Generic responses and durable IP/account rate controls limit enumeration and mail abuse. Passwords and tokens never enter analytics, URLs outside the fixed confirmation flow, browser storage, screenshots or ordinary logs. Local Worker runtime tests must establish KDF cost and request limits before activation.
 
 ## Mail reuse
 
