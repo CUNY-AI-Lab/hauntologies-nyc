@@ -18,8 +18,8 @@ function setHostedRecords(records){hostedRecords=records;populateFacets();render
 const hasPoint=r=>Boolean(AtlasModel.normalize(r).geometry);
 const markers=new Map();
 let uncertaintyLayer;
-let proposedPointMarker=null,contributionPicking=false;
-function clearProposedPoint(){if(proposedPointMarker&&map)map.removeLayer(proposedPointMarker);proposedPointMarker=null;}
+let proposedPointMarker=null,proposedPanFrame=0,contributionPicking=false;
+function clearProposedPoint(){cancelAnimationFrame(proposedPanFrame);if(proposedPointMarker&&map)map.removeLayer(proposedPointMarker);proposedPointMarker=null;}
 function stopContributionPicking(){
  contributionPicking=false;document.body.classList.remove('contribution-picking');
  if($('mapStatus').textContent==='Choose a location')updateLayerStatus();
@@ -29,6 +29,16 @@ function showProposedPoint(point){
  if(!map||!point||!Number.isFinite(point.latitude)||!Number.isFinite(point.longitude)||$('researchSidecar').hidden||!$('draftPanel').classList.contains('active'))return;
  proposedPointMarker=L.marker([point.latitude,point.longitude],{interactive:false,keyboard:false,zIndexOffset:800,icon:L.divIcon({className:'proposed-point',html:'<span aria-hidden="true">+</span>',iconSize:[30,30],iconAnchor:[15,15]})}).addTo(map);
  proposedPointMarker.getElement()?.setAttribute('aria-label','Proposed location');
+ const marker=proposedPointMarker;
+ proposedPanFrame=requestAnimationFrame(()=>{
+  if(proposedPointMarker!==marker||$('researchSidecar').hidden)return;
+  const size=map.getSize(),panel=$('researchSidecar').getBoundingClientRect(),brand=document.querySelector('.brand').getBoundingClientRect(),tools=document.querySelector('.header-tools').getBoundingClientRect();
+  const position=map.latLngToContainerPoint(marker.getLatLng()),narrow=panel.width>size.x*.75;
+  const left=24,right=narrow?size.x-24:panel.left-24,top=brand.bottom+24,bottom=narrow?panel.top-24:size.y-90;
+  const x=Math.max(left,Math.min(right,position.x)),y=Math.max(Math.min(top,bottom),Math.min(bottom,position.y));
+  const targetX=y<tools.bottom+24&&x>tools.left-24?Math.max(left,tools.left-24):x;
+  if(Math.abs(position.x-targetX)>1||Math.abs(position.y-y)>1)map.panBy([position.x-targetX,position.y-y],{animate:false});
+ });
 }
 function emptyMapTarget(target){
  return target instanceof Element&&$('map').contains(target)&&!$('map').inert&&!document.querySelector('dialog[open]')&&!target.closest('.leaflet-marker-icon,.leaflet-popup,.leaflet-tooltip,.leaflet-interactive,.leaflet-control,button,a,input,select,textarea,[role="button"]');
