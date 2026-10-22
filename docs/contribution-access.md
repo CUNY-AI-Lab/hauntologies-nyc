@@ -1,33 +1,53 @@
 # Private dashboard access
 
-The public map and registration at `/register` use the existing Worker and D1 database. Registration accepts only Name and Email through `/api/register`; it has no public attendee list. Contribution and review APIs remain closed. No reviewer grants, identity provider, service binding or database migration are created by this release.
+The live public map and registration at `/register` use the existing Worker and D1 database. Registration accepts Name and Email through `/api/register`; it has no public attendee list. The private attendee dashboard and CUNY session adapter in this branch are tested locally, not deployed or activated. No reviewer grant, identity provider, service binding or database migration is created by this change.
 
-## Current decision
+## Owner and integration decision
 
-The owner selected their existing CUNY Login admin account, `zach.muhlbauer`. The earlier Gmail and email one-time PIN proposal is superseded and was not approved. A typed username is not a verified subject. No account is granted access until its authenticated canonical subject is verified and the exact integration is approved.
+The owner selected the existing CUNY Login admin account `zach.muhlbauer`. The earlier Gmail/email-code proposal is superseded and was not approved. A typed username is not a verified subject. No owner is configured until the canonical subject is verified through the existing CUNY authentication service and the exact connection is approved.
 
-The existing CUNY service source documents a private `WorkerIdentity` entrypoint on `cail-doorway`. A proposed Hauntologies receiver would use:
+The proposed private service connection is:
 
-- Service binding `IDENTITY` to `cail-doorway`, entrypoint `WorkerIdentity`
-- Binding props `{ "id": "hauntologies-nyc", "worker": "hauntologies-nyc", "workspace": false }`
-- Audience `cail:hauntologies-nyc` and issuer `https://tools.ailab.gc.cuny.edu/cail-sso`
-- Same-origin `/auth/start`, `/auth/callback` and POST `/auth/logout`
-- Private dashboard and contribution routes only; `/`, `/register` and `/api/register` stay public
+```json
+{
+  "binding": "IDENTITY",
+  "service": "cail-doorway",
+  "entrypoint": "WorkerIdentity",
+  "props": { "id": "hauntologies-nyc", "worker": "hauntologies-nyc", "workspace": false }
+}
+```
 
-These are proposed integration values derived from local service source, not a verified deployed registration. The receiver requires an application adapter, authorization scoped to the verified owner, and action-time approval for the persistent service binding. This release does not add that binding or imply access for other contributors. The dormant Cloudflare Access JWT adapter is a different protocol and must not be enabled as a substitute.
+The receiver verifies only the application identity for audience `cail:hauntologies-nyc` and issuer `https://tools.ailab.gc.cuny.edu/cail-sso`. It never consumes or exposes Gateway/workspace identity legs and adds no Gateway or AdmissionResolver binding. Doorway rechecks its existing session and Admission through the private RPC protocol. No username matching, first-login ownership, whole-domain access or admin-role inference is used.
 
-## Application safeguards
+## Local implementation
 
-Submit requires a matching durable receipt. An uncertain save retains its exact request and idempotency key. Pending requests bind to the verified actor; a different account cannot replay them. Sign-in opens separately and does not submit automatically. Failed authentication clears loaded private review data and capabilities.
+`/dashboard` is a data-free HTML shell. Attendee reads use exact GET `/api/admin/registrations`, which requires the verified owner before accessing D1. The response contains Name, Email, Registered time and a bounded pagination cursor for this event only. There are no export, edit, delete or email actions. Errors, expired authentication and sign-out clear rendered attendee data. No attendee data is stored in browser storage or bundled into the page.
 
-Reviewer configuration defaults to empty. `CONTRIBUTIONS_REVIEWER_IDS` accepts only explicitly approved verified actor IDs; malformed configuration grants no roles. Publishers and stewards remain empty. Contributor credits confer no permissions. A contributor cannot approve their own proposal, and reviewed metadata does not automatically overwrite map records.
+The CUNY adapter uses random state and S256 PKCE, a Secure/HttpOnly/SameSite=Lax host-only cookie, bounded RPC, one-use callback redemption, validated public verification keys, exact RS256 issuer/audience/subject/time checks, and a server-verified opaque actor. Exact routes are GET `/auth/start`, GET `/auth/callback`, POST `/auth/logout` and GET `/auth/session`. The callback host is fixed to this Worker. Local return destinations are limited to `/` and `/dashboard`.
 
-Old hosting identities and submission history have not been migrated or remapped. Do not infer ownership from an unverified email or rewrite existing history.
+The authenticated self-session endpoint returns only the signed-in person's own canonical subject and opaque actor ID, never a token, and grants no access to registrations. It can be used to verify the owner's subject after the connection is approved. Attendee and contribution access require that verified subject to match the explicitly configured owner. Missing or malformed configuration stays closed. Confirmed logout returns 204; uncertain server revocation returns an error even though browser cookies are cleared.
+
+These settings remain absent from release preparation:
+
+| Setting | Required value after approval |
+| --- | --- |
+| `CONTRIBUTIONS_CUNY_ENABLED` | Exact string `true` |
+| `CAIL_IDENTITY_JWKS` | Current public verification keys from the trusted existing CUNY identity service; no private key |
+| `CONTRIBUTIONS_CUNY_OWNER_SUBJECT` | Owner's verified canonical `cail-` subject; never the typed username or an email |
+| `IDENTITY` | The exact service binding above |
+
+The existing Cloudflare Access adapter is a different, dormant protocol. It is not a substitute for CUNY Login. Once CUNY mode is enabled, its authentication failures never fall back to Access. No email-code login is configured.
+
+## Contribution safeguards
+
+Submit requires a matching durable receipt. Uncertain saves retain the exact request and idempotency key. Pending requests bind to the verified actor; another account cannot replay them. Sign-in opens separately and does not submit automatically. Authentication failures clear loaded private review data and capabilities.
+
+The owner may submit and read their own proposals when CUNY access is activated. Attendee-dashboard ownership does not confer review, triage or publication authority. Reviewer configuration, publishers and stewards remain empty. Contributor credits confer no permissions. A contributor cannot approve their own proposal. Old hosting identities and submission history have not been migrated or reassigned.
 
 ## Verification and remaining decisions
 
-On October 22, 2026 the user approved renewal of the existing Wrangler OAuth session with unchanged permissions. Renewal succeeded with the same 29 scopes; no new login grant or credential was created. The previously denied Access organization lookup was not retried.
+The local suite includes synthetic RS256 identities, isolated SQLite registration saves/reads, owner/stranger/forged-identity denial before database access, route normalization, callback state and cookie handling, key/audience/time failures, pagination, safe text rendering and expired-session clearing. Compiled local checks verify that unconfigured private endpoints remain closed. These are not hosted CUNY login or production persistence acceptance.
 
-The public registration page and time change can deploy independently. Private dashboard activation still requires the exact CUNY binding approval and verified owner subject. Any independent reviewer identity and role needs separate approval.
+Activation still requires approval of the exact CUNY binding, trusted current public-key configuration and verified owner subject. No other users receive access. After approval, real callback and owner readback must be checked; production synthetic registration and proposal writes still require their separate approval. Never read actual attendee details unnecessarily or put them in fixtures, screenshots, repository history or logs.
 
-Production proposal/retry/withdrawal testing and registration test writes remain unapproved. Local synthetic SQLite and browser results are not production acceptance. No attendee or submission data belongs in this repository or test fixtures.
+The public map and registration release remains independent. The existing Worker/D1 are reused; AI stays disabled. No new database, migration, paid service or credential is needed by the local implementation.

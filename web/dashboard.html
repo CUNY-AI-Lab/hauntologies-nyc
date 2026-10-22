@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Registrations | Hauntologies of New York</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script defer src="/dashboard.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#registrations">Skip to registrations</a>
+  <header>
+    <a class="identity" href="/">Hauntologies of New York</a>
+    <nav aria-label="Site"><a href="/">Map</a><a href="/register">Register</a></nav>
+  </header>
+  <main id="registrations" tabindex="-1">
+    <div class="heading">
+      <h1>Registrations</h1>
+      <div class="actions">
+        <button id="refreshRegistrations" type="button">Refresh</button>
+        <button id="dashboardLogout" type="button" hidden>Sign out</button>
+      </div>
+    </div>
+    <p id="dashboardStatus" role="status" aria-live="polite">Loading</p>
+    <div class="actions" id="dashboardRecovery" hidden>
+      <a class="button" id="dashboardSignIn" href="/auth/start" hidden>Sign in</a>
+      <button id="retryRegistrations" type="button" hidden>Retry</button>
+    </div>
+    <div id="registrationResults" hidden>
+      <table>
+        <caption class="sr-only">Halloween Hackathon registrations</caption>
+        <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Registered</th></tr></thead>
+        <tbody id="registrationRows"></tbody>
+      </table>
+      <nav id="registrationPages" aria-label="Registration pages" hidden>
+        <button id="previousRegistrations" type="button" disabled>Previous</button>
+        <p id="registrationPage"></p>
+        <button id="nextRegistrations" type="button" disabled>Next</button>
+      </nav>
+    </div>
+    <noscript><p>Enable JavaScript to view registrations</p></noscript>
+  </main>
+</body>
+</html>

@@ -87,7 +87,7 @@ test('public access status exposes only readiness and a fixed same-origin path',
   for(const [env,enabled] of [[{},false],[config,true]]) {
     const response=await worker.fetch(request(null,'/api/access-status'),env,{});
     assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
-    assert.deepEqual(await response.json(),{enabled,sign_in_url:enabled?'/api/contributions/sign-in':null});
+    assert.deepEqual(await response.json(),{enabled,sign_in_url:enabled?'/api/contributions/sign-in':null,dashboard_enabled:false});
   }
   assert.equal((await worker.fetch(new Request('https://map.example.test/api/access-status',{method:'POST'}),config,{})).status,401);
   for(const path of ['/API/access-status','/%61pi/access-status','/api//access-status'])assert.equal((await worker.fetch(request(null,path),config,{})).status,401);
