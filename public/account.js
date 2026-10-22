@@ -15,7 +15,6 @@
     trigger.setAttribute('aria-label',pending?'Checking sign-in':value?'Account':'Sign in');
     byId('accountTitle').textContent=value?'Account':'Sign in';
     if(byId('accountRegistrationSection'))byId('accountRegistrationSection').hidden=!value;
-    if(byId('accountSignInHelp'))byId('accountSignInHelp').hidden=value;
     const saved=window.HauntologiesRegistration?.receipt();registration.textContent=saved?'Receipt: '+saved.receipt_id:'No receipt saved in this browser';
     if(byId('accountEventLink'))byId('accountEventLink').hidden=!!saved;
   }

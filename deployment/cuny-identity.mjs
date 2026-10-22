@@ -1,3 +1,5 @@
+// Historical, inactive adapter. CUNY Login was withdrawn on 2026-10-22.
+// Not imported or bundled by the Worker. Do not activate this integration.
 import { createLocalJWKSet, jwtVerify } from 'jose';
 
 // Protocol source: CUNY-AI-Lab/cail-tools-admission, commit
