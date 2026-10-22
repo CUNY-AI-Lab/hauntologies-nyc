@@ -3,7 +3,7 @@
   const byId=id=>document.getElementById(id),model=window.RecordEditModel;
   const dialog=byId('recordEditorDialog'),form=byId('recordEditorForm'),fieldsRoot=byId('recordEditorFields');
   const message=byId('recordChangeMessage'),previewRoot=byId('recordEditorPreview'),submit=byId('submitRecordEdit');
-  const drafts=new Map();let current=null,opener=null;
+  const drafts=new Map();let current=null,opener=null,statusVersion=0;
   const pendingStorageKey='hauntologies-pending-record-edit';
   const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
   const copy=value=>structuredClone(value),inputId=key=>'record-edit-'+key.replace(/[^a-zA-Z0-9_-]/g,'-');
@@ -37,7 +37,27 @@
     if(typeof receipt?.id!=='string'||!receipt.id||receipt.action!==request.path.slice(1)||typeof saved?.id!=='string'||result?.submission_id!==saved.id||result.revision!==revision||!Number.isInteger(saved.revision)||saved.revision<revision||request.path==='/revise'&&saved.id!==request.body.submission_id)throw Object.assign(new Error('Save receipt could not be confirmed'),{uncertain:true});
     return data;
   }
-  function status(text){byId('recordEditorStatus').textContent=text;}
+  function status(text){statusVersion++;byId('recordEditorStatus').textContent=text;}
+  async function accessActions(state){
+    const version=statusVersion,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
+    if(!state.pending&&!state.target)byId('reloadRecordEditor').hidden=true;
+    try{
+      const response=await fetch('/api/access-status',{credentials:'same-origin',cache:'no-store',signal:controller.signal}),access=await response.json();
+      if(current!==state||version!==statusVersion||!response.ok)return;
+      if(access?.enabled===false){byId('recordEditorStatus').textContent=state.pending?'Save outcome unknown. Sign-in is not enabled yet':'Sign-in is not enabled yet';return;}
+      if(access?.enabled!==true||access.sign_in_url!=='/api/contributions/sign-in')return;
+      byId('recordEditorStatus').textContent=state.pending?'Save outcome unknown. Sign in to retry':'Sign in to submit';
+      const link=node('a','Sign in');link.href=access.sign_in_url;link.target='_blank';link.rel='noopener noreferrer';
+      byId('recordEditorStatus').append(document.createTextNode(' '),link);
+      if(!state.pending&&!state.target&&!state.loading&&!state.busy)byId('reloadRecordEditor').hidden=false;
+    }catch{}finally{clearTimeout(timeout);}
+  }
+  function serviceStatus(state,error,text=serviceError(error)){
+    state.unavailableStatus=error.status;status(text);
+    byId('reloadRecordEditor').hidden=!!state.pending||!!state.target||!!state.loading||error.status===401||error.status===403;
+    if(state.pending)byId('recordEditorPreviewMode').hidden=true;
+    if(error.status===401)accessActions(state);
+  }
   function changed(){if(!current||current.pending)return;current.preview=null;previewRoot.hidden=true;byId('recordEditorReceipt').hidden=true;submit.disabled=true;}
   function errors(items=[]){
     const root=byId('recordEditorErrors');root.replaceChildren();root.hidden=!items.length;
@@ -142,8 +162,9 @@
     byId('recordEditorName').textContent=state.title;message.value=state.message;renderFields(state);
     const focused=state.controls.get(focusedKey);if(dialog.open&&focused){reveal(focused);focused.focus();if(typeof selection==='number'&&typeof focused.setSelectionRange==='function'&&!['number','select'].includes(focused.type)){try{focused.setSelectionRange(selection,selection);}catch{}}}
     byId('recordEditorReceipt').hidden=!state.saved;
-    previewRoot.hidden=true;errors([]);status(state.loading?'Loading current record…':state.target?(state.stale?'Record changed. Preview your changes again':''):state.unavailable||'Local preview');
-    byId('reloadRecordEditor').hidden=!!state.target||!!state.loading;
+    previewRoot.hidden=true;errors([]);status(state.pending?'Save outcome unknown':state.loading?'Loading current record…':state.target?(state.stale?'Record changed. Preview your changes again':''):state.unavailable||'Local preview');
+    byId('reloadRecordEditor').hidden=!!state.pending||!!state.target||!!state.loading||state.unavailableStatus===401||state.unavailableStatus===403;
+    if(state.unavailableStatus===401&&!state.loading)accessActions(state);
     if(state.preview)renderPreview(state,state.preview.changes,state.preview.serverValid);
     if(state.saved)renderReceipt(state.saved);lock();
   }
@@ -168,9 +189,9 @@
       const binding={record_id:target.record_id,expected_version:target.expected_version,expected_hash:target.expected_hash};
       const bindingChanged=state.lastTarget&&(state.lastTarget.expected_version!==binding.expected_version||state.lastTarget.expected_hash!==binding.expected_hash);
       const baselineChanged=[...state.dirty].some(key=>JSON.stringify(state.before[key])!==JSON.stringify(before[key]));
-      state.stale=!!(state.stale||bindingChanged||baselineChanged);state.lastTarget=copy(binding);state.target=binding;state.before=before;state.fields=fields;state.original=copy(target.record);state.title=target.title||state.title;state.unavailable='';
+      state.stale=!!(state.stale||bindingChanged||baselineChanged);state.lastTarget=copy(binding);state.target=binding;state.before=before;state.fields=fields;state.original=copy(target.record);state.title=target.title||state.title;state.unavailable='';state.unavailableStatus=null;
       for(const key of Object.keys(state.rawValues))if(!state.dirty.has(key))delete state.rawValues[key];
-    }catch(error){if(token!==state.lookup)return;state.unavailable=serviceError(error);}
+    }catch(error){if(token!==state.lookup)return;state.unavailable=serviceError(error);state.unavailableStatus=error.status;}
     finally{if(token===state.lookup){state.loading=false;if(current===state)renderState(state);}}
   }
   function afterValues(state){
@@ -195,7 +216,7 @@
     const root=byId('recordEditorDiff');root.replaceChildren();
     for(const change of changes){const section=node('section'),title=state.fields.find(f=>f.key===change.field)?.label||change.field;section.className='record-edit-diff';section.append(node('h4',title));const dl=node('dl');for(const [label,value]of [['Before',change.before],['After',change.after]])dl.append(node('dt',label),node('dd',value===null?'Unknown':display(value)));section.append(dl);root.append(section);}
     sourceAdditions(state).forEach((source,index)=>{const section=node('section'),dl=node('dl');section.className='record-edit-diff';section.append(node('h4','New reference '+(index+1)));dl.append(node('dt','Before'),node('dd','No reference'));for(const field of model.sourceFields)if(Object.hasOwn(source,field.key))dl.append(node('dt',field.label[0].toUpperCase()+field.label.slice(1)),node('dd',source[field.key]===null?'Unknown':display(source[field.key])));section.append(dl);root.append(section);});
-    byId('recordEditorPreviewMode').textContent=state.pending?'Save outcome unknown':serverValid?'Ready to submit':'Local preview';previewRoot.hidden=false;lock();
+    byId('recordEditorPreviewMode').textContent=serverValid?'Ready to submit':'Local preview';byId('recordEditorPreviewMode').hidden=!!state.pending;previewRoot.hidden=false;lock();
   }
   async function preview(event){
     event.preventDefault();const state=current;if(!state||state.pending||state.busy||state.saved)return;errors([]);
@@ -204,9 +225,9 @@
     const validation=model.validateChanges(changes,{snapshot:state.before,change_message:state.message,source_additions:sourceAdditions(state)});
     if(!validation.valid){errors(validation.errors);return;}
     const raw=JSON.stringify(envelope(state,changes),null,2);state.preview={changes,raw,serverValid:false};renderPreview(state,changes,false);
-    if(!state.target){status(state.loading?'Loading current record…':state.unavailable||'Submissions unavailable');previewRoot.focus();return;}
+    if(!state.target){status(state.loading?'Loading current record…':state.unavailable||'Submissions unavailable');if(state.unavailableStatus===401&&!state.loading)accessActions(state);previewRoot.focus();return;}
     state.busy=true;lock();
-    try{const result=await api('/preview',{submission_json:raw});if(current!==state)return;
+    try{const result=await api('/preview',{submission_json:raw,...(state.revisionOf?{submission_id:state.revisionOf.id,expected_revision:state.revisionOf.revision}:{})});if(current!==state)return;
       state.preview.serverValid=result.preview?.validation?.valid===true;
       if(!state.preview.serverValid){
         const issues=result.preview?.validation?.errors||['The proposal could not be validated'];
@@ -214,7 +235,7 @@
         errors(issues);
       }
       else{state.stale=false;status('');renderPreview(state,changes,true);previewRoot.focus();}
-    }catch(error){state.target=null;state.unavailable=serviceError(error);status(state.unavailable);byId('reloadRecordEditor').hidden=false;}
+    }catch(error){state.target=null;state.unavailable=serviceError(error);serviceStatus(state,error);}
     finally{state.busy=false;if(current===state)lock();}
   }
   function renderReceipt(data){
@@ -224,17 +245,17 @@
   }
   async function send(){
     const state=current;if(!state||state.busy||state.saved||(!state.pending&&!state.preview?.serverValid))return;
-    if(state.pending&&(typeof state.pending.actor_id!=='string'||!state.pending.actor_id)){status('Original account unknown');errors(['Original account unknown. The saved request needs recovery before retrying']);return;}
+    if(state.pending&&(typeof state.pending.actor_id!=='string'||!state.pending.actor_id)){errors([]);status('Original account unknown');return;}
     state.busy=true;lock();errors([]);let actor;
     try{
       const session=await api('/session');actor=session?.actor_id;
       if(typeof actor!=='string'||!actor||actor.length>200)throw new Error('Invalid session');
-    }catch(error){state.busy=false;if(current===state){status(serviceError(error));errors([serviceError(error)]);lock();}return;}
-    if(state.pending&&state.pending.actor_id!==actor){state.busy=false;if(current===state){status('Original account required');errors(['Sign in with the original account to retry this saved request']);lock();}return;}
-    if(!state.pending){const now=JSON.stringify(envelope(state,proposedChanges(state)),null,2);if(now!==state.preview.raw){state.busy=false;changed();lock();errors(['Changes updated. Preview again']);return;}
+    }catch(error){state.busy=false;if(current===state){serviceStatus(state,error);lock();}return;}
+    if(state.pending&&state.pending.actor_id!==actor){state.busy=false;if(current===state){status('Original account required');lock();}return;}
+    if(!state.pending){const now=JSON.stringify(envelope(state,proposedChanges(state)),null,2);if(now!==state.preview.raw){state.busy=false;changed();lock();status('Changes updated. Preview again');return;}
       const body={idempotency_key:crypto.randomUUID(),submission_json:state.preview.raw};if(state.revisionOf)Object.assign(body,{submission_id:state.revisionOf.id,expected_revision:state.revisionOf.revision});
       state.pending={path:state.revisionOf?'/revise':'/submit',body,actor_id:actor};
-      try{persistPending(state);}catch{clearPending(state);state.busy=false;lock();errors(['Request not sent. Browser recovery storage is unavailable']);return;}
+      try{persistPending(state);}catch{clearPending(state);state.busy=false;lock();status('Request not sent. Browser recovery storage is unavailable');return;}
     }
     const exact=state.pending,wasUncertain=!!state.pendingUncertain;
     try{
@@ -246,7 +267,7 @@
       const uncertain=wasUncertain||error.uncertain||!error.status||error.status>=500;
       if(uncertain)state.pendingUncertain=true;
       else{clearPending(state);if(error.status===401||error.status===403||error.status===409){state.target=null;if(state.preview)state.preview.serverValid=false;state.unavailable=serviceError(error);byId('reloadRecordEditor').hidden=false;}}
-      if(current===state){status(uncertain?'Save outcome unknown':serviceError(error));errors([uncertain?'Save outcome unknown. Retry the same submission':serviceError(error)]);}
+      if(current===state)serviceStatus(state,error,uncertain?'Save outcome unknown':serviceError(error));
     }finally{state.busy=false;if(current===state)lock();}
   }
   const restoredPending=restorePending();if(restoredPending)drafts.set('pending',restoredPending);
@@ -257,7 +278,7 @@
     let state=pending||drafts.get(recordId);
     if(!state||state.saved){state={id:recordId,title:record.title||recordId,original:copy(record),before:model.snapshot(record),fields:model.fieldsFor?model.fieldsFor(record):model.fields,message:'',rawValues:{},dirty:new Set(),controls:new Map(),initial:new Map(),additions:[],target:null,lookup:0,loading:false,sourceChoice:'primary'};drafts.set(recordId,state);}
     current=state;renderState(state);if(!dialog.open)dialog.showModal();
-    if(state.pending){errors(['Save outcome unknown. Retry the same submission']);submit.focus();return;}
+    if(state.pending){submit.focus();return;}
     message.focus();loadTarget(state);
   });
   window.addEventListener('record-edit-revision-requested',event=>{
@@ -274,7 +295,7 @@
       drafts.set(key,state);
     }
     current=state;renderState(state);if(!dialog.open)dialog.showModal();
-    if(state.pending){errors(['Save outcome unknown. Retry the same submission']);submit.focus();return;}
+    if(state.pending){submit.focus();return;}
     message.focus();loadTarget(state);
   });
   message.addEventListener('input',()=>{if(current){current.message=message.value;changed();}});

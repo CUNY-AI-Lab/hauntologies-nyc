@@ -98,8 +98,10 @@ html,body,.workspace{overflow:clip}
 .place-links a:hover{text-decoration:underline;color:#f0ddbd}
 @media(max-width:380px){.place-facts{padding-left:16px}.recordlist .place-card .place-select{font-size:15px}.place-coordinates{display:block}.place-coordinates dd{margin-top:1px}}
 
-/* Tools follows the map actions in reading and keyboard order. */
-#mapTools .map-actions{display:flex;flex-direction:column;align-items:stretch;gap:8px}#mapTools .map-actions>.outline{width:100%;text-align:left}#mapTools #zoomTools{align-self:flex-start}
+/* Zoom follows Layers in the map controls and keyboard order. */
+#mapTools .map-actions{display:flex;flex-direction:column;align-items:stretch;gap:8px}#mapTools .map-actions>.outline{width:100%;text-align:left}.header-tools .zoom-tools{align-self:center}
+@media(min-height:501px){.popout:not(.filters-popout),.filters-popout{top:210px;max-height:calc(100dvh - 210px - var(--panel-bottom) - 8px)}.research.popout{height:calc(100dvh - 210px - var(--panel-bottom) - 8px)}}
+@media(max-width:760px) and (min-height:501px){.popout:not(.filters-popout){top:auto;max-height:min(55dvh,calc(100dvh - 210px - env(safe-area-inset-top) - var(--panel-bottom)))}.research.popout{height:min(55dvh,calc(100dvh - 210px - env(safe-area-inset-top) - var(--panel-bottom)))}.filters-popout{top:calc(202px + env(safe-area-inset-top));max-height:calc(100dvh - 210px - env(safe-area-inset-top) - var(--panel-bottom))}}
 
 /* Participation forms remain overlays on the full-window map. */
 .contribution-navigation{display:flex;gap:8px}.contribution-navigation button{min-width:84px}

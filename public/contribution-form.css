@@ -1,0 +1,24 @@
+#typedContributionForm { display: grid; gap: 12px; }
+#typedContributionForm > label { margin: 0; }
+#contributionSummary { min-height: 96px; max-height: 40dvh; }
+#typedContributionForm .workflow-details { margin: 0; }
+#typedContributionForm .workflow-details > summary { padding-block: 10px; }
+.contribution-place-choice { display: grid; grid-template-columns: minmax(104px, .9fr) minmax(0, 1.5fr); gap: 10px; }
+.contribution-place-choice label { margin: 0; }
+#freeformRecordContext { margin: 0; align-items: center; }
+#freeformRecordLabel { min-width: 0; overflow-wrap: anywhere; }
+#workflowConnection:empty { display: none; }
+#workflowConnection [data-access-actions] { display: inline-flex; gap: 12px; margin-left: 10px; }
+#contributionAttributes, #stagedContributionImages { display: grid; gap: 12px; }
+.contribution-attribute, .staged-image { min-width: 0; padding-block: 10px; border-top: 1px solid var(--line); }
+.contribution-attribute label, .staged-image label { display: block; margin-bottom: 10px; }
+.staged-image > p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.staged-image details { margin-block: 4px; }
+#contributionImages { padding: 8px; }
+#contributionImageLimits, #contributionImageError { margin: 8px 0; }
+#contributionImageError { color: #ffba9a; }
+#contributionImageProgress { margin-top: 14px; }
+#contributionImageStatus { margin: 0 0 10px; }
+#typedContributionForm [aria-invalid=true] { border-color: #edb08b; }
+#typedContributionForm :is(input, textarea, select, button, summary) { scroll-margin-block: 12px; }
+@media (min-width: 420px) { .contribution-place-choice { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); } }

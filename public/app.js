@@ -23,7 +23,30 @@ function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.i
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
 let toolOpener='toolsButton';
 const toolPanels=['toolsMenu','mapTools','layersPanel','filtersPanel','researchSidecar'];
+let sidecarModalState=null;
+function setSidecarModal(active){
+ const sidecar=$('researchSidecar');
+ if(!active){
+  if(!sidecarModalState)return;
+  for(const [node,inert] of sidecarModalState.background)node.inert=inert;
+  for(const [name,value] of sidecarModalState.attributes)value===null?sidecar.removeAttribute(name):sidecar.setAttribute(name,value);
+  sidecarModalState=null;return;
+ }
+ if(sidecarModalState)return;
+ const background=new Map();
+ for(let branch=sidecar;branch.parentElement&&branch!==document.body;branch=branch.parentElement){
+  for(const sibling of branch.parentElement.children){
+   // Native dialogs manage their own modality, including the record editor opened from Review.
+   if(sibling===branch||sibling.tagName==='DIALOG')continue;
+   background.set(sibling,sibling.inert);sibling.inert=true;
+  }
+ }
+ sidecarModalState={background,attributes:['role','aria-modal'].map(name=>[name,sidecar.getAttribute(name)])};
+ sidecar.setAttribute('role','dialog');sidecar.setAttribute('aria-modal','true');
+ if(!sidecar.contains(document.activeElement))$('sidecarTitle').focus({preventScroll:true});
+}
 function closeTools(focus=false){
+ setSidecarModal(false);
  for(const id of toolPanels)$(id).hidden=true;
  for(const id of ['toolsButton','filtersButton','mapToolsButton','layersButton','openResearch'])$(id).setAttribute('aria-expanded','false');
  document.body.classList.remove('sidecar-open');if(focus)$(toolOpener).focus({preventScroll:true});
@@ -37,6 +60,7 @@ function switchPanel(id){
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
  $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Submit';
  if(id==='casePanel')toolOpener='mapToolsButton';
+ setSidecarModal(id==='draftPanel');
 }
 $('toolsButton').addEventListener('click',()=>{const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
