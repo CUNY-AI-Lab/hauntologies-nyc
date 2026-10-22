@@ -4,9 +4,31 @@
   const dialog=byId('registrationDialog'),form=byId('registrationForm');
   const name=byId('registrationName'),email=byId('registrationEmail'),submit=byId('submitRegistration');
   const status=byId('registrationStatus'),error=byId('registrationError'),receipt=byId('registrationReceipt');
-  if(!form||!name||!email||!submit||!status||!error||!receipt)return;
   const registerButton=byId('registerButton');
-  let request=null,busy=false,registered=false,opener=null;
+  const eventId='hauntologies-2026-10-30',receiptKey='hauntologies-registration-receipt',pendingKey='hauntologies-registration-pending';
+  const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  function readReceipt(){try{const value=JSON.parse(localStorage.getItem(receiptKey)||'null');return value?.event_id===eventId&&uuid(value.receipt_id)?{event_id:eventId,receipt_id:value.receipt_id}:null;}catch{return null;}}
+  function readPending(){try{const value=JSON.parse(sessionStorage.getItem(pendingKey)||'null');return value?.event_id===eventId&&uuid(value.key)&&/^[a-f0-9]{64}$/.test(value.payload_hash)?value:null;}catch{return null;}}
+  let savedReceipt=readReceipt(),pending=readPending(),request=null,busy=false,registered=!!savedReceipt,opener=null;
+  window.HauntologiesRegistration=Object.freeze({receipt:()=>savedReceipt?{...savedReceipt}:readReceipt()});
+  if(!form||!name||!email||!submit||!status||!error||!receipt)return;
+
+  async function payloadHash(value){
+    const address=value.email.trim(),at=address.lastIndexOf('@');
+    const normalized={name:value.name.trim(),email:address.slice(0,at)+address.slice(at).toLowerCase()};
+    const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(normalized)));
+    return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  function retainPending(value){sessionStorage.setItem(pendingKey,JSON.stringify(value));pending=value;}
+  function clearPending(){pending=null;try{sessionStorage.removeItem(pendingKey);}catch{}}
+  function renderReceipt(){
+    registered=true;form.hidden=true;name.value=email.value='';receipt.replaceChildren();
+    const heading=document.createElement(dialog?'h3':'h2');heading.textContent='Registered';
+    const saved=document.createElement('p');saved.textContent='Receipt: '+savedReceipt.receipt_id;receipt.append(heading,saved);
+    if(!dialog){const map=document.createElement('a');map.href='/';map.textContent='View map';receipt.append(map);}
+    receipt.hidden=false;
+    if(registerButton){registerButton.textContent='Registration';registerButton.setAttribute('aria-controls','registrationDialog');}
+  }
 
   function message(node,value){node.textContent=value;node.hidden=!value;}
   function lock(){submit.disabled=busy;name.readOnly=email.readOnly=busy||!!request;form.setAttribute('aria-busy',String(busy));}
@@ -30,8 +52,8 @@
     });
     byId('closeRegistration')?.addEventListener('click',()=>dialog.close());
     dialog.addEventListener('close',()=>{
-      const target=opener?.isConnected&&opener.getClientRects().length?opener:registerButton;
-      target.focus({preventScroll:true});
+      const target=opener?.isConnected&&opener.getClientRects().length?opener:registerButton.getClientRects().length?registerButton:byId('toolsButton');
+      target?.focus({preventScroll:true});
     });
     dialog.addEventListener('keydown',event=>{
       if(event.key!=='Tab')return;
@@ -44,29 +66,37 @@
   }
   form.addEventListener('submit',async event=>{
     event.preventDefault();if(busy||registered)return;
+    if(!request&&!form.reportValidity())return;
+    busy=true;lock();message(error,'');message(status,'Saving…');
     if(!request){
-      if(!form.reportValidity())return;
-      request={key:crypto.randomUUID(),body:JSON.stringify({name:name.value,email:email.value})};
+      try{
+        const body={name:name.value,email:email.value},hash=await payloadHash(body);
+        if(pending&&pending.payload_hash!==hash){showError('Enter the same name and email to retry this registration');busy=false;lock();message(status,'');return;}
+        const key=pending?.key||crypto.randomUUID();
+        retainPending({event_id:eventId,key,payload_hash:hash});request={key,body:JSON.stringify(body)};
+      }catch{busy=false;lock();message(status,'');showError('Registration is unavailable in this browser');return;}
     }
-    const exact=request;busy=true;lock();message(error,'');message(status,'Saving…');
+    const exact=request;
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{
       const response=await fetch('/api/register',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Idempotency-Key':exact.key},body:exact.body,signal:controller.signal});
       let data;try{data=await response.json();}catch{throw new Error('unreadable_response');}
       if(!response.ok){
         if(response.status>=500)throw new Error('registration_unavailable');
-        request=null;
+        request=null;clearPending();
         showError(errors[data?.error]||(response.status===401?'Registration is unavailable':'Registration was not saved. Please try again'));
         return;
       }
-      if(data?.ok!==true||typeof data.receipt_id!=='string'||!data.receipt_id.trim()||data.event?.id!=='hauntologies-2026-10-30')throw new Error('missing_receipt');
-      registered=true;request=null;form.hidden=true;receipt.replaceChildren();
-      const heading=document.createElement(dialog?'h3':'h2');heading.textContent='Registered';
-      const saved=document.createElement('p');saved.textContent='Receipt: '+data.receipt_id;
-      receipt.append(heading,saved);receipt.hidden=false;if(!dialog||dialog.open)receipt.focus();
+      if(data?.ok!==true||!uuid(data.receipt_id)||data.event?.id!==eventId)throw new Error('missing_receipt');
+      savedReceipt={event_id:eventId,receipt_id:data.receipt_id};
+      try{localStorage.setItem(receiptKey,JSON.stringify(savedReceipt));}catch{}
+      request=null;clearPending();renderReceipt();window.dispatchEvent(new CustomEvent('registration-confirmed'));
+      if(!dialog||dialog.open)receipt.focus();
     }catch{
       // A missing response cannot establish whether the write committed.
       request=exact;showError('Save outcome unknown. Select Register to retry');
     }finally{clearTimeout(timeout);busy=false;message(status,'');lock();}
   });
+  if(savedReceipt){clearPending();renderReceipt();}
+  else if(pending)message(error,'Registration outcome unknown. Enter the same name and email to retry');
 })();

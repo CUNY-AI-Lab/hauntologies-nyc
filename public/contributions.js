@@ -677,6 +677,11 @@
     clearRevision();for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
+  window.addEventListener('contributions-review-requested',async event=>{
+    const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;
+    byId('draftTab').click();switchView('reviewView');await loadSubmission(id);
+  });
+  window.addEventListener('contributions-session-ended',event=>clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to submit'));
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
   byId('tasksTool').addEventListener('click',()=>{byId('draftTab').click();switchView('taskView');loadSharedTasks();byId('toolsMenu').hidden=true;byId('toolsButton').setAttribute('aria-expanded','false');});
   byId('createTaskForm').addEventListener('submit',createTask);

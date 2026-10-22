@@ -77,15 +77,20 @@ export async function handleRegistration(request, env) {
     const clientKey = 'client:' + await sha256(event + ':' + windowStart + ':' + client), globalKey = 'global:' + event;
     const id = crypto.randomUUID(), createdAt = new Date(now).toISOString();
     // D1 batch is transactional. Only a newly inserted registration consumes either budget.
-    // Conditional INSERT and both counters share the transaction, so parallel requests cannot overrun it.
+    // Use database time at insertion: a queued request must not reopen a window
+    // whose counters a newer transaction has already pruned.
     const result = await db.batch([
-      db.prepare('DELETE FROM event_registration_limits WHERE window_start < ?').bind(windowStart),
+      db.prepare("DELETE FROM event_registration_limits WHERE window_start < CAST(CAST(strftime('%s', 'now') AS INTEGER) / ? AS INTEGER) * ?")
+        .bind(REGISTRATION_LIMITS.window_seconds, REGISTRATION_LIMITS.window_seconds),
       db.prepare(`INSERT INTO event_registrations (id, event_id, idempotency_hash, payload_hash, name, email, created_at)
         SELECT ?, ?, ?, ?, ?, ?, ?
         WHERE COALESCE((SELECT attempts FROM event_registration_limits WHERE rate_key = ? AND window_start = ?), 0) < ?
           AND COALESCE((SELECT attempts FROM event_registration_limits WHERE rate_key = ? AND window_start = ?), 0) < ?
+          AND CAST(strftime('%s', 'now') AS INTEGER) >= ?
+          AND CAST(strftime('%s', 'now') AS INTEGER) < ?
         ON CONFLICT(event_id, idempotency_hash) DO NOTHING`).bind(id, event, keyHash, payloadHash, name, canonicalEmail, createdAt,
-        globalKey, windowStart, REGISTRATION_LIMITS.global, clientKey, windowStart, REGISTRATION_LIMITS.per_client),
+        globalKey, windowStart, REGISTRATION_LIMITS.global, clientKey, windowStart, REGISTRATION_LIMITS.per_client,
+        windowStart, windowStart + REGISTRATION_LIMITS.window_seconds),
       ...[globalKey, clientKey].map(rateKey => db.prepare(`INSERT INTO event_registration_limits (rate_key, window_start, attempts)
         SELECT ?, ?, 1 WHERE EXISTS (SELECT 1 FROM event_registrations WHERE id = ?)
         ON CONFLICT(rate_key, window_start) DO UPDATE SET attempts = attempts + 1`).bind(rateKey, windowStart, id)),
@@ -95,6 +100,7 @@ export async function handleRegistration(request, env) {
     const saved = await find();
     if (saved) return receipt(saved, payloadHash, saved.id === id ? 201 : 200);
     if (Number(result[1].meta?.changes) !== 0) return reject(503, 'registration_unavailable');
-    return reject(429, 'rate_limited', { 'Retry-After': String(windowStart + REGISTRATION_LIMITS.window_seconds - seconds) });
+    const retrySeconds = Math.floor(Date.now() / 1000);
+    return reject(429, 'rate_limited', { 'Retry-After': String(Math.max(1, windowStart + REGISTRATION_LIMITS.window_seconds - retrySeconds)) });
   } catch { return reject(503, 'registration_unavailable'); }
 }
