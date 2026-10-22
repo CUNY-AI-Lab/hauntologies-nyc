@@ -1,36 +1,33 @@
-# Contribution access
+# Private dashboard access
 
-The public map and event registration remain available. `/api/contributions/*` remains closed until an explicitly approved Cloudflare Access application is configured. This PR does not create an Access application, identity provider, policy, credential, reviewer grant, or database migration.
+The public map and registration at `/register` use the existing Worker and D1 database. Registration accepts only Name and Email through `/api/register`; it has no public attendee list. Contribution and review APIs remain closed. No reviewer grants, identity provider, service binding or database migration are created by this release.
 
-## Required activation decision
+## Current decision
 
-Approve one self-hosted Access application for `hauntologies-nyc.ailab-452.workers.dev/api/contributions/*`, with an Allow policy for one owner-selected email identity and a one-hour session. The bare `/api/contributions` route stays denied by the Worker. The map, static assets and `/api/register` remain outside this application. Do not use an entire email domain, Everyone, a bypass policy or a service token.
+The owner selected their existing CUNY Login admin account, `zach.muhlbauer`. The earlier Gmail and email one-time PIN proposal is superseded and was not approved. A typed username is not a verified subject. No account is granted access until its authenticated canonical subject is verified and the exact integration is approved.
 
-An account inventory on October 21, 2026 returned no Access applications and no identity providers. The team-domain lookup was denied; it was not retried. The owner must confirm the team domain and login method. If email one-time PIN is chosen, enabling that provider is a separate security configuration decision; no provider has been added here.
+The existing CUNY service source documents a private `WorkerIdentity` entrypoint on `cail-doorway`. A proposed Hauntologies receiver would use:
 
-After approval, configure only these Worker variables using the actual application values:
+- Service binding `IDENTITY` to `cail-doorway`, entrypoint `WorkerIdentity`
+- Binding props `{ "id": "hauntologies-nyc", "worker": "hauntologies-nyc", "workspace": false }`
+- Audience `cail:hauntologies-nyc` and issuer `https://tools.ailab.gc.cuny.edu/cail-sso`
+- Same-origin `/auth/start`, `/auth/callback` and POST `/auth/logout`
+- Private dashboard and contribution routes only; `/`, `/register` and `/api/register` stay public
 
-| Variable | Meaning |
-| --- | --- |
-| `CONTRIBUTIONS_ACCESS_ENABLED` | Exact string `true`; absent or any other value keeps the API closed |
-| `ACCESS_TEAM_DOMAIN` | Exact `https://TEAM.cloudflareaccess.com` issuer, without a trailing slash |
-| `ACCESS_AUDIENCE` | This Access application's 64-character AUD tag, not an account or Worker ID |
-| `ACCESS_ALLOWED_EMAILS` | The same explicitly approved owner email; commas allow future individually approved identities |
+These are proposed integration values derived from local service source, not a verified deployed registration. The receiver requires an application adapter, authorization scoped to the verified owner, and action-time approval for the persistent service binding. This release does not add that binding or imply access for other contributors. The dormant Cloudflare Access JWT adapter is a different protocol and must not be enabled as a substitute.
 
-These settings contain no API token or client secret. Incomplete or invalid configuration fails closed. The verifier checks RS256 signature, fixed issuer/JWKS, audience, expiry, not-before, issued-at, application type, user subject and the explicit email allowlist. It replaces untrusted identity headers only after verification. API responses are not cached. Static Assets does not provide `ctx.access`, so the Worker verifies the assertion JWT directly.
+## Application safeguards
 
-## Verification after approval
+Submit requires a matching durable receipt. An uncertain save retains its exact request and idempotency key. Pending requests bind to the verified actor; a different account cannot replay them. Sign-in opens separately and does not submit automatically. Failed authentication clears loaded private review data and capabilities.
 
-The owner must first open a protected contribution URL in a browser and complete the approved login. Return to the map and retry the editor or review panel. Confirm a clearly labeled synthetic proposal receives a persisted receipt, appears in that owner's queue, and replays without duplication. Confirm an unauthenticated browser and a different, unapproved identity cannot read it. Do not call local fixture results production acceptance.
+Reviewer configuration defaults to empty. `CONTRIBUTIONS_REVIEWER_IDS` accepts only explicitly approved verified actor IDs; malformed configuration grants no roles. Publishers and stewards remain empty. Contributor credits confer no permissions. A contributor cannot approve their own proposal, and reviewed metadata does not automatically overwrite map records.
 
-The initial owner can submit, read, revise and withhold their own proposals. Runtime reviewer and publisher lists remain empty. Admission through Access does not grant review or publishing rights; independent human reviewers need a separate, explicit server-role decision. A contributor cannot approve their own proposal. Metadata updates remain proposals even after review and cannot automatically overwrite the catalog.
+Old hosting identities and submission history have not been migrated or remapped. Do not infer ownership from an unverified email or rewrite existing history.
 
-Actors use an opaque hash of the verified issuer and subject. Old hosting IDs and submission history have not been migrated or remapped. Changing teams or removing and re-adding an Access user can create a different subject; resolve ownership deliberately, never by matching an unverified email or silently rewriting history.
+## Verification and remaining decisions
 
-If activation fails, leave `CONTRIBUTIONS_ACCESS_ENABLED` absent or false. The public map and registration continue working, and the private APIs remain closed. No production registration test or attendee data is part of this PR.
+On October 22, 2026 the user approved renewal of the existing Wrangler OAuth session with unchanged permissions. Renewal succeeded with the same 29 scopes; no new login grant or credential was created. The previously denied Access organization lookup was not retried.
 
-## References
+The public registration page and time change can deploy independently. Private dashboard activation still requires the exact CUNY binding approval and verified owner subject. Any independent reviewer identity and role needs separate approval.
 
-- [Cloudflare Access for Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
-- [Validate Access JWTs](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
-- [Application paths](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/)
+Production proposal/retry/withdrawal testing and registration test writes remain unapproved. Local synthetic SQLite and browser results are not production acceptance. No attendee or submission data belongs in this repository or test fixtures.

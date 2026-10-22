@@ -4,10 +4,39 @@
   const dialog=byId('recordEditorDialog'),form=byId('recordEditorForm'),fieldsRoot=byId('recordEditorFields');
   const message=byId('recordChangeMessage'),previewRoot=byId('recordEditorPreview'),submit=byId('submitRecordEdit');
   const drafts=new Map();let current=null,opener=null;
+  const pendingStorageKey='hauntologies-pending-record-edit';
   const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
   const copy=value=>structuredClone(value),inputId=key=>'record-edit-'+key.replace(/[^a-zA-Z0-9_-]/g,'-');
   const display=value=>value===null||value===undefined?'':typeof value==='string'?value:typeof value==='object'?JSON.stringify(value):String(value);
   const safeUrl=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:null;}catch{return null;}};
+  function persistPending(state){
+    const changedKeys=new Set(JSON.parse(state.pending.body.submission_json).payload.changes.map(change=>change.field));
+    // Keep this proposal only, not the original record, other revisions or review history.
+    const value=JSON.stringify({version:1,request:state.pending,title:state.title,fields:state.fields.filter(field=>changedKeys.has(field.key))});
+    sessionStorage.setItem(pendingStorageKey,value);
+    if(sessionStorage.getItem(pendingStorageKey)!==value)throw new Error('Request recovery unavailable');
+  }
+  function clearPending(state){state.pending=null;state.pendingUncertain=false;try{sessionStorage.removeItem(pendingStorageKey);}catch{}}
+  function restorePending(){
+    try{
+      const stored=JSON.parse(sessionStorage.getItem(pendingStorageKey)||'null'),request=stored?.request,body=request?.body;
+      if(stored?.version!==1||!['/submit','/revise'].includes(request?.path)||typeof body?.idempotency_key!=='string'||!body.idempotency_key||typeof body.submission_json!=='string')return null;
+      if(request.path==='/revise'&&(typeof body.submission_id!=='string'||!Number.isInteger(body.expected_revision)||body.expected_revision<1))return null;
+      const original=JSON.parse(body.submission_json),target=original.targets?.[0],changes=original.payload?.changes;
+      if(original.type!=='record_update'||original.targets.length!==1||typeof target?.record_id!=='string'||!Array.isArray(changes)||typeof original.payload.change_message!=='string'||!Array.isArray(stored.fields))return null;
+      const keys=new Set(changes.map(change=>change.field));
+      if(stored.fields.some(field=>!field||typeof field.key!=='string'||!keys.has(field.key)||typeof field.label!=='string'||!['Place','Location','Dates','Sources','Image'].includes(field.group)))return null;
+      const before=Object.fromEntries(changes.map(change=>[change.field,copy(change.before)])),state={id:target.record_id,title:typeof stored.title==='string'?stored.title:target.record_id,before,fields:stored.fields,message:original.payload.change_message,rawValues:{},dirty:new Set(keys),controls:new Map(),initial:new Map(),target:copy(target),lastTarget:copy(target),lookup:0,loading:false,sourceChoice:'primary',pending:copy(request),pendingUncertain:true,proposedValues:new Map(),proposedDisplays:new Map(),additions:(original.payload.source_additions||[]).map(value=>({value:copy(value),original:copy(value),removable:false})),preview:{changes:copy(changes),raw:body.submission_json,serverValid:false}};
+      if(request.path==='/revise')state.revisionOf={id:body.submission_id,revision:body.expected_revision};
+      for(const change of changes){state.rawValues[change.field]=display(change.after);state.proposedValues.set(change.field,copy(change.after));}
+      return state;
+    }catch{return null;}
+  }
+  function validateReceipt(data,request){
+    const saved=data?.submission,receipt=data?.receipt,result=receipt?.result,revision=request.path==='/revise'?request.body.expected_revision+1:1;
+    if(typeof receipt?.id!=='string'||!receipt.id||receipt.action!==request.path.slice(1)||typeof saved?.id!=='string'||result?.submission_id!==saved.id||result.revision!==revision||!Number.isInteger(saved.revision)||saved.revision<revision||request.path==='/revise'&&saved.id!==request.body.submission_id)throw Object.assign(new Error('Save receipt could not be confirmed'),{uncertain:true});
+    return data;
+  }
   function status(text){byId('recordEditorStatus').textContent=text;}
   function changed(){if(!current||current.pending)return;current.preview=null;previewRoot.hidden=true;byId('recordEditorReceipt').hidden=true;submit.disabled=true;}
   function errors(items=[]){
@@ -166,7 +195,7 @@
     const root=byId('recordEditorDiff');root.replaceChildren();
     for(const change of changes){const section=node('section'),title=state.fields.find(f=>f.key===change.field)?.label||change.field;section.className='record-edit-diff';section.append(node('h4',title));const dl=node('dl');for(const [label,value]of [['Before',change.before],['After',change.after]])dl.append(node('dt',label),node('dd',value===null?'Unknown':display(value)));section.append(dl);root.append(section);}
     sourceAdditions(state).forEach((source,index)=>{const section=node('section'),dl=node('dl');section.className='record-edit-diff';section.append(node('h4','New reference '+(index+1)));dl.append(node('dt','Before'),node('dd','No reference'));for(const field of model.sourceFields)if(Object.hasOwn(source,field.key))dl.append(node('dt',field.label[0].toUpperCase()+field.label.slice(1)),node('dd',source[field.key]===null?'Unknown':display(source[field.key])));section.append(dl);root.append(section);});
-    byId('recordEditorPreviewMode').textContent=serverValid?'Ready to submit':'Local preview';previewRoot.hidden=false;lock();
+    byId('recordEditorPreviewMode').textContent=state.pending?'Save outcome unknown':serverValid?'Ready to submit':'Local preview';previewRoot.hidden=false;lock();
   }
   async function preview(event){
     event.preventDefault();const state=current;if(!state||state.pending||state.busy||state.saved)return;errors([]);
@@ -189,28 +218,38 @@
     finally{state.busy=false;if(current===state)lock();}
   }
   function renderReceipt(data){
-    const root=byId('recordEditorReceipt'),saved=data.submission;root.replaceChildren();root.append(node('h3','Saved'),node('p',saved.status==='submitted'?'Pending review':saved.status==='changes_requested'?'Needs information':saved.status),node('p','Submission: '+saved.id),node('p','Revision: '+saved.revision),node('p','Receipt: '+data.receipt.id));root.hidden=false;
+    const root=byId('recordEditorReceipt'),saved=data.submission,revision=data.receipt.result.revision,label=saved.status==='submitted'?'Pending review':saved.status==='changes_requested'?'Needs information':saved.status;
+    root.replaceChildren();root.append(node('h3','Saved'),node('p',saved.revision===revision?label:'Current status: '+label),node('p','Submission: '+saved.id),node('p','Revision: '+revision));
+    if(saved.revision!==revision)root.append(node('p','Current revision: '+saved.revision));root.append(node('p','Receipt: '+data.receipt.id));root.hidden=false;
   }
   async function send(){
     const state=current;if(!state||state.busy||state.saved||(!state.pending&&!state.preview?.serverValid))return;
-    if(!state.pending){const now=JSON.stringify(envelope(state,proposedChanges(state)),null,2);if(now!==state.preview.raw){changed();errors(['Changes updated. Preview again']);return;}
-      const body={idempotency_key:crypto.randomUUID(),submission_json:state.preview.raw};if(state.revisionOf)Object.assign(body,{submission_id:state.revisionOf.id,expected_revision:state.revisionOf.revision});
-      state.pending={path:state.revisionOf?'/revise':'/submit',body};
-    }
-    const exact=state.pending;state.busy=true;lock();errors([]);
+    if(state.pending&&(typeof state.pending.actor_id!=='string'||!state.pending.actor_id)){status('Original account unknown');errors(['Original account unknown. The saved request needs recovery before retrying']);return;}
+    state.busy=true;lock();errors([]);let actor;
     try{
-      const data=await api(exact.path,exact.body),saved=data.submission,receipt=data.receipt;
-      if(!receipt?.id||!saved?.id||receipt.result?.submission_id!==saved.id||receipt.result?.revision!==saved.revision||!Number.isInteger(saved.revision))throw Object.assign(new Error('Missing receipt'),{uncertain:true});
-      if(state.revisionOf&&(saved.id!==state.revisionOf.id||saved.revision!==state.revisionOf.revision+1))throw Object.assign(new Error('Unexpected revision receipt'),{uncertain:true});
-      state.saved=data;state.pending=null;state.preview=null;
+      const session=await api('/session');actor=session?.actor_id;
+      if(typeof actor!=='string'||!actor||actor.length>200)throw new Error('Invalid session');
+    }catch(error){state.busy=false;if(current===state){status(serviceError(error));errors([serviceError(error)]);lock();}return;}
+    if(state.pending&&state.pending.actor_id!==actor){state.busy=false;if(current===state){status('Original account required');errors(['Sign in with the original account to retry this saved request']);lock();}return;}
+    if(!state.pending){const now=JSON.stringify(envelope(state,proposedChanges(state)),null,2);if(now!==state.preview.raw){state.busy=false;changed();lock();errors(['Changes updated. Preview again']);return;}
+      const body={idempotency_key:crypto.randomUUID(),submission_json:state.preview.raw};if(state.revisionOf)Object.assign(body,{submission_id:state.revisionOf.id,expected_revision:state.revisionOf.revision});
+      state.pending={path:state.revisionOf?'/revise':'/submit',body,actor_id:actor};
+      try{persistPending(state);}catch{clearPending(state);state.busy=false;lock();errors(['Request not sent. Browser recovery storage is unavailable']);return;}
+    }
+    const exact=state.pending,wasUncertain=!!state.pendingUncertain;
+    try{
+      const data=validateReceipt(await api(exact.path,exact.body),exact),saved=data.submission;
+      state.saved=data;clearPending(state);state.preview=null;
       if(current===state){previewRoot.hidden=true;status('');renderReceipt(data);byId('recordEditorReceipt').focus();}
       window.dispatchEvent(new CustomEvent('record-edit-saved',{detail:{submissionId:saved.id,revision:saved.revision}}));
     }catch(error){
-      const uncertain=error.uncertain||!error.status||error.status>=500;
-      if(!uncertain){state.pending=null;if(error.status===401||error.status===403||error.status===409){state.target=null;if(state.preview)state.preview.serverValid=false;state.unavailable=serviceError(error);byId('reloadRecordEditor').hidden=false;}}
+      const uncertain=wasUncertain||error.uncertain||!error.status||error.status>=500;
+      if(uncertain)state.pendingUncertain=true;
+      else{clearPending(state);if(error.status===401||error.status===403||error.status===409){state.target=null;if(state.preview)state.preview.serverValid=false;state.unavailable=serviceError(error);byId('reloadRecordEditor').hidden=false;}}
       if(current===state){status(uncertain?'Save outcome unknown':serviceError(error));errors([uncertain?'Save outcome unknown. Retry the same submission':serviceError(error)]);}
     }finally{state.busy=false;if(current===state)lock();}
   }
+  const restoredPending=restorePending();if(restoredPending)drafts.set('pending',restoredPending);
   window.addEventListener('record-edit-requested',event=>{
     const {recordId,record,opener:source}=event.detail||{};if(!model||typeof recordId!=='string'||!record)return;
     opener=source instanceof HTMLElement?source:document.activeElement;

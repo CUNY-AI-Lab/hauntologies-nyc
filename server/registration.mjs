@@ -1,6 +1,6 @@
 // Public event intake only. No attendee reads, identity claims, email sends or map writes.
 export const REGISTRATION_EVENT = Object.freeze({
-  id: 'hauntologies-2026-10-30', date: '2026-10-30', start_time: '15:00', end_time: '18:00',
+  id: 'hauntologies-2026-10-30', date: '2026-10-30', start_time: '15:00', end_time: '18:30',
   time_zone: 'America/New_York', location: 'DH Lounge 5307',
 });
 export const REGISTRATION_LIMITS = Object.freeze({ body_bytes: 2048, window_seconds: 900, per_client: 10, global: 200 });

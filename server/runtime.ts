@@ -12,6 +12,7 @@ import taskSeeds from '../public/data/contribution-tasks.json';
 import inventoryText from '../public/inventory.js?raw';
 import pilotText from '../public/pilot.js?raw';
 import { parseStaticRecords } from './static-targets.mjs';
+import { reviewAuthorization } from './review-authorization.mjs';
 const staticRecords=parseStaticRecords(inventoryText,pilotText);
 const boundaries=JSON.parse(boundaryText);
 
@@ -19,9 +20,9 @@ export function handleRequest(request:Request){
   const e=env as Record<string,any>;
   const geography={boundaries,gazetteer};
   if(new URL(request.url).pathname.startsWith('/api/contributions/')){
-    // The existing Site remains owner-private. No reviewer or publisher is
-    // provisioned implicitly, including from an authenticated visitor's name.
-    return createWorkflowService({store:e.DB?createWorkflowStore(e.DB):null,taskSeeds,geography,staticRecords,authorization:{reviewers:[],publishers:[]}}).handle(request);
+    // Only explicitly configured verified actor IDs may review. Invalid or
+    // absent configuration grants no roles; publication remains disabled.
+    return createWorkflowService({store:e.DB?createWorkflowStore(e.DB):null,taskSeeds,geography,staticRecords,authorization:reviewAuthorization(e.CONTRIBUTIONS_REVIEWER_IDS)}).handle(request);
   }
   return createIngestionService({store:e.DB?createD1Store(e.DB):null,provider:createCunyProvider({extractionSchema,skillText}),config:{...e,CAIL_ENABLED:'false'},geography}).handle(request);
 }

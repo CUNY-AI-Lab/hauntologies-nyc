@@ -1,6 +1,6 @@
 // The demo can serve the map after a sharing decision. APIs remain closed until
 // verified identity is configured; old hosting identity headers are never trusted.
-import { authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
+import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
 export function createDemoWorker(handler, registration, authenticate = authenticateAccess) {
   return {
     async fetch(request, env, ctx) {
@@ -10,6 +10,11 @@ export function createDemoWorker(handler, registration, authenticate = authentic
         for(let i=0;i<4;i++){const decoded=decodeURIComponent(path);if(decoded===path)break;path=decoded;}
       } catch { return new Response('Invalid path',{status:400}); }
       path=path.replace(/\/+/g,'/').toLowerCase();
+      if (rawPath === '/api/access-status' && ['GET','HEAD'].includes(request.method)) {
+        const enabled = Boolean(accessConfiguration(env));
+        const response = Response.json({ enabled, sign_in_url: enabled ? '/api/contributions/sign-in' : null }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+        return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
+      }
       if(path==='/data/source-inventory.json')return new Response('Not found',{status:404,headers:{'Cache-Control':'no-store'}});
       // Only event registration has a public write endpoint. Review and map
       // contribution APIs keep their existing authentication boundary.
@@ -19,6 +24,12 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       if (rawPath === path && /^\/api\/contributions\/[a-z][a-z0-9-]*$/.test(rawPath)) {
         const actor = await authenticate(request, env);
         if (actor) {
+          if (rawPath === '/api/contributions/sign-in' || rawPath === '/api/contributions/session') {
+            if (!['GET','HEAD'].includes(request.method)) return new Response(null, { status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'} });
+            if (rawPath.endsWith('/sign-in')) return new Response(null, { status:303, headers:{Location:'/', 'Cache-Control':'no-store'} });
+            const response = Response.json({ actor_id:actor }, { headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'} });
+            return request.method === 'HEAD' ? new Response(null, { headers:response.headers }) : response;
+          }
           const headers = stripIdentityHeaders(request);
           headers.set('oai-authenticated-user-id', actor);
           const response = await handler.fetch(new Request(request, { headers }), env, ctx);

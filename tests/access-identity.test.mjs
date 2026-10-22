@@ -81,3 +81,26 @@ test('key service failures fail closed', async () => {
   const authenticate = createAccessIdentity({ resolveKeys: () => { throw Error('synthetic unavailable key service'); } });
   assert.equal(await authenticate(request(await token()), config), null);
 });
+
+test('public access status exposes only readiness and a fixed same-origin path', async () => {
+  const worker = createDemoWorker({fetch:()=>{throw Error('No application route expected');}});
+  for(const [env,enabled] of [[{},false],[config,true]]) {
+    const response=await worker.fetch(request(null,'/api/access-status'),env,{});
+    assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+    assert.deepEqual(await response.json(),{enabled,sign_in_url:enabled?'/api/contributions/sign-in':null});
+  }
+  assert.equal((await worker.fetch(new Request('https://map.example.test/api/access-status',{method:'POST'}),config,{})).status,401);
+  for(const path of ['/API/access-status','/%61pi/access-status','/api//access-status'])assert.equal((await worker.fetch(request(null,path),config,{})).status,401);
+});
+
+test('sign-in and session routes require verified identity and cannot redirect externally', async () => {
+  const {authenticate}=verifier();
+  const worker=createDemoWorker({fetch:()=>{throw Error('No application route expected');}},undefined,authenticate);
+  for(const path of ['/api/contributions/sign-in','/api/contributions/session'])assert.equal((await worker.fetch(request(null,path),config,{})).status,401);
+  const jwt=await token(),response=await worker.fetch(request(jwt,'/api/contributions/sign-in?returnTo=https://untrusted.example'),config,{});
+  assert.equal(response.status,303);assert.equal(response.headers.get('location'),'/');assert.equal(response.headers.get('cache-control'),'no-store');
+  const session=await worker.fetch(request(jwt,'/api/contributions/session'),config,{}),body=await session.json();
+  assert.deepEqual(Object.keys(body),['actor_id']);assert.match(body.actor_id,/^access_[a-f0-9]{64}$/);
+  const denied=await worker.fetch(new Request('https://map.example.test/api/contributions/sign-in',{method:'POST',headers:{'cf-access-jwt-assertion':jwt}}),config,{});
+  assert.equal(denied.status,405);
+});
