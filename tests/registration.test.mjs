@@ -162,3 +162,68 @@ test('uncertain post-commit read failure gives no success; exact retry recovers 
   const retry = await call(db, undefined, { key }); status(retry, 200); assert.equal(retry.body.receipt_id, id);
   assert.equal(count(db), 1); assert.ok(rates(db).every(row => row.attempts === 1));
 });
+
+// Database time is controlled independently from the Worker clock so the test
+// exercises the transaction-time guard, rather than a preflight JS clock check.
+function controlledClock(t, db) {
+  let milliseconds = 1792684800000 + 1000; // One second into a fixed 15-minute window.
+  t.mock.method(Date, 'now', () => milliseconds);
+  db.native.function('strftime', (format, value) => {
+    assert.equal(format, '%s'); assert.equal(value, 'now');
+    return String(Math.floor(milliseconds / 1000));
+  });
+  return { advance() { milliseconds += REGISTRATION_LIMITS.window_seconds * 1000; }, seconds: () => Math.floor(milliseconds / 1000) };
+}
+function pauseNextBatch(db) {
+  const batch = db.batch; let entered, release, pause = true;
+  const reached = new Promise(resolve => { entered = resolve; });
+  const waiting = new Promise(resolve => { release = resolve; });
+  db.batch = async statements => {
+    if (pause) { pause = false; entered(); await waiting; }
+    return batch(statements);
+  };
+  return { reached, release };
+}
+
+for (const budget of ['client', 'global']) test(`delayed old-window request cannot reopen the ${budget} budget after pruning`, async t => {
+  const db = fixture(t), clock = controlledClock(t, db);
+  const cap = budget === 'client' ? REGISTRATION_LIMITS.per_client : REGISTRATION_LIMITS.global;
+  const oldWindow = Math.floor(clock.seconds() / REGISTRATION_LIMITS.window_seconds) * REGISTRATION_LIMITS.window_seconds;
+  for (let i = 0; i < cap; i++) status(await call(db, undefined, { ip: budget === 'client' ? '192.0.2.10' : '2001:db8::' + i.toString(16) }), 201);
+  const paused = pauseNextBatch(db), key = crypto.randomUUID();
+  const delayed = call(db, undefined, { key }); await paused.reached;
+  clock.advance();
+  const fresh = await call(db); status(fresh, 201);
+  assert.ok(rates(db).every(row => row.window_start > oldWindow));
+  paused.release();
+  const stale = await delayed; status(stale, 429);
+  assert.equal(stale.body.error, 'rate_limited'); assert.equal(stale.headers.get('retry-after'), '1');
+  assert.equal('receipt_id' in stale.body, false); assert.equal(count(db), cap + 1);
+  assert.equal(db.native.prepare('SELECT COUNT(*) AS n FROM event_registrations WHERE created_at < ?').get(new Date((oldWindow + REGISTRATION_LIMITS.window_seconds) * 1000).toISOString()).n, cap);
+  assert.ok(rates(db).every(row => row.window_start > oldWindow && row.attempts === 1));
+  // The rejected request never committed; keeping its key safely retries in the new window.
+  const retry = await call(db, undefined, { key }); status(retry, 201);
+  const replay = await call(db, undefined, { key }); status(replay, 200);
+  assert.equal(replay.body.receipt_id, retry.body.receipt_id); assert.equal(count(db), cap + 2);
+  assert.ok(rates(db).every(row => row.attempts === 2));
+});
+
+test('stale in-flight request still recovers a same-key receipt committed in the new window', async t => {
+  const db = fixture(t), clock = controlledClock(t, db), paused = pauseNextBatch(db), key = crypto.randomUUID();
+  const delayed = call(db, undefined, { key }); await paused.reached;
+  clock.advance(); const current = await call(db, undefined, { key }); status(current, 201);
+  paused.release(); const replay = await delayed; status(replay, 200);
+  assert.equal(replay.body.receipt_id, current.body.receipt_id); assert.equal(count(db), 1);
+  assert.ok(rates(db).every(row => row.attempts === 1));
+});
+
+test('future Worker clock cannot prune or bypass the current database window budget', async t => {
+  const db = fixture(t), clock = controlledClock(t, db);
+  for (let i = 0; i < REGISTRATION_LIMITS.per_client; i++) status(await call(db), 201);
+  const counters = rates(db), databaseSeconds = clock.seconds();
+  db.native.function('strftime', (format, value) => {
+    assert.equal(format, '%s'); assert.equal(value, 'now'); return String(databaseSeconds);
+  });
+  clock.advance(); const future = await call(db); status(future, 429);
+  assert.equal(count(db), REGISTRATION_LIMITS.per_client); assert.deepEqual(rates(db), counters);
+});

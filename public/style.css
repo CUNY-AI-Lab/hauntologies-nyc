@@ -206,3 +206,46 @@ html,body,.workspace{overflow:clip}
 #recordEditorDialog .record-edit-diff dt{font-size:11px;color:var(--muted)}
 #recordEditorDialog .record-edit-diff dd{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
 #recordEditorDialog #recordEditorReceipt p{overflow-wrap:anywhere;font-size:12px}
+
+#accountSignInHelp>a{display:flex;align-items:center;min-height:44px;font-size:13px}
+#accountContributions{padding:0;list-style:none}
+#accountContributions>li{padding-block:10px;border-top:1px solid var(--line)}
+#accountContributions>li>a{display:flex;align-items:center;min-height:44px;overflow-wrap:anywhere}
+#accountContributions>li>p{margin:4px 0;font-size:12px}
+/* Component actions use compact controls and a bottom-left fold; map toolbar stays unchanged. */
+:is(#researchSidecar,#layersPanel,#filtersPanel,#toolsMenu,#recordEditorDialog) :is(button.outline,button.primary,button.darkbutton),
+#toolsMenu > button {
+  min-height:34px;
+  min-width:34px;
+  padding:6px 11px;
+  font-size:12px;
+  font-weight:400;
+  line-height:1.4;
+}
+:is(#researchSidecar,#layersPanel,#filtersPanel,#toolsMenu,#recordEditorDialog) :is(button.outline,button.primary,button.darkbutton)::after,
+#toolsMenu > button::after,
+#filtersPanel .result-actions button::after {
+  top:auto;
+  right:auto;
+  bottom:-1px;
+  left:-1px;
+  width:7px;
+  height:7px;
+  background:linear-gradient(225deg,#746652 0 43%,#bba78a 44% 54%,#11110f 55%);
+}
+#filtersPanel .result-actions #fitFiltered::after {
+  background:linear-gradient(225deg,#a47545 0 43%,#e1b481 44% 54%,#121412 55%);
+}
+#filtersPanel .close-control::after{top:auto;right:auto;bottom:4px;left:4px;background:linear-gradient(225deg,#6f6658 0 43%,#b5a18a 44% 54%,#121412 55%)}
+#researchSidecar .recordlist .place-card :is(.place-contribute,.place-edit){min-height:34px;min-width:60px;padding:6px 11px;font-size:12px;margin-bottom:12px}
+#researchSidecar .recordlist .place-card .place-contribute{margin-right:8px}
+#researchSidecar .textbutton,#recordEditorDialog .textbutton{min-height:34px;padding:6px 2px;font-size:12px}
+#layersPanel select,#researchSidecar select,#recordEditorDialog select{height:34px;min-height:34px;padding:5px 8px;appearance:auto;font-size:13px;font-weight:400;line-height:1.4}
+:is(#researchSidecar,#layersPanel,#recordEditorDialog) :is(button,select,summary):focus-visible{outline:2px solid #ffd39e!important;outline-offset:3px}
+@media(max-width:760px),(pointer:coarse){
+  :is(#researchSidecar,#layersPanel,#filtersPanel,#toolsMenu,#recordEditorDialog) :is(button.outline,button.primary,button.darkbutton),
+  #toolsMenu > button,#researchSidecar .textbutton,#recordEditorDialog .textbutton,
+  #researchSidecar .recordlist .place-card :is(.place-contribute,.place-edit){min-height:44px;min-width:44px;padding:8px 11px}
+  #layersPanel select,#researchSidecar select,#recordEditorDialog select{height:44px;min-height:44px;font-size:16px;font-weight:400;padding:7px 8px}
+  #filtersPanel .close-control::after{bottom:8px;left:8px}
+}

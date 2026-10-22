@@ -22,7 +22,7 @@ const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'D
 function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&String(lat).trim()!==''&&String(lon).trim()!==''&&Number(lat)>=40.45&&Number(lat)<=40.98&&Number(lon)>=-74.30&&Number(lon)<=-73.65}
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
 let toolOpener='toolsButton';
-const toolPanels=['toolsMenu','mapTools','layersPanel','filtersPanel','researchSidecar'];
+const toolPanels=['toolsMenu','layersPanel','filtersPanel','researchSidecar'];
 let sidecarModalState=null;
 function setSidecarModal(active){
  const sidecar=$('researchSidecar');
@@ -59,18 +59,24 @@ function switchPanel(id){
  openSidecar();document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
  $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Submit';
- if(id==='casePanel')toolOpener='mapToolsButton';
+ if(id==='casePanel'){toolOpener='mapToolsButton';$('mapToolsButton').setAttribute('aria-expanded','true');}
  setSidecarModal(id==='draftPanel');
 }
 $('toolsButton').addEventListener('click',()=>{const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
-document.addEventListener('pointerdown',e=>{if(!$('filtersPanel').hidden&&!$('filtersPanel').contains(e.target)&&!e.target.closest('.header-tools'))closeTools(true)},{capture:true});
-$('mapToolsButton').addEventListener('click',()=>{const open=$('mapTools').hidden;closeTools();toolOpener='mapToolsButton';$('mapTools').hidden=!open;$('mapToolsButton').setAttribute('aria-expanded',String(open));if(open)$('mapToolsTitle').focus()});
+document.addEventListener('pointerdown',e=>{
+ if(document.querySelector('dialog[open]')||e.target.closest('.header-tools'))return;
+ const panel=!$('filtersPanel').hidden?$('filtersPanel'):!$('researchSidecar').hidden&&$('casePanel').classList.contains('active')?$('researchSidecar'):null;
+ if(panel&&!panel.contains(e.target))closeTools(true);
+},{capture:true});
+$('mapToolsButton').addEventListener('click',()=>{
+ if(!$('researchSidecar').hidden&&$('casePanel').classList.contains('active')){closeTools(true);return;}
+ switchPanel('casePanel');$('sidecarTitle').focus({preventScroll:true});
+});
 $('layersButton').addEventListener('click',()=>{const open=$('layersPanel').hidden;closeTools();toolOpener='layersButton';$('layersPanel').hidden=!open;$('layersButton').setAttribute('aria-expanded',String(open));if(open)$('layersTitle').focus()});
-$('placesTool').addEventListener('click',()=>{switchPanel('casePanel');$('sidecarTitle').focus()});
 for(const [button,view,title] of [['submitTool','submissionView','Submit'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()});
 $('openResearch').addEventListener('click',()=>switchPanel('casePanel'));
-for(const id of ['closeResearch','closeMapTools','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
+for(const id of ['closeResearch','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&toolPanels.some(id=>!$(id).hidden)){e.preventDefault();closeTools(true);map?.closePopup()}});
 // A tool is a keyboard surface. Keep its controls reachable without tabbing into obscured pins.
@@ -102,7 +108,6 @@ for(const layer of LAYERS){
 $('layerSelect').addEventListener('change',e=>changeYear(e.target.value));
 $('opacity').addEventListener('input',()=>{const value=Number($('opacity').value);$('opacityValue').value=value+'%';$('opacity').setAttribute('aria-valuetext',value+' percent');if(activeLayer)layerOpacities.set(activeLayer.id,value);if(imagery)imagery.setOpacity(value/100)});
 function recenterNYC(){if(map){map.stop();map.fitBounds(NYC_BOUNDS,{paddingTopLeft:[20,20],paddingBottomRight:[20,Math.ceil(map.attributionControl.getContainer().getBoundingClientRect().height)+64],animate:false});}}
-$('resetMap').addEventListener('click',recenterNYC);
 $('recenterMap').addEventListener('click',recenterNYC);
 $('fitLayer').addEventListener('click',()=>{const layer=layerById.get($('layerSelect').value);if(map&&layer){map.fitBounds(layer.bounds,{padding:[30,30],animate:false});$('map').focus()}});
 let activeLayer=null,layerLoaded=0,layerFailed=0,layerLoading=false,layerSlow=false;
@@ -218,7 +223,7 @@ function togglePeriod(){const active=$('filterPeriod').value==='custom';$('perio
 $('search').addEventListener('input',renderRecords);
 for(const id of ['filterStatus','filterPeriod',...Object.keys(facetControls)])$(id).addEventListener('change',()=>{togglePeriod();renderRecords();fitRecords(filtered())});
 for(const id of ['periodStart','periodEnd'])$(id).addEventListener('input',()=>{renderRecords();fitRecords(filtered())});
-$('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFilters').addEventListener('click',()=>resetFilters());$('showAll').addEventListener('click',recenterNYC);
+$('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFilters').addEventListener('click',()=>resetFilters());
 function addContributionAction(card,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!hostedRecords.some(x=>x.id===r.id)))return;
  const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
