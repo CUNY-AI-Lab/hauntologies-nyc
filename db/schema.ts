@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { blob, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 export const ingestionPreviews=sqliteTable('ingestion_previews',{
  id:text('id').primaryKey(),ownerId:text('owner_id').notNull(),idempotencyKey:text('idempotency_key').notNull(),rawJson:text('raw_json').notNull(),rawHash:text('raw_hash').notNull(),derivedJson:text('derived_json'),previewHash:text('preview_hash'),status:text('status').notNull(),errorCode:text('error_code'),createdAt:text('created_at').notNull(),expiresAt:text('expires_at').notNull(),providerCalls:integer('provider_calls').notNull().default(0)
 },t=>[uniqueIndex('previews_owner_idempotency').on(t.ownerId,t.idempotencyKey)]);
@@ -17,3 +17,6 @@ export const workflowJobs=sqliteTable('workflow_jobs',{id:text('id').primaryKey(
 export const workflowTargets=sqliteTable('workflow_targets',{recordId:text('record_id').primaryKey(),version:integer('version').notNull(),recordHash:text('record_hash').notNull(),jobId:text('job_id').notNull(),updatedAt:text('updated_at').notNull()});
 export const workflowTaskEvents=sqliteTable('workflow_task_events',{id:text('id').primaryKey(),taskId:text('task_id').notNull(),version:integer('version').notNull(),actorId:text('actor_id').notNull(),eventJson:text('event_json').notNull(),createdAt:text('created_at').notNull()},t=>[uniqueIndex('workflow_task_version').on(t.taskId,t.version)]);
 export const workflowReceipts=sqliteTable('workflow_receipts',{id:text('id').primaryKey(),actorId:text('actor_id').notNull(),idempotencyKey:text('idempotency_key').notNull(),action:text('action').notNull(),requestHash:text('request_hash').notNull(),resultJson:text('result_json').notNull(),createdAt:text('created_at').notNull()},t=>[uniqueIndex('workflow_actor_key').on(t.actorId,t.idempotencyKey)]);
+
+// Private sanitized derivatives; immutable references live in proposal revisions.
+export const contributionMedia=sqliteTable('contribution_media',{id:text('id').primaryKey(),submissionId:text('submission_id').notNull(),ownerId:text('owner_id').notNull(),sha256:text('sha256').notNull(),byteLength:integer('byte_length').notNull(),mediaType:text('media_type').notNull(),width:integer('width').notNull(),height:integer('height').notNull(),metadataJson:text('metadata_json').notNull(),imageBlob:blob('image_blob',{mode:'buffer'}).notNull(),createdAt:text('created_at').notNull()});

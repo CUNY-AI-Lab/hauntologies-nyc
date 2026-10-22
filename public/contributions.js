@@ -61,11 +61,19 @@
     const version=connectionVersion,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{
       const response=await fetch('/api/access-status',{credentials:'same-origin',cache:'no-store',signal:controller.signal}),access=await response.json();
-      if(version!==connectionVersion||!response.ok||access.enabled!==true||access.sign_in_url!=='/api/contributions/sign-in')return;
+      if(version!==connectionVersion||!response.ok)return;
+      if(access.enabled===false){const pending=root.querySelector('[data-reconciliation]');root.textContent='Sign-in is not enabled yet';if(pending)root.append(pending);return;}
+      if(access.enabled!==true||access.sign_in_url!=='/api/contributions/sign-in')return;
+      const pending=root.querySelector('[data-reconciliation]');root.textContent='Sign in to submit';if(pending)root.append(pending);
       const link=el('a','Sign in');link.href=access.sign_in_url;link.target='_blank';link.rel='noopener noreferrer';
-      const retry=button('Retry',async()=>{retry.disabled=true;const data=await loadDashboard();await loadSharedTasks();if(data&&openTargetFailed&&openRequestedRecordId)await chooseOpenReference(openRequestedRecordId,openTargetLabel);retry.disabled=false;});
-      root.append(document.createTextNode(' '),link,document.createTextNode(' '),retry);
+      const retry=button('Retry',async()=>{retry.disabled=true;const data=await loadDashboard();await loadSharedTasks();if(data&&openTargetFailed&&openRequestedRecordId)await chooseOpenReference(openRequestedRecordId,openTargetLabel);if(data&&draftRevisionBlocked)await restoreRevisionDraft();retry.disabled=false;});
+      root.querySelector('[data-access-actions]')?.remove();const actions=el('span');actions.dataset.accessActions='true';actions.append(link,retry);root.append(actions);
     }catch{}finally{clearTimeout(timeout);}
+  }
+  function serviceFailure(error, retry){
+    if(error.status===401||error.status===403)return;
+    const root=byId('workflowConnection');root.textContent=error.message||'Submissions unavailable';
+    if(retry)root.append(document.createTextNode(' '),button('Retry',retry));
   }
   async function sessionActor(){
     const session=await api('/session');
@@ -262,28 +270,151 @@
   }
 
   // Intake stores the contributor's words; classification and plotting remain review work.
-  let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='';
+  let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
+  const draftStorageKey='hauntologies-contribution-draft';let draftRevisionBlocked=null;
   const isOpenForm=()=>!revisionOriginal||revisionOriginal.type==='open_proposal';
+  function draftValue(){return {version:1,explanation:byId('contributionSummary').value,sources:byId('freeformSources').value,attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
+  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.explanation||value.sources||value.attributes.length||value.record_id)sessionStorage.setItem(draftStorageKey,JSON.stringify(value));else sessionStorage.removeItem(draftStorageKey);}catch{}}
+  function clearSavedDraft(request){
+    try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
+      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets))sessionStorage.removeItem(draftStorageKey);
+    }catch{}
+  }
+  function restoreDraftFields(value){
+    byId('contributionSummary').value=value.explanation;byId('freeformSources').value=value.sources;byId('contributionAttributes').replaceChildren();for(const attribute of value.attributes)addAttribute(attribute);
+    byId('contributionPlaceMode').value=value.place_mode;openRequestedRecordId=value.record_id;openTargetLabel=value.title;showOpenReference();
+  }
+  async function restoreRevisionDraft(){
+    if(!draftRevisionBlocked)return;const expected=draftRevisionBlocked,value=draftValue();
+    try{const data=await api('/submission?id='+encodeURIComponent(expected.id));if(data.submission?.revision!==expected.revision){byId('workflowConnection').textContent='Submission changed. Open its latest revision from Review';return;}
+      if(data.submission.type!=='open_proposal'||!data.submission.is_own)return;
+      draftRevisionBlocked=null;loadRevision(data.submission);restoreDraftFields(value);saveDraft();
+    }catch(error){serviceFailure(error,restoreRevisionDraft);}
+  }
+  function restoreDraft(){
+    try{const value=JSON.parse(sessionStorage.getItem(draftStorageKey)||'null');if(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string')return;
+      restoreDraftFields(value);if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision)){draftRevisionBlocked=value.revision;restoreRevisionDraft();}
+      else if(value.record_id)chooseOpenReference(value.record_id,value.title);
+    }catch{}
+  }
   function showOpenReference(){
     const visible=!!(openRequestedRecordId||openTargets.length||openTargetPending||openTargetFailed);
-    byId('freeformRecordContext').hidden=!visible;
+    byId('freeformRecordContext').hidden=true;
     byId('freeformRecordContext').dataset.recordId=openRequestedRecordId||openTargets[0]?.record_id||'';
     byId('freeformRecordLabel').textContent=openTargetLabel||openRequestedRecordId||openTargets[0]?.record_id||'';
     byId('freeformRecordContext').setAttribute('aria-busy',String(openTargetPending));
+    if(visible)byId('contributionPlaceMode').value='existing';
+    byId('freeformPlacePicker').hidden=byId('contributionPlaceMode').value!=='existing';
+    populatePlaceChoices();
   }
   function resetOpenContext(){
-    ++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;openTaskIds=[];openSourcesInitial='';
-    byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;showOpenReference();
+    ++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;openTaskIds=[];openSourcesInitial='';openSourcesDisplayInitial='';openExplanationInitial='';openExplanationDisplayInitial='';
+    byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
+  }
+  function populatePlaceChoices(){
+    const select=byId('freeformPlaceSelect'),records=typeof allRecords==='function'?allRecords():window.NYC_INVENTORY?.records||[];
+    const entries=new Map(records.filter(r=>r?.id&&r.status!=='draft'&&!r.hosted_pending).map(r=>[r.id,r.title||r.id]));
+    if(openRequestedRecordId&&!entries.has(openRequestedRecordId))entries.set(openRequestedRecordId,openTargetLabel||openRequestedRecordId);
+    select.replaceChildren(new Option('Choose a place',''));for(const [id,title] of [...entries].sort((a,b)=>a[1].localeCompare(b[1])))select.append(new Option(title,id));select.value=openRequestedRecordId||openTargets[0]?.record_id||'';select.title=select.selectedOptions[0]?.textContent||'';
+  }
+  function attributeValues(){return [...byId('contributionAttributes').children].map(row=>Object.fromEntries(['name','value'].map(key=>{const control=row.querySelector('[data-attribute='+key+']');return [key,control.value===row.originalDisplay[key]?row.originalValue[key]:control.value];})));}
+  function addAttribute(value={name:'',value:''}){
+    const root=byId('contributionAttributes');if(root.children.length>=20)return;
+    const row=el('div',undefined,'contribution-attribute'),name=el('input'),content=el('textarea');name.type='text';name.maxLength=80;content.rows=2;content.maxLength=4000;
+    name.dataset.attribute='name';content.dataset.attribute='value';name.value=value.name;content.value=value.value;row.originalValue=structuredClone(value);row.originalDisplay={name:name.value,value:content.value};
+    const id='attribute-'+(++rowCounter);name.id=id+'-name';content.id=id+'-value';const nameLabel=el('label','Name'),valueLabel=el('label','Value');nameLabel.htmlFor=name.id;valueLabel.htmlFor=content.id;nameLabel.append(name);valueLabel.append(content);
+    row.append(nameLabel,valueLabel,button('Remove',()=>{row.remove();byId('addContributionAttribute').disabled=false;invalidatePreview();saveDraft();},'textbutton'));root.append(row);byId('addContributionAttribute').disabled=root.children.length>=20;return name;
   }
   async function chooseOpenReference(id,title=''){
-    const request=++openRequest;openTargets=[];openRequestedRecordId=id;openTargetPending=true;openTargetFailed=false;openTargetLabel=typeof title==='string'?title:'';showOpenReference();invalidatePreview();renderErrors([]);
+    const request=++openRequest;openTargets=[];openRequestedRecordId=id;openTargetPending=true;openTargetFailed=false;openTargetLabel=typeof title==='string'?title:'';showOpenReference();invalidatePreview();renderErrors([]);saveDraft();
     try{const data=await api('/target?id='+encodeURIComponent(id));if(request!==openRequest)return;const target=data.target;
       if(!target||target.record_id!==id||!Number.isInteger(target.expected_version)||typeof target.expected_hash!=='string')throw new Error('Reference unavailable');
       openTargets=[{record_id:target.record_id,expected_version:target.expected_version,expected_hash:target.expected_hash}];openTargetLabel=target.title||target.record_id;openTargetPending=false;showOpenReference();
-    }catch(error){if(request!==openRequest)return;openTargetPending=false;openTargetFailed=true;showOpenReference();renderErrors([{field:'targets',message:error.status===401?'Submissions unavailable':'Reference unavailable. Remove it or try again.'}]);}
+    }catch(error){if(request!==openRequest)return;openTargetPending=false;openTargetFailed=true;showOpenReference();serviceFailure(error,()=>chooseOpenReference(id,openTargetLabel));}
   }
+  let stagedImages=[],imageBatch=null,imageBusy=false,imageProcessing=false;
+  const attachmentId=value=>typeof value==='string'&&/^watt_[0-9a-f-]{36}$/.test(value);
+  const imageFields=[['caption','Caption',2000],['alt','Description',1000],['credit','Credit',1000],['source_url','Source link',2048],['rights','Rights',2000]];
+  function imageStatus(message,retry=false){
+    byId('contributionImageProgress').hidden=!message;byId('contributionImageStatus').textContent=message;
+    byId('retryContributionImages').hidden=!retry;byId('retryContributionImages').disabled=imageBusy;
+  }
+  function renderStagedImages(){
+    const root=byId('stagedContributionImages');root.replaceChildren();
+    byId('contributionImages').disabled=imageBusy||imageProcessing||!!imageBatch||stagedImages.length>=3;
+    for(const [index,entry] of stagedImages.entries()){
+      const card=el('div',undefined,'staged-image');card.append(el('p',entry.file.name),el('p',entry.receipt?'Uploaded':'Not uploaded','small'),el('p','Metadata removed','small'));
+      const details=disclosure('Details');
+      for(const [key,label,max] of imageFields){const input=el(key==='caption'||key==='alt'?'textarea':'input');input.id='image-'+index+'-'+key;input.dataset.imageField=key;input.value=entry.metadata[key]||'';input.maxLength=max;input.disabled=imageBusy||!!entry.pending||!!entry.receipt;if(input.tagName==='TEXTAREA')input.rows=2;else input.type=key==='source_url'?'url':'text';const wrap=el('label',label);wrap.htmlFor=input.id;wrap.append(input);details.append(wrap);input.addEventListener('input',()=>{entry.metadata[key]=input.value;if(imageBatch&&!entry.pending)imageStatus('Contribution saved. Image not saved',true);});}
+      card.append(details);
+      if(!entry.receipt&&!entry.pending&&!imageBusy){card.append(button('Remove',()=>{stagedImages=stagedImages.filter(item=>item!==entry);renderStagedImages();if(imageBatch&&!stagedImages.some(item=>!item.receipt)){imageBatch=null;stagedImages=[];renderStagedImages();imageStatus('Contribution saved');}else if(imageBatch)imageStatus('Contribution saved. Image not saved',true);},'textbutton'));}
+      root.append(card);
+    }
+  }
+  async function stageImages(){
+    const input=byId('contributionImages'),files=[...input.files];input.value='';if(!files.length||imageBusy||imageBatch)return;
+    const error=byId('contributionImageError');error.hidden=true;error.textContent='';
+    if(stagedImages.length+files.length>3){error.textContent='Choose up to 3 images';error.hidden=false;return;}
+    imageProcessing=true;byId('previewContribution').disabled=true;invalidatePreview();renderStagedImages();
+    try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');stagedImages.push({file:prepared.file,width:prepared.width,height:prepared.height,metadata:{rights:'unknown'},pending:null,receipt:null});}}
+    catch(failure){error.textContent=failure.message||'Image could not be prepared';error.hidden=false;}
+    finally{imageProcessing=false;byId('previewContribution').disabled=false;renderStagedImages();}
+  }
+  async function attachmentRequest(entry){
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000),pending=entry.pending,body=new FormData();
+    body.set('submission_id',imageBatch.submission_id);body.set('expected_revision',String(pending.expected_revision));body.set('idempotency_key',pending.idempotency_key);body.set('metadata_json',pending.metadata_json);body.set('image',entry.file,entry.file.name);
+    try{
+      const response=await fetch(apiRoot+'/attachment',{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',body,signal:controller.signal});
+      let data;try{data=await response.json();}catch{throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});}
+      if(!response.ok){if(response.status===401||response.status===403){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)await accessActions(byId('workflowConnection'));}throw Object.assign(new Error(typeof data.error==='string'?data.error:'Image not saved'),{status:response.status});}
+      const receipt=data.receipt,result=receipt?.result;
+      if(typeof receipt?.id!=='string'||!receipt.id||receipt.action!=='attachment'||result?.submission_id!==imageBatch.submission_id||result.revision!==pending.expected_revision+1||!attachmentId(result.attachment_id)||data.submission?.id!==imageBatch.submission_id||!Number.isInteger(data.submission.revision)||data.submission.revision<result.revision)throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});
+      const ref=data.attachment,expectedMetadata={rights:'unknown',...JSON.parse(pending.metadata_json)};
+      const equalMetadata=value=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===Object.keys(expectedMetadata).length&&Object.entries(expectedMetadata).every(([key,valueText])=>value[key]===valueText);
+      const referenceShape=value=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')==='attachment_id,byte_length,height,media_type,metadata,sha256,width'&&value.attachment_id===result.attachment_id&&typeof value.sha256==='string'&&/^[a-f0-9]{64}$/.test(value.sha256)&&Number.isInteger(value.byte_length)&&value.byte_length>0&&value.byte_length<=1048576&&['image/jpeg','image/png','image/webp'].includes(value.media_type)&&value.media_type===entry.file.type&&Number.isInteger(value.width)&&Number.isInteger(value.height)&&value.width>0&&value.height>0&&value.width<=8192&&value.height<=8192&&value.width*value.height<=16777216&&value.width===entry.width&&value.height===entry.height&&equalMetadata(value.metadata);
+      let raw;try{raw=JSON.parse(data.submission.raw_json);}catch{}
+      const equalReference=value=>referenceShape(value)&&['sha256','byte_length','media_type','width','height'].every(key=>value[key]===ref[key]);
+      if(!referenceShape(ref)||!Array.isArray(data.submission.attachments)||!data.submission.attachments.some(equalReference)||!Array.isArray(raw?.attachments)||!raw.attachments.some(equalReference))throw Object.assign(new Error('Stored image could not be confirmed'),{uncertain:true});
+      return data;
+    }finally{clearTimeout(timeout);}
+  }
+  async function beginImages(submission,request){
+    if(!stagedImages.length||!['/submit','/revise'].includes(request.path))return;
+    if(!imageBatch)imageBatch={submission_id:submission.id,revision:submission.revision,actor_id:request.actor_id};
+    await uploadImages();
+  }
+  async function uploadImages(){
+    if(!imageBatch||imageBusy)return;imageBusy=true;renderStagedImages();imageStatus('Saving images');
+    try{
+      const actor=await sessionActor();if(actor!==imageBatch.actor_id)throw Object.assign(new Error('Use the original account to retry images'),{accountMismatch:true});
+      for(const entry of stagedImages){
+        if(entry.receipt)continue;
+        if(!entry.pending)entry.pending={idempotency_key:crypto.randomUUID(),expected_revision:imageBatch.revision,metadata_json:JSON.stringify(entry.metadata)};
+        renderStagedImages();
+        const response=await attachmentRequest(entry);entry.receipt=response.receipt;entry.pending=null;imageBatch.revision=response.submission.revision;
+        showReceipt(response.submission,response);renderStagedImages();
+      }
+      stagedImages=[];imageBatch=null;renderStagedImages();imageStatus('Images saved');
+    }catch(error){
+      const entry=stagedImages.find(item=>!item.receipt),definite=!!error.status&&error.status<500;
+      if(entry&&definite&&!entry.uncertain&&![401,403,409].includes(error.status))entry.pending=null;
+      if(entry&&(error.uncertain||!error.status&&!error.accountMismatch||error.status>=500))entry.uncertain=true;
+      const blocked=[400,403,409,413,415].includes(error.status);
+      imageStatus(error.accountMismatch?'Contribution saved. Use the original account to retry images':error.status===409?'Contribution saved. Review it before retrying images':'Contribution saved. Image not saved',!blocked);
+      if(error.status===401){byId('retryContributionImages').hidden=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);try{const response=await fetch('/api/access-status',{credentials:'same-origin',cache:'no-store',signal:controller.signal});const access=await response.json();byId('retryContributionImages').hidden=!(response.ok&&access.enabled===true&&access.sign_in_url==='/api/contributions/sign-in');}catch{}finally{clearTimeout(timer);}}
+    }finally{imageBusy=false;renderStagedImages();byId('retryContributionImages').disabled=false;}
+  }
+  function renderPrivateImages(root,attachments){
+    const list=el('div');for(const [index,ref] of (attachments||[]).entries()){
+      if(!attachmentId(ref?.attachment_id))continue;const section=el('section'),link=el('a','Image '+(index+1));link.href=apiRoot+'/attachment?id='+encodeURIComponent(ref.attachment_id);link.target='_blank';link.rel='noopener noreferrer';section.append(link);
+      const values=imageFields.filter(([key])=>typeof ref.metadata?.[key]==='string'&&ref.metadata[key]).map(([key,label])=>[label,ref.metadata[key]]);if(values.length)section.append(metadata(values));list.append(section);
+    }if(list.childElementCount)root.append(disclosure('Images',list));
+  }
+  byId('contributionImages').addEventListener('change',stageImages);
+  byId('retryContributionImages').addEventListener('click',uploadImages);
+  window.addEventListener('beforeunload',event=>{if(stagedImages.some(entry=>!entry.receipt)){event.preventDefault();event.returnValue='';}});
   function buildIntakeEnvelope(){
-    const explanation=byId('contributionSummary').value;
+    const explanation=revisionOriginal&&byId('contributionSummary').value===openExplanationDisplayInitial?openExplanationInitial:byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
     if(revisionOriginal&&revisionOriginal.type!=='open_proposal'){
       const revised={...structuredClone(revisionOriginal),summary:explanation};
@@ -294,7 +425,8 @@
     const payload=prior?prior.payload:{explanation,geometry:null};
     payload.explanation=explanation;
     const sourcesText=byId('freeformSources').value;
-    if(!prior||sourcesText!==openSourcesInitial)payload.sources_text=sourcesText===''?null:sourcesText;
+    if(!prior||sourcesText!==openSourcesDisplayInitial)payload.sources_text=sourcesText===''?null:sourcesText;
+    const attributes=attributeValues();if(attributes.length||Object.hasOwn(payload,'attributes'))payload.attributes=attributes;
     return prior?{...prior,summary:explanation,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title:'Contribution',summary:explanation,public_credit:{consent:false,label:''},sources:[],attachments:[],targets:structuredClone(openTargets),payload};
   }
   function buildEnvelope(){
@@ -332,7 +464,8 @@
     if(isOpenForm()){
       if(path==='summary'||path==='payload.explanation')return byId('contributionSummary');
       if(path==='payload.sources_text')return byId('freeformSources');
-      if(path==='targets'||path.startsWith('targets.'))return byId('removeFreeformRecord');
+      if(path==='targets'||path.startsWith('targets.'))return byId('freeformPlaceSelect');
+      const attribute=path.match(/^payload\.attributes\.(\d+)(?:\.(name|value))?$/);if(attribute)return byId('contributionAttributes').children[Number(attribute[1])]?.querySelector('[data-attribute="'+(attribute[2]||'name')+'"]');
       return null;
     }
     if(simpleFlow()!=='other'){if(path==='clarificationTarget'||path==='targets')return byId('clarificationTarget');if(['payload.text','payload.description'].includes(path))return byId('contributionSummary');if(path==='payload.geometry_basis')return simpleControl('geo_basis');if(path==='payload.geometry_status')return simpleControl('area_status');const key=path.replace(/^payload\./,'').replace(/^Entries\.0\./,'').replace(/^dates\./,'');const input=simpleControl(key);if(input)return input;if(key==='geometry'||key.startsWith('geometry.'))return simpleControl(simpleValue('area_input')==='geojson'?'geometry_json':'south');if(key==='geo_source_ref')return byId('submissionSources').querySelector('[data-row-field=role]');if(key==='sources')return byId('addSubmissionSource');}
@@ -352,7 +485,7 @@
     try{
     const response=await fetch(apiRoot+path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
     let data;try{data=await response.json();}catch{throw Object.assign(new Error('The contribution service returned an unreadable response.'),{status:response.status,uncertain:true});}
-    if(!response.ok){if(response.status===401){clearPrivateView('Submissions unavailable');accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
+    if(!response.ok){if(response.status===401||response.status===403){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
     }finally{clearTimeout(timeout);}
   }
   function empty(container,message){container.replaceChildren(el('p',message,'empty'));}
@@ -384,10 +517,12 @@
   function renderPreview(envelope,result,raw){
     const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3','Preview'));root.firstChild.id='previewContributionTitle';
     if(envelope.type==='open_proposal'){
-      root.append(intakeText(envelope.payload.explanation),metadata([['Evidence','Unverified']]));
+      root.append(intakeText(envelope.payload.explanation));if(result.local)root.append(el('p','Local preview','small'));
+      if(envelope.payload.attributes?.length)root.append(disclosure('Details',metadata(envelope.payload.attributes.map(a=>[a.name,a.value]))));
+      if(openTargetLabel)root.append(el('p',openTargetLabel));
       if(envelope.payload.sources_text)root.append(rawDisclosure('Sources',envelope.payload.sources_text));
       if(envelope.targets.length)root.append(rawDisclosure('Reference',envelope.targets));
-      if(!result.validation?.valid)root.append(validationView(result.validation));
+      if(!result.local&&!result.validation?.valid)root.append(validationView(result.validation));
       if(revisionOf)root.append(diffView(result.diff));
       root.append(rawDisclosure('Original',raw));
     }else{
@@ -396,22 +531,26 @@
     const send=button(revisionOf?'Revise':'Submit',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
   }
   async function previewForm(event){
-    event.preventDefault();if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
+    event.preventDefault();if(imageProcessing||imageBusy)return;if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
     renderErrors([]);const errors=[],explanation=byId('contributionSummary').value;
     if(!explanation.trim())errors.push({field:'summary',message:'Describe what you would like to contribute'});
     if(isOpenForm()&&explanation.length>15000)errors.push({field:'summary',message:'Use 15,000 characters or fewer'});
-    if(isOpenForm()&&(openTargetPending||openTargetFailed))errors.push({field:'targets',message:openTargetPending?'Wait for the reference to load':'Remove the unavailable reference or try again'});
+    if(imageBatch){imageStatus('Contribution saved. Images not saved',true);return;}
+    if(isOpenForm()&&byId('contributionPlaceMode').value==='existing'&&!openRequestedRecordId&&!openTargets.length)errors.push({field:'targets',message:'Choose an existing place'});
+    for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
     if(errors.length){renderErrors(errors);return;}let envelope,raw;
     try{envelope=buildEnvelope();raw=JSON.stringify(envelope,null,2);}catch(error){renderErrors([{field:error.field,message:error.message}]);return;}
+    const local=()=>{const result={local:true,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
+    if(openTargetPending||openTargetFailed||draftRevisionBlocked){local();return;}
     byId('previewContribution').disabled=true;
-    try{const result=await api('/preview',{submission_json:raw});preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
-    catch(error){renderErrors([error.status===401?'Submissions unavailable':'Not saved. '+error.message]);}
+    try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
+    catch(error){local();serviceFailure(error,()=>byId('previewContribution').click());}
     finally{byId('previewContribution').disabled=false;}
   }
 
   async function submitPreview(){
     if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
-    if(!preview||!caps().can_submit||busy)return;
+    if(!preview||!caps().can_submit||busy||imageProcessing||imageBusy||imageBatch||draftRevisionBlocked)return;
     const exact=preview;
     if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw){invalidatePreview();renderErrors(['Form changed. Preview again.']);return;}
     busy=true;byId('confirmContribution').disabled=true;let request=null;
@@ -421,10 +560,10 @@
       if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw)throw Object.assign(new Error('Form changed. Preview again.'),{status:400});
       request=revisionOf?{actor_id,path:'/revise',body:{idempotency_key:crypto.randomUUID(),submission_id:revisionOf.id,expected_revision:revisionOf.revision,submission_json:exact.raw}}:{actor_id,path:'/submit',body:{idempotency_key:crypto.randomUUID(),submission_json:exact.raw}};
       retainWrite(request);const response=requireReceipt(await api(request.path,request.body),request);
-      retainWrite(null);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;await loadDashboard();
+      retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;await beginImages(response.submission,request);await loadDashboard();
     }catch(error){
       const uncertain=!!request&&(error.uncertain||!error.status||error.status>=500);
-      renderErrors([uncertain?'Save outcome unknown. Check the queue before retrying. Request: '+request.body.idempotency_key:error.status===401?'Submissions unavailable':error.message]);
+      if(uncertain)renderErrors([]);else if(error.status===400)renderErrors([error.message]);else serviceFailure(error);
       if(!uncertain){if(request)retainWrite(null);}else showReconciliation();
     }finally{busy=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}
   }
@@ -432,13 +571,15 @@
 
   function clearRevision(){revisionOf=null;revisionOriginal=null;byId('revisionContext').hidden=true;byId('cancelRevision').hidden=true;invalidatePreview();}
   function loadRevision(submission){
+    if(imageBatch){imageStatus('Contribution saved. Images not saved',true);return;}
     let value;try{value=JSON.parse(submission.raw_json);}catch{return;}
     if(value.type==='record_update'){window.dispatchEvent(new CustomEvent('record-edit-revision-requested',{detail:{submission:structuredClone(submission),opener:document.activeElement}}));return;}
     clearRevision();resetContributionForm();resetOpenContext();revisionOriginal=structuredClone(value);revisionOf={id:submission.id,revision:submission.revision};
-    byId('contributionSummary').value=value.type==='open_proposal'?value.payload.explanation:value.summary||'';
+    openExplanationInitial=value.type==='open_proposal'?value.payload.explanation:value.summary||'';byId('contributionSummary').value=openExplanationInitial;openExplanationDisplayInitial=byId('contributionSummary').value;
     openTargets=structuredClone(value.targets||[]);openRequestedRecordId=openTargets[0]?.record_id||'';openTargetLabel=openRequestedRecordId;openTaskIds=[...(value.task_ids||[])];
-    openSourcesInitial=value.type==='open_proposal'?value.payload.sources_text??'':'';byId('freeformSources').value=openSourcesInitial;
-    byId('freeformContext').hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
+    openSourcesInitial=value.type==='open_proposal'?value.payload.sources_text??'':'';byId('freeformSources').value=openSourcesInitial;openSourcesDisplayInitial=byId('freeformSources').value;
+    for(const attribute of value.payload.attributes||[])addAttribute(attribute);
+    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
     byId('revisionContext').replaceChildren(el('span','Revision '+submission.revision),el('br'),el('span','Submission: '+submission.id));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('contributionSummary').focus();
   }
 
@@ -448,8 +589,9 @@
   function renderSubmission(s){const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.append(el('h3','Review'),el('strong',s.title||s.id),metadata([['Submission',s.id],['Revision',s.revision],['Status',statusLabel(s.status)]]),disclosure('Details',metadata([['Type',labels[s.type]||s.type],['Credit',s.public_credit?.consent?s.public_credit.label:'None'],['Created',s.created_at],['Updated',s.updated_at],['Payload hash',s.payload_hash],['Diff hash',s.diff_hash]]),validationView(s.validation)),diffView(s.diff),editorialChecks(s));
     if(s.type==='open_proposal'){
       let original;try{original=JSON.parse(s.raw_json);}catch{}
-      if(original?.payload){root.append(intakeText(original.payload.explanation));if(original.payload.sources_text)root.append(rawDisclosure('Sources',original.payload.sources_text));root.append(metadata([['Evidence','Unverified']]));}
+      if(original?.payload){root.append(intakeText(original.payload.explanation));if(original.payload.sources_text)root.append(rawDisclosure('Sources',original.payload.sources_text));if(original.payload.attributes?.length)root.append(disclosure('Details',metadata(original.payload.attributes.map(a=>[a.name,a.value]))));root.append(metadata([['Evidence','Unverified']]));}
     }
+    renderPrivateImages(root,s.attachments);
     if(s.type==='record_update'&&s.proposal?.change_message)root.append(el('h4','Message'),intakeText(s.proposal.change_message));
     if(!s.application?.applicable)root.append(el('p','Review only','small'));
     if(s.targets?.length)root.append(rawDisclosure('Targets',s.targets));root.append(rawDisclosure('Original',s.raw_json));
@@ -469,7 +611,7 @@
       if(!pendingWrite)return;const request=pendingWrite,selectedId=selectedSubmission?.id;
       try{
         await requireOriginalActor(request);const result=requireReceipt(await api(request.path,request.body),request);retainWrite(null);renderErrors([]);
-        if(result.submission)showReceipt(result.submission,result);
+        if(result.submission){if(['/submit','/revise'].includes(request.path))clearSavedDraft(request);showReceipt(result.submission,result);if(['submit','revise'].includes(request.path.slice(1)))await beginImages(result.submission,request);}
         else{byId('contributionReceipt').replaceChildren(el('h3','Saved'),metadata([['Receipt',result.receipt.id]]));byId('contributionReceipt').hidden=false;}
         await loadDashboard();
         if(selectedId&&result.submission?.id===selectedId)await loadSubmission(selectedId);
@@ -516,7 +658,7 @@
   document.querySelectorAll('[data-workflow-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.workflowView)));
   byId('contributionType').addEventListener('change',()=>{renderPayload(byId('contributionType').value);invalidatePreview();});
   byId('publicCreditConsent').addEventListener('change',()=>{byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;invalidatePreview();});
-  byId('typedContributionForm').addEventListener('input',invalidatePreview);byId('typedContributionForm').addEventListener('change',invalidatePreview);byId('typedContributionForm').addEventListener('submit',previewForm);
+  byId('typedContributionForm').addEventListener('input',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('change',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('submit',previewForm);
   byId('addSubmissionSource').addEventListener('click',()=>{if(simpleFlow()==='other')addRow('submissionSources',sourceSpecs);else addSimpleSource();invalidatePreview();});byId('addSubmissionTarget').addEventListener('click',()=>{addRow('submissionTargets',targetSpecs);invalidatePreview();});byId('addSubmissionAttachment').addEventListener('click',()=>{addRow('submissionAttachments',attachmentSpecs);invalidatePreview();});
   byId('contributionTargetPick').addEventListener('change',()=>{byId('useContributionTarget').disabled=byId('contributionTargetPick').value==='';});
   byId('useContributionTarget').addEventListener('click',()=>{const index=byId('contributionTargetPick').value;if(index==='')return;const target=dashboard?.targets?.[Number(index)];if(!target)return;addRow('submissionTargets',targetSpecs,{record_id:target.record_id,expected_version:target.expected_version,expected_hash:target.expected_hash});byId('targetSnapshot').replaceChildren(rawDisclosure('Record',target.canonical_entry));invalidatePreview();});
@@ -526,10 +668,13 @@
   for(const [value,label]of [['area_proposal','Proposed area'],['record_annotation','Clarification']])if(![...byId('contributionType').options].some(o=>o.value===value)){const option=new Option(label,value);option.hidden=true;byId('contributionType').append(option);}
   byId('contributionFlow')?.addEventListener('change',()=>{rememberSimple();clearRevision();syncFlow();if(simpleFlow()==='other')renderPayload(byId('contributionType').value);});
   byId('clarificationTarget')?.addEventListener('change',()=>chooseClarification(byId('clarificationTarget').value));
-  byId('removeFreeformRecord').addEventListener('click',()=>{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;showOpenReference();invalidatePreview();byId('contributionSummary').focus();});
+  byId('removeFreeformRecord').addEventListener('click',()=>{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;byId('contributionPlaceMode').value='new';showOpenReference();invalidatePreview();saveDraft();byId('contributionSummary').focus();});
+  byId('contributionPlaceMode').addEventListener('change',()=>{if(byId('contributionPlaceMode').value==='new'){++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;}showOpenReference();invalidatePreview();});
+  byId('freeformPlaceSelect').addEventListener('change',()=>{const select=byId('freeformPlaceSelect');if(select.value)chooseOpenReference(select.value,select.selectedOptions[0].textContent);else{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;showOpenReference();invalidatePreview();}});
+  byId('addContributionAttribute').addEventListener('click',()=>{addAttribute()?.focus();invalidatePreview();saveDraft();});
   window.addEventListener('contributions-clarify-requested',event=>{
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
-    clearRevision();byId('freeformContext').hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('contributionSummary').focus();
+    clearRevision();for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
@@ -537,6 +682,6 @@
   byId('createTaskForm').addEventListener('submit',createTask);
   byId('refreshSharedTasks').addEventListener('click',loadSharedTasks);
   restorePendingTask();renderTaskList();loadSharedTasks();
-  resetOpenContext();loadDashboard();
+  resetOpenContext();restoreDraft();loadDashboard();
 
 })();

@@ -71,7 +71,8 @@ export function createDemoWorker(handler, registration, authenticate = authentic
           headers.set('oai-authenticated-user-id', actor);
           const response = await handler.fetch(new Request(request, { headers }), env, ctx);
           const privateHeaders = new Headers(response.headers);
-          privateHeaders.set('Cache-Control', 'no-store');
+          const isPrivate = (response.headers.get('Cache-Control') || '').split(',').some(value => value.trim().toLowerCase() === 'private');
+          privateHeaders.set('Cache-Control', isPrivate ? 'private, no-store' : 'no-store');
           return new Response(response.body, { status: response.status, statusText: response.statusText, headers: privateHeaders });
         }
       }

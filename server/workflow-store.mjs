@@ -1,4 +1,5 @@
 import {snapshotHash,fail} from './workflow-core.mjs';
+import {MEDIA_LIMITS} from './contribution-media.mjs';
 // Every mutation is gated by a fresh receipt inserted in the same D1 batch.
 // The random receipt ID distinguishes this attempt from concurrent/replayed keys.
 export function createWorkflowStore(db){
@@ -15,6 +16,10 @@ export function createWorkflowStore(db){
  function projectionWrites(targets,job,at,rollback=false){const writes=[];for(const t of targets){const next=rollback?t.before:t.after,nextVersion=rollback?t.after_version+1:t.after_version,nextHash=rollback?t.before_hash:t.after_hash;if(next){writes.push({sql:'INSERT INTO approved_records (id,owner_id,preview_id,raw_json,raw_hash,derived_json,preview_hash,approved_at) SELECT ?,?,?,?,?,?,?,? WHERE /*guard*/ ON CONFLICT(id) DO UPDATE SET raw_json=excluded.raw_json,raw_hash=excluded.raw_hash,derived_json=excluded.derived_json,preview_hash=excluded.preview_hash,approved_at=excluded.approved_at',args:[next.id,next.owner_id,next.preview_id,next.raw_json,next.raw_hash,next.derived_json,next.preview_hash,next.approved_at]})}else writes.push({sql:'DELETE FROM approved_records WHERE id=? AND /*guard*/',args:[t.record_id]});writes.push({sql:'INSERT INTO workflow_targets (record_id,version,record_hash,job_id,updated_at) SELECT ?,?,?,?,? WHERE /*guard*/ ON CONFLICT(record_id) DO UPDATE SET version=excluded.version,record_hash=excluded.record_hash,job_id=excluded.job_id,updated_at=excluded.updated_at',args:[t.record_id,nextVersion,nextHash||'absent',job,at]})}return writes}
  return{
  receiptByKey,getRecord,
+ getAttachment:id=>first('SELECT id,submission_id,owner_id,sha256,byte_length,media_type,width,height,metadata_json,created_at FROM contribution_media WHERE id=?',[id]),
+ getAttachmentBytes:id=>first('SELECT image_blob FROM contribution_media WHERE id=?',[id]),
+ mediaUsage:async id=>({count:(await first('SELECT COUNT(*) AS n FROM contribution_media WHERE submission_id=?',[id])).n,bytes:(await first('SELECT COALESCE(SUM(byte_length),0) AS n FROM contribution_media')).n}),
+ async attach(receipt,head,revision,media,audit,expectedState){return commit(receipt,"EXISTS (SELECT 1 FROM workflow_submissions WHERE id=? AND owner_id=? AND current_revision=? AND review_state=? AND review_state<>'superseded') AND NOT EXISTS (SELECT 1 FROM workflow_jobs WHERE submission_id=? AND status='verification_pending') AND (SELECT COUNT(*) FROM contribution_media WHERE submission_id=?)<? AND (SELECT COALESCE(SUM(byte_length),0) FROM contribution_media)+?<=?",[head.id,media.owner_id,revision.revision-1,expectedState,head.id,head.id,MEDIA_LIMITS.per_submission,media.byte_length,MEDIA_LIMITS.total_bytes],[insert('contribution_media',media),insert('workflow_revisions',revision),updateHead(head.id,revision.revision,head.review_state,head.updated_at),event(audit)])},
  async reuseReceipt(receipt){return commit(receipt,'1',[],[])},
  getTargetState:id=>first('SELECT * FROM workflow_targets WHERE record_id=?',[id]),
  async listRecords({owner_id}={}){const rows=await all('SELECT id FROM approved_records'+(owner_id?' WHERE owner_id=?':'')+' ORDER BY approved_at DESC LIMIT 1000',owner_id?[owner_id]:[]);return Promise.all(rows.map(r=>getRecord(r.id)))},

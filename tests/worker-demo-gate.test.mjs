@@ -21,3 +21,18 @@ test('registration exception cannot open private submission or review APIs',asyn
  for(const path of ['/api/register/attendees','/api/registrations','/api/contributions/dashboard','/api/contributions/submit','/api/review'])assert.equal((await worker.fetch(new Request('https://example.test'+path),env,{})).status,401);
  assert.equal(registrations.length,1);assert.deepEqual(app,[]);
 });
+
+test('private image downloads retain cache protection and verified identity at the gate',async()=>{
+ let forwarded;
+ const worker=createDemoWorker({fetch:r=>{forwarded=r;return new Response(new Uint8Array([1,2,3]),{headers:{'Cache-Control':'private, no-store','Content-Disposition':'attachment; filename="synthetic.png"','Content-Type':'image/png','X-Content-Type-Options':'nosniff'}});}},undefined,async()=> 'synthetic_verified_actor');
+ const response=await worker.fetch(new Request('https://example.test/api/contributions/attachment?id=synthetic',{headers:{'oai-authenticated-user-id':'forged','Cookie':'private-session=opaque'}}),{},{});
+ assert.equal(response.status,200);
+ assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+ assert.equal(response.headers.get('X-Content-Type-Options'),'nosniff');
+ assert.match(response.headers.get('Content-Disposition'),/^attachment;/);
+ assert.equal(forwarded.headers.get('oai-authenticated-user-id'),'synthetic_verified_actor');
+ assert.equal(forwarded.headers.get('Cookie'),null);
+ const blocked=setup();
+ assert.equal((await blocked.worker.fetch(new Request('https://example.test/api/contributions/attachment?id=synthetic',{headers:{'oai-authenticated-user-id':'forged'}}),{},{})).status,401);
+ assert.equal(blocked.seen.length,0);
+});
