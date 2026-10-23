@@ -577,8 +577,12 @@ test('failed staged verification retains incident history and leaves the active 
   const failed = await verify(h, staged.job, 'fail');
   assertStatus(failed, 200);
   assert.equal(failed.body.job.status, 'rolled_back');
-  assert.notEqual(failed.body.submission.status, 'merged');
-  assert(failed.body.submission.events.some(event => event.kind === 'verification_failed'));
+  assert.equal(failed.body.receipt.action, 'verify');
+  assert.equal(failed.body.submission, undefined, 'Publisher cannot read the reset private draft.');
+  const ownerReadback = await call(h, '/api/contributions/submission?id=' + approved.id);
+  assertStatus(ownerReadback, 200);
+  assert.notEqual(ownerReadback.body.submission.status, 'merged');
+  assert(ownerReadback.body.submission.events.some(event => event.kind === 'verification_failed'));
   assert.equal(rowCount(h, 'approved_records'), 0);
   assert.equal(rowCount(h, 'workflow_revisions'), 1);
   assert.equal(rowCount(h, 'workflow_approvals'), 1);
@@ -666,7 +670,11 @@ test('a post-activation readback failure produces an audited bounded restore', a
   assert.equal(result.body.job.verification.outcome, 'readback_failed_rolled_back');
   assert.equal(await getRecord('wf_TEST-001'), null);
   assert.equal(rowCount(h, 'workflow_revisions'), 1);
-  assert(result.body.submission.events.some(event => event.kind === 'readback_failed_rolled_back'));
+  assert.equal(result.body.receipt.action, 'verify');
+  assert.equal(result.body.submission, undefined, 'Publisher cannot read the reset private draft.');
+  const ownerReadback = await call(h, '/api/contributions/submission?id=' + approved.id);
+  assertStatus(ownerReadback, 200);
+  assert(ownerReadback.body.submission.events.some(event => event.kind === 'readback_failed_rolled_back'));
 });
 
 test('a non-applicable research proposal can be stored and reviewed but cannot activate code or layers', async t => {

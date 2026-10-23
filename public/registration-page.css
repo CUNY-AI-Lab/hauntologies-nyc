@@ -1,0 +1,27 @@
+:root { color-scheme: dark; background: #0b0d0b; color: #e9e3d7; font: 16px/1.5 Arial, Helvetica, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+.registration-header, main { width: min(100%, 408px); margin-inline: auto; }
+.registration-header a { display: inline-flex; align-items: center; min-height: 44px; color: #e9e3d7; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+main { padding-top: clamp(20px, 6vh, 48px); }
+.event-name { margin: 0 0 6px; color: #d6ad79; font-size: 13px; }
+h1 { margin: 0 0 20px; font-size: 28px; font-weight: 400; line-height: 1.2; }
+p { margin: 0 0 16px; }
+.event-details { margin-bottom: 24px; }
+.programs { color: #bbb5a9; font-size: 13px; }
+#registrationForm { display: grid; gap: 6px; }
+label { font-size: 14px; }
+input { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid #827563; border-radius: 0; background: #161916; color: #e9e3d7; font: inherit; }
+input[readonly] { color: #bbb5a9; }
+button { position: relative; justify-self: start; min-width: 100px; min-height: 44px; margin: 2px 0 0; padding: 8px 14px; border: 1px solid #a08b6d; border-radius: 0; background: #28231b; color: #f1e9db; font: inherit; cursor: pointer; }
+button::after { content: ''; position: absolute; right: -1px; top: -1px; width: 9px; height: 9px; background: linear-gradient(45deg, #746652 0 43%, #bba78a 44% 54%, #0b0d0b 55%); pointer-events: none; }
+button:hover { background: #393022; }
+button:disabled { cursor: wait; opacity: .7; }
+:focus-visible { outline: 2px solid #ffd39e; outline-offset: 3px; }
+#registrationStatus, #registrationError, #registrationReceipt { margin-top: 20px; overflow-wrap: anywhere; }
+#registrationError { color: #ffba9a; }
+#registrationReceipt :is(h2,h3) { margin: 0 0 8px; font-size: 20px; font-weight: 400; }
+#registrationReceipt p { font-size: 13px; }
+[hidden] { display: none !important; }
+@media (max-width: 380px) { body { padding: 12px; } main { padding-top: 16px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }

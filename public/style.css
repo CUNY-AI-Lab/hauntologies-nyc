@@ -98,8 +98,10 @@ html,body,.workspace{overflow:clip}
 .place-links a:hover{text-decoration:underline;color:#f0ddbd}
 @media(max-width:380px){.place-facts{padding-left:16px}.recordlist .place-card .place-select{font-size:15px}.place-coordinates{display:block}.place-coordinates dd{margin-top:1px}}
 
-/* Tools follows the map actions in reading and keyboard order. */
-#mapTools .map-actions{display:flex;flex-direction:column;align-items:stretch;gap:8px}#mapTools .map-actions>.outline{width:100%;text-align:left}#mapTools #zoomTools{align-self:flex-start}
+/* Zoom follows Layers in the map controls and keyboard order. */
+#mapTools .map-actions{display:flex;flex-direction:column;align-items:stretch;gap:8px}#mapTools .map-actions>.outline{width:100%;text-align:left}.header-tools .zoom-tools{align-self:center}
+@media(min-height:501px){.popout:not(.filters-popout),.filters-popout{top:210px;max-height:calc(100dvh - 210px - var(--panel-bottom) - 8px)}.research.popout{height:calc(100dvh - 210px - var(--panel-bottom) - 8px)}}
+@media(max-width:760px) and (min-height:501px){.popout:not(.filters-popout){top:auto;max-height:min(55dvh,calc(100dvh - 210px - env(safe-area-inset-top) - var(--panel-bottom)))}.research.popout{height:min(55dvh,calc(100dvh - 210px - env(safe-area-inset-top) - var(--panel-bottom)))}.filters-popout{top:calc(202px + env(safe-area-inset-top));max-height:calc(100dvh - 210px - env(safe-area-inset-top) - var(--panel-bottom))}}
 
 /* Participation forms remain overlays on the full-window map. */
 .contribution-navigation{display:flex;gap:8px}.contribution-navigation button{min-width:84px}
@@ -188,6 +190,7 @@ html,body,.workspace{overflow:clip}
 #recordEditorDialog details{border-top:1px solid var(--line)}
 #recordEditorDialog summary{cursor:pointer;min-height:44px;display:list-item;list-style-position:inside;padding:10px 0;font-size:13px}
 #recordEditorDialog .record-edit-group{display:grid;gap:12px;padding:4px 0 16px}
+#recordEditorDialog .record-source-action{justify-self:start;min-width:80px}
 #recordEditorDialog label{min-width:0;font-size:12px}
 #recordEditorDialog :is(input,select,textarea,button){min-height:44px;scroll-margin-block:16px}
 #recordEditorDialog :is(input,select,textarea){font-size:16px}
@@ -203,3 +206,48 @@ html,body,.workspace{overflow:clip}
 #recordEditorDialog .record-edit-diff dt{font-size:11px;color:var(--muted)}
 #recordEditorDialog .record-edit-diff dd{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
 #recordEditorDialog #recordEditorReceipt p{overflow-wrap:anywhere;font-size:12px}
+
+#accountSignInHelp>a{display:flex;align-items:center;min-height:44px;font-size:13px}
+#accountContributions{padding:0;list-style:none}
+#accountContributions>li{padding-block:10px;border-top:1px solid var(--line)}
+#accountContributions>li>a{display:flex;align-items:center;min-height:44px;overflow-wrap:anywhere}
+#accountContributions>li>p{margin:4px 0;font-size:12px}
+/* Component actions use compact controls and a bottom-left fold; map toolbar stays unchanged. */
+:is(#researchSidecar,#layersPanel,#filtersPanel,#toolsMenu,#recordEditorDialog) :is(button.outline,button.primary,button.darkbutton),
+#toolsMenu > button {
+  min-height:34px;
+  min-width:34px;
+  padding:6px 11px;
+  font-size:12px;
+  font-weight:400;
+  line-height:1.4;
+}
+:is(#researchSidecar,#layersPanel,#filtersPanel,#toolsMenu,#recordEditorDialog) :is(button.outline,button.primary,button.darkbutton)::after,
+#toolsMenu > button::after,
+#filtersPanel .result-actions button::after {
+  top:auto;
+  right:auto;
+  bottom:-1px;
+  left:-1px;
+  width:7px;
+  height:7px;
+  background:linear-gradient(225deg,#746652 0 43%,#bba78a 44% 54%,#11110f 55%);
+}
+#filtersPanel .result-actions #fitFiltered::after {
+  background:linear-gradient(225deg,#a47545 0 43%,#e1b481 44% 54%,#121412 55%);
+}
+#filtersPanel .close-control::after{top:auto;right:auto;bottom:4px;left:4px;background:linear-gradient(225deg,#6f6658 0 43%,#b5a18a 44% 54%,#121412 55%)}
+#researchSidecar .recordlist .place-card :is(.place-contribute,.place-edit){min-height:34px;min-width:60px;padding:6px 11px;font-size:12px;margin-bottom:12px}
+#researchSidecar .recordlist .place-card .place-contribute{margin-right:8px}
+#researchSidecar .textbutton,#recordEditorDialog .textbutton{min-height:34px;padding:6px 2px;font-size:12px}
+#layersPanel select,#researchSidecar select,#recordEditorDialog select{height:34px;min-height:34px;padding:5px 8px;appearance:auto;font-size:13px;font-weight:400;line-height:1.4}
+:is(#researchSidecar,#layersPanel,#recordEditorDialog) :is(button,select,summary):focus-visible{outline:2px solid #ffd39e!important;outline-offset:3px}
+@media(max-width:760px),(pointer:coarse){
+  :is(#researchSidecar,#layersPanel,#filtersPanel,#toolsMenu,#recordEditorDialog) :is(button.outline,button.primary,button.darkbutton),
+  #toolsMenu > button,#researchSidecar .textbutton,#recordEditorDialog .textbutton,
+  #researchSidecar .recordlist .place-card :is(.place-contribute,.place-edit){min-height:44px;min-width:44px;padding:8px 11px}
+  #layersPanel select,#researchSidecar select,#recordEditorDialog select{height:44px;min-height:44px;font-size:16px;font-weight:400;padding:7px 8px}
+  #filtersPanel .close-control::after{bottom:8px;left:8px}
+}
+.proposed-point{border:2px dashed #ffcf94;background:#171510;color:#fff0d9;border-radius:50%;text-align:center;font:22px/26px Arial,Helvetica,sans-serif;box-shadow:0 0 0 3px #171510aa}
+.contribution-picking #map{cursor:crosshair}

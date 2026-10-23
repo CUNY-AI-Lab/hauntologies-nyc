@@ -1,0 +1,43 @@
+:root { color-scheme: dark; background: #0b0d0b; color: #e9e3d7; font: 16px/1.5 Arial, Helvetica, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+header, main { width: min(100%, 1040px); margin-inline: auto; }
+header, .heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+header nav, .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+a { color: #e9caa1; text-underline-offset: 4px; }
+header a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px; }
+header .identity { padding-left: 0; color: #e9e3d7; }
+main { padding-top: clamp(24px, 6vh, 48px); }
+h1 { margin: 0; font: 400 28px/1.2 Georgia, 'Times New Roman', serif; }
+p { margin: 16px 0; }
+button, .button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 8px 14px; border: 1px solid #827563; border-radius: 0; background: #28231b; color: #f1e9db; font: inherit; text-decoration: none; cursor: pointer; }
+button:hover, .button:hover { background: #393022; }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 2px solid #ffd39e; outline-offset: 3px; }
+#dashboardStatus { min-height: 24px; color: #bbb5a9; }
+#dashboardRecovery { margin-bottom: 20px; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+th, td { padding: 14px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #3b3730; overflow-wrap: anywhere; }
+th { font-size: 14px; font-weight: 600; color: #bbb5a9; }
+th:nth-child(1) { width: 29%; }
+th:nth-child(2) { width: 39%; }
+th:nth-child(3) { width: 32%; }
+td time { font-size: 14px; }
+#registrationPages { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 20px; }
+#registrationPage { color: #bbb5a9; font-size: 14px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.skip-link { position: absolute; left: 12px; top: -100px; z-index: 2; background: #e9e3d7; color: #111; padding: 10px; }
+.skip-link:focus { top: 12px; }
+[hidden] { display: none !important; }
+@media (max-width: 560px) {
+  body { padding: 12px; }
+  header { gap: 4px; }
+  header nav { gap: 2px; }
+  main { padding-top: 24px; }
+  .heading { gap: 12px; }
+  th, td { padding: 12px 6px; font-size: 13px; }
+  th:nth-child(1) { width: 27%; }
+  th:nth-child(2) { width: 39%; }
+  th:nth-child(3) { width: 34%; }
+  td time { font-size: 12px; }
+}

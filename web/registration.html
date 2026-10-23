@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Register | Hauntologies of New York</title>
+  <meta name="description" content="Halloween Hackathon registration. October 30, 2026, 3–6:30 pm Eastern, DH Lounge 5307.">
+  <link rel="stylesheet" href="/registration-page.css">
+  <script defer src="/registration.js"></script>
+</head>
+<body>
+  <header class="registration-header"><a href="/" aria-label="Hauntologies of New York map">Hauntologies of New York</a></header>
+  <main>
+    <p class="event-name">Halloween Hackathon</p>
+    <h1>Register</h1>
+    <div class="event-details">
+      <p><time datetime="2026-10-30">October 30, 2026</time><br><time datetime="2026-10-30T15:00:00-04:00">3</time>–<time datetime="2026-10-30T18:30:00-04:00">6:30 pm Eastern</time><br>DH Lounge 5307</p>
+      <p class="programs">Graduate Center<br>M.A. Program in Digital Humanities<br>M.S. Program in Data Analysis and Visualization</p>
+    </div>
+    <form id="registrationForm">
+      <label for="registrationName">Name</label>
+      <input id="registrationName" name="name" autocomplete="name" maxlength="120" required>
+      <label for="registrationEmail">Email</label>
+      <input id="registrationEmail" name="email" type="email" autocomplete="email" maxlength="254" required>
+      <button id="submitRegistration" type="submit">Register</button>
+    </form>
+    <p id="registrationStatus" role="status" hidden></p>
+    <p id="registrationError" role="alert" tabindex="-1" hidden></p>
+    <div id="registrationReceipt" role="status" tabindex="-1" hidden></div>
+    <noscript><p>Enable JavaScript to register</p></noscript>
+  </main>
+</body>
+</html>

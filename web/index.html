@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="app.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration.js"></script><script defer src="record-edit-model.js"></script><script defer src="record-editor.js"></script></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="contributors.css"><link rel="stylesheet" href="contribution-form.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="app.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contribution-image.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration.js"></script><script defer src="account.js"></script><script defer src="record-edit-model.js"></script><script defer src="record-editor.js"></script><script defer src="contributors.js"></script></head>
 <body>
-<a class="skip-link" href="#mapToolsButton">Tools</a>
+<a class="skip-link" href="#mapToolsButton">Places</a>
 <header class="masthead">
-  <div class="brand"><p class="eyebrow">Halloween Hackathon</p><h1>Hauntologies of New York</h1><p id="programCredits" class="program-credits"><span>Graduate Center</span><span>M.A. Program in Digital Humanities</span><span>M.S. Program in Data Analysis and Visualization</span></p></div>
-  <nav class="header-tools" aria-label="Map controls"><button class="outline" id="mapToolsButton" type="button" aria-controls="mapTools" aria-expanded="false">Tools</button><button class="outline" id="filtersButton" type="button" aria-controls="filtersPanel" aria-expanded="false">Filters <span id="filtersActiveCount" class="filter-active-count" hidden>0</span></button><button class="outline" id="layersButton" type="button" aria-controls="layersPanel" aria-expanded="false">Layers</button></nav>
+  <div class="brand"><p class="eyebrow">Halloween Hackathon</p><h1>Hauntologies of New York</h1><p id="programCredits" class="program-credits"><span>Graduate Center, Room 5307</span><span><time datetime="2026-10-30T15:00:00-04:00">Friday, October 30 · 3–6:30 p.m.</time></span><span>M.A. Program in Digital Humanities</span><span>M.S. Program in Data Analysis and Visualization</span></p></div>
+  <nav class="header-tools" aria-label="Map controls"><button class="outline" id="mapToolsButton" type="button" aria-controls="researchSidecar" aria-expanded="false">Places</button><button class="outline" id="filtersButton" type="button" aria-controls="filtersPanel" aria-expanded="false">Filters <span id="filtersActiveCount" class="filter-active-count" hidden>0</span></button><button class="outline" id="layersButton" type="button" aria-controls="layersPanel" aria-expanded="false">Layers</button><div id="zoomTools" class="zoom-tools" role="group" aria-label="Zoom"></div></nav>
 </header>
-<nav class="contribution-navigation" aria-label="Participation"><button class="outline" id="registerButton" type="button" aria-haspopup="dialog" aria-controls="registrationDialog">Register</button><button class="outline" id="toolsButton" type="button" aria-controls="toolsMenu" aria-expanded="false">Contribute</button></nav>
+<nav class="contribution-navigation" aria-label="Participation"><button class="outline" id="accountButton" type="button" aria-haspopup="dialog" aria-controls="accountDialog" aria-label="Checking sign-in" disabled>…</button><button class="outline" id="toolsButton" type="button" aria-controls="toolsMenu" aria-expanded="false">Contribute</button></nav>
 <nav id="toolsMenu" class="tools-menu" aria-label="Contributions" hidden>
   <button id="tasksTool" type="button" aria-controls="researchSidecar">Tasks</button>
   <button id="submitTool" type="button" aria-controls="researchSidecar">Submit</button>
@@ -16,16 +16,6 @@
 <main class="workspace">
   <section class="mapspace" aria-label="Map"><div class="mapwrap"><div id="map" role="region" aria-label="New York map" tabindex="0"></div></div></section>
   <button id="recenterMap" class="outline recenter-map" type="button" aria-label="Recenter New York City" title="Recenter New York City"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="6"/></svg><span>NYC</span></button>
-  <aside id="mapTools" class="map-tools popout" aria-labelledby="mapToolsTitle" hidden>
-    <div class="popout-head"><h2 id="mapToolsTitle" tabindex="-1">Tools</h2><button id="closeMapTools" class="close-control" type="button" aria-label="Close"><span aria-hidden="true">×</span></button></div>
-    <div class="popout-content">
-      <div class="map-actions">
-        <button id="placesTool" class="outline" type="button" aria-controls="researchSidecar">Places</button>
-        <div id="zoomTools" class="zoom-tools" role="group" aria-label="Zoom"></div>
-        <button id="showAll" type="button" hidden>NYC</button><button id="resetMap" type="button" hidden>Recenter</button>
-      </div>
-    </div>
-  </aside>
   <aside id="layersPanel" class="map-tools layers-popout popout" aria-labelledby="layersTitle" hidden>
     <div class="popout-head"><h2 id="layersTitle" tabindex="-1">Layers</h2><button id="closeLayers" class="close-control" type="button" aria-label="Close layers"><span aria-hidden="true">×</span></button></div>
     <div class="popout-content">
@@ -93,10 +83,29 @@
     <div id="workflowErrors" class="workflow-errors" role="alert" tabindex="-1" hidden></div>
     <form id="typedContributionForm" novalidate>
       <p id="revisionContext" class="notice" hidden></p>
-      <label for="contributionSummary">What would you like to contribute?<textarea id="contributionSummary" rows="5" required></textarea></label>
+      <label for="contributionSummary">What would you like to contribute?<textarea id="contributionSummary" rows="3" required></textarea></label>
+      <div id="freeformPlaceChoice" class="contribution-place-choice">
+        <label for="contributionPlaceMode">Place<select id="contributionPlaceMode"><option value="new">New place</option><option value="existing">Existing place</option></select></label>
+        <label id="freeformPlacePicker" for="freeformPlaceSelect" hidden>Existing place<select id="freeformPlaceSelect"><option value="">Choose a place</option></select></label>
+      </div>
       <div id="freeformRecordContext" class="buttonrow" hidden><span id="freeformRecordLabel" role="status"></span><button id="removeFreeformRecord" class="textbutton" type="button">Remove</button></div>
+      <details id="freeformLocation" class="workflow-details"><summary>Location</summary>
+        <div class="contribution-coordinates">
+          <label for="contributionLatitude">Latitude<input id="contributionLatitude" type="number" step="any" min="-90" max="90" inputmode="decimal"></label>
+          <label for="contributionLongitude">Longitude<input id="contributionLongitude" type="number" step="any" min="-180" max="180" inputmode="decimal"></label>
+        </div>
+        <div class="buttonrow"><button id="chooseContributionPoint" type="button" class="outline">Choose on map</button><button id="cancelContributionPoint" type="button" class="textbutton" disabled>Cancel</button></div>
+      </details>
       <details id="freeformContext" class="workflow-details"><summary>Sources</summary>
-        <label for="freeformSources">References or sources<textarea id="freeformSources" rows="3"></textarea></label>
+        <label for="freeformSources">Links or references<textarea id="freeformSources" rows="3"></textarea></label>
+      </details>
+      <details id="freeformImages" class="workflow-details"><summary>Images</summary>
+        <label for="contributionImages">Add images<input id="contributionImages" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="contributionImageLimits"></label>
+        <p id="contributionImageLimits" class="small">Up to 3 images, 1 MB each. JPEG, PNG or WebP</p>
+        <div id="contributionImageError" role="alert" hidden></div><div id="stagedContributionImages"></div>
+      </details>
+      <details id="freeformDetails" class="workflow-details"><summary>Details</summary>
+        <div id="contributionAttributes"></div><button id="addContributionAttribute" type="button" class="outline">Add detail</button>
       </details>
       <div id="typedCompatibilityFields" hidden inert>
       <label for="contributionFlow">Contribution<select id="contributionFlow"><option value="new">New point or area</option><option value="clarify">Clarify a record</option><option value="other">Other contribution</option></select></label>
@@ -118,6 +127,7 @@
     </form>
     <section id="contributionPreview" class="workflow-preview" aria-labelledby="previewContributionTitle" tabindex="-1" hidden></section>
     <div id="contributionReceipt" class="workflow-receipt" role="status" tabindex="-1" hidden></div>
+    <section id="contributionImageProgress" class="workflow-receipt" aria-label="Images" hidden><p id="contributionImageStatus" role="status"></p><button id="retryContributionImages" type="button" class="outline" hidden>Retry images</button></section>
   </section>
   <section id="reviewView" class="workflow-view" hidden aria-labelledby="reviewQueueTitle">
     <h3 id="reviewQueueTitle" class="sr-only" tabindex="-1">Review</h3>
@@ -133,18 +143,14 @@
 <section id="sourcesPanel" class="panel" hidden><div id="sourceAudit"></div><div id="selectedLayerInfo"></div><button id="fitLayer" type="button">Fit</button><div id="layerLedger"></div></section>
 </aside></main>
 <button id="openResearch" aria-controls="researchSidecar" aria-expanded="false" hidden>Places</button>
-<dialog id="registrationDialog" class="registration-dialog" aria-labelledby="registrationTitle">
-  <div class="popout-head"><h2 id="registrationTitle">Register</h2><button id="closeRegistration" class="close-control" type="button" aria-label="Close registration"><span aria-hidden="true">×</span></button></div>
+<dialog id="accountDialog" class="registration-dialog" aria-labelledby="accountTitle">
+  <div class="popout-head"><h2 id="accountTitle">Sign in</h2><button id="closeAccount" class="close-control" type="button" aria-label="Close account"><span aria-hidden="true">×</span></button></div>
   <div class="registration-content">
-    <div class="registration-event"><p><time datetime="2026-10-30">October 30, 2026</time><br>3–6 pm Eastern<br>DH Lounge 5307</p><p>DH MA / DAV MS</p></div>
-    <form id="registrationForm">
-      <label for="registrationName">Name<input id="registrationName" name="name" autocomplete="name" maxlength="120" required></label>
-      <label for="registrationEmail">Email<input id="registrationEmail" name="email" type="email" autocomplete="email" maxlength="254" required></label>
-      <button id="submitRegistration" class="primary" type="submit">Register</button>
-    </form>
-    <p id="registrationStatus" class="small" role="status" hidden></p>
-    <p id="registrationError" class="notice" role="alert" tabindex="-1" hidden></p>
-    <div id="registrationReceipt" class="registration-receipt" role="status" tabindex="-1" hidden></div>
+    <p id="accountStatus" role="status"></p><div id="accountActions" class="button-row"></div>
+    <section id="accountRegistrationSection" hidden>
+      <details><summary>Registration</summary><p id="accountRegistration" class="registration-receipt"></p><a id="accountEventLink" href="/register">Event registration</a></details>
+      <h3>Contributions</h3><ul id="accountContributions"></ul>
+    </section>
   </div>
 </dialog>
 <dialog id="recordEditorDialog" class="record-editor" aria-labelledby="recordEditorTitle">
@@ -153,7 +159,7 @@
     <p id="recordEditorName" class="record-editor-name"></p>
     <div class="record-editor-service"><p id="recordEditorStatus" class="small" role="status"></p><button id="reloadRecordEditor" class="textbutton" type="button" hidden>Retry</button></div>
     <form id="recordEditorForm" novalidate>
-      <label for="recordChangeMessage">Change message<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
+      <label for="recordChangeMessage">Explanation<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
       <div id="recordEditorFields"></div>
       <button id="previewRecordEdit" class="primary" type="submit">Preview</button>
     </form>

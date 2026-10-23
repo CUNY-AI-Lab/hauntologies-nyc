@@ -1,0 +1,45 @@
+#typedContributionForm { display: grid; gap: 12px; }
+#typedContributionForm > label { margin: 0; }
+#contributionSummary { min-height: 96px; max-height: 40dvh; }
+#typedContributionForm .workflow-details { margin: 0; }
+#typedContributionForm .workflow-details > summary { padding-block: 10px; }
+.contribution-place-choice { display: grid; grid-template-columns: minmax(104px, .9fr) minmax(0, 1.5fr); gap: 10px; }
+.contribution-place-choice label { margin: 0; }
+#freeformRecordContext { margin: 0; align-items: center; }
+#freeformRecordLabel { min-width: 0; overflow-wrap: anywhere; }
+.contribution-coordinates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.contribution-coordinates label { min-width: 0; margin: 0 0 10px; }
+.contribution-coordinates input { width: 100%; min-height: 44px; }
+#workflowConnection:empty { display: none; }
+#workflowConnection [data-access-actions] { display: inline-flex; gap: 12px; margin-left: 10px; }
+#contributionAttributes, #stagedContributionImages { display: grid; gap: 12px; }
+.contribution-attribute, .staged-image { min-width: 0; padding-block: 10px; border-top: 1px solid var(--line); }
+.contribution-attribute label, .staged-image label { display: block; margin-bottom: 10px; }
+.staged-image > p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.staged-image details { margin-block: 4px; }
+#contributionImages { padding: 8px; }
+#contributionImageLimits, #contributionImageError { margin: 8px 0; }
+#contributionImageError { color: #ffba9a; }
+#contributionImageProgress { margin-top: 14px; }
+#contributionImageStatus { margin: 0 0 10px; }
+#typedContributionForm [aria-invalid=true] { border-color: #edb08b; }
+#typedContributionForm :is(input, textarea, select, button, summary) { scroll-margin-block: 12px; }
+@media (min-width: 420px) { .contribution-place-choice { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); } }
+
+/* Plain, compact place pickers and bookmarked disclosures. */
+#typedContributionForm{gap:10px}
+#typedContributionForm .contribution-place-choice{gap:8px;grid-template-columns:minmax(120px,.9fr) minmax(0,1.5fr)}
+#typedContributionForm .contribution-place-choice label{font-size:11px;font-weight:400;line-height:1.4}
+#typedContributionForm .contribution-place-choice select{height:34px;min-height:34px;margin-top:4px;padding:5px 8px;font-size:13px;font-weight:400;line-height:1.4;appearance:auto;text-overflow:ellipsis}
+#typedContributionForm .workflow-details{border:0;padding:0}
+#typedContributionForm .workflow-details > summary{position:relative;width:fit-content;min-width:72px;min-height:34px;padding:6px 10px 6px 12px;border:1px solid #81776a;background:#181a17;color:#dfc5a0;font-size:12px;font-weight:400;line-height:20px;list-style-position:inside;cursor:pointer}
+#typedContributionForm .workflow-details > summary::marker{color:#c99762;font-size:10px}
+#typedContributionForm .workflow-details > summary::after{content:'';position:absolute;bottom:-1px;left:-1px;width:7px;height:7px;background:linear-gradient(225deg,#746652 0 43%,#bba78a 44% 54%,#11110f 55%);pointer-events:none}
+#typedContributionForm .workflow-details > summary:hover{background:#28261f}
+#typedContributionForm .workflow-details[open] > summary{margin-bottom:8px}
+#typedContributionForm .workflow-details > summary:focus-visible{outline:2px solid #ffd39e!important;outline-offset:3px}
+@media(max-width:760px),(pointer:coarse){
+  #typedContributionForm .contribution-place-choice select{height:44px;min-height:44px;font-size:16px;font-weight:400;padding:7px 8px}
+  #typedContributionForm .workflow-details > summary{min-height:44px;padding-block:11px}
+}
+@media(max-width:420px){#typedContributionForm .contribution-place-choice{grid-template-columns:minmax(0,1fr)}}
