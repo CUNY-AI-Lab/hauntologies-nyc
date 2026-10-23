@@ -43,3 +43,9 @@
   #typedContributionForm .workflow-details > summary{min-height:44px;padding-block:11px}
 }
 @media(max-width:420px){#typedContributionForm .contribution-place-choice{grid-template-columns:minmax(0,1fr)}}
+
+.account-form { display: grid; gap: 16px; margin-block: 16px; }
+.account-form label { display: grid; gap: 6px; }
+.account-form input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 10px 12px; font: inherit; color: inherit; background: var(--bg, #131512); border: 1px solid var(--line, #57594f); border-radius: 6px; }
+#accountActions { gap: 10px; flex-wrap: wrap; }
+#accountActions button { min-height: 44px; white-space: normal; }

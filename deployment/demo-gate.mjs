@@ -1,6 +1,7 @@
-// The demo can serve the map after a sharing decision. APIs remain closed until
-// verified identity is configured; old hosting identity headers are never trusted.
+// Public map with account-derived identity for private contribution routes.
+// Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
+import { handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
 const privateJson = (value, status = 200) => Response.json(value, { status, headers: {
   'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer'
 } });
@@ -13,16 +14,21 @@ export function createDemoWorker(handler, registration, authenticate = authentic
         for(let i=0;i<4;i++){const decoded=decodeURIComponent(path);if(decoded===path)break;path=decoded;}
       } catch { return new Response('Invalid path',{status:400}); }
       path=path.replace(/\/+/g,'/').toLowerCase();
+      const mapEnabled = mapAccountsReady(env);
+      if (path === '/api/auth' || path.startsWith('/api/auth/')) {
+        if (rawPath !== path) return privateJson({error:'invalid_path'},400);
+        return handleMapAccount(request, env);
+      }
       // CUNY Login was withdrawn. An obsolete enable setting must never
       // activate that adapter or fall back to another identity provider.
       const withdrawnIdentity = env?.CONTRIBUTIONS_CUNY_ENABLED === 'true';
       if (rawPath === '/api/access-status' && ['GET','HEAD'].includes(request.method)) {
-        const enabled = !withdrawnIdentity && Boolean(accessConfiguration(env));
-        const response = privateJson({ enabled, sign_in_url: enabled ? '/api/contributions/sign-in' : null, dashboard_enabled: false });
+        const enabled = mapEnabled || (!withdrawnIdentity && Boolean(accessConfiguration(env)));
+        const response = privateJson({ enabled, sign_in_url: enabled ? '/api/contributions/sign-in' : null, ...(mapEnabled ? {account_mode:'map'} : {}), dashboard_enabled: false });
         return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
       }
-      // Replacement map accounts are not activated. Legacy session cookies,
-      // headers and owner names cannot open authentication or attendee routes.
+      // Legacy session cookies, headers and owner names cannot open obsolete
+      // authentication or attendee routes.
       if (path === '/auth' || path.startsWith('/auth/') || path === '/api/admin/registrations') {
         return privateJson({error:'sign_in_required'},401);
       }
@@ -33,7 +39,10 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       // Only exact contribution routes can use verified identity. Encoded,
       // repeated, case-folded and bare API paths stay closed.
       if (rawPath === path && /^\/api\/contributions\/[a-z][a-z0-9-]*$/.test(rawPath)) {
-        const actor = withdrawnIdentity ? null : await authenticate(request, env);
+        if (rawPath === '/api/contributions/sign-in' && mapEnabled && ['GET','HEAD'].includes(request.method)) return new Response(null, {status:303,headers:{Location:'/#sign-in','Cache-Control':'no-store'}});
+        let actor;
+        try { actor = mapEnabled ? (await mapSession(request, env))?.actor_id : withdrawnIdentity ? null : await authenticate(request, env); }
+        catch { return privateJson({error:'account_unavailable'},503); }
         if (actor) {
           if (rawPath === '/api/contributions/sign-in' || rawPath === '/api/contributions/session') {
             if (!['GET','HEAD'].includes(request.method)) return new Response(null, { status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'} });

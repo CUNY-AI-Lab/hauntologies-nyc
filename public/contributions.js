@@ -725,6 +725,7 @@
     byId('draftTab').click();switchView('reviewView');await loadSubmission(id);
   });
   window.addEventListener('contributions-session-ended',event=>clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to submit'));
+  window.addEventListener('contributions-session-started',()=>loadDashboard());
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
   byId('tasksTool').addEventListener('click',()=>{byId('draftTab').click();switchView('taskView');loadSharedTasks();byId('toolsMenu').hidden=true;byId('toolsButton').setAttribute('aria-expanded','false');});
   byId('createTaskForm').addEventListener('submit',createTask);
