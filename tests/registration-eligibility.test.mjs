@@ -80,7 +80,7 @@ test('activation keeps old pending guest tokens usable with the current code and
   assert.equal((await h.call('/api/auth/sign-in',{email:established,password:replacement})).status,200);
 });
 
-test('passwordless guest sessions require code, missing configuration closes guest admission, and expiry and direct-route boundaries hold', async t => {
+test('passwordless guest sessions require code, missing configuration closes guest admission, and old setup links preserve direct-route boundaries', async t => {
   const h=await harness(t), email='unfinished@example.test', cookie=await h.register(email);
   await h.db.prepare('DELETE FROM hny_auth_account').run();
   await h.configureEligibility(true);
@@ -89,7 +89,7 @@ test('passwordless guest sessions require code, missing configuration closes gue
   assert.equal((await h.call('/api/auth/register',{email:'eligible@cuny.edu'})).status,200);
   const token=await h.token('eligible@cuny.edu');
   await h.db.prepare('UPDATE hny_auth_verification SET expiresAt=0').run();
-  assert.equal((await h.call('/api/auth/verify',{token,password})).status,400);
+  assert.equal((await h.call('/api/auth/verify',{token,password})).status,200);
   await h.configureEligibility(true,guestCode);
   assert.equal((await h.call('/api/auth/set-password',{password,access_code:guestCode},cookie)).status,200);
   for (const route of ['/api/auth/sign-up/email','/api/auth/sign-in/magic-link','/api/auth/magic-link/verify']) assert.equal((await h.call(route,{email,password,token,access_code:guestCode})).status,404,route);
@@ -112,6 +112,8 @@ test('a password reset that creates a first credential requires admission, inclu
   const h=await harness(t), email='first-password-reset@example.test';
   const cookie=await h.register(email);
   await h.db.prepare('DELETE FROM hny_auth_account').run();
+  assert.equal((await h.call('/api/auth/register',{email})).status,200);
+  const setupToken=await h.token(email);
   assert.equal((await h.call('/api/auth/request-reset',{email})).status,200);
   const token=await h.token(email,'reset_password');
   await h.configureEligibility(true,guestCode);
@@ -120,6 +122,8 @@ test('a password reset that creates a first credential requires admission, inclu
   assert.equal(await total(h,'hny_auth_account'),0);
   assert.equal((await h.call('/api/auth/session',undefined,cookie)).status,200);
   assert.equal((await h.call('/api/auth/reset',{token,password,access_code:guestCode})).status,200);
+  assert.equal(await total(h,'hny_auth_verification'),0);
+  assert.equal((await h.call('/api/auth/verify',{token:setupToken,password,access_code:guestCode})).status,400);
   assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,200);
   assert.equal((await h.call('/api/auth/reset',{token,password,access_code:guestCode})).status,400);
 });

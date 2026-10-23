@@ -1,4 +1,4 @@
-import { normalizeRegistrationEmail, registrationAllowed, registrationRestricted } from '../server/registration-eligibility.mjs';
+import { normalizeRegistrationEmail, registrationAllowed } from '../server/registration-eligibility.mjs';
 import { betterAuth } from 'better-auth';
 import { magicLink } from 'better-auth/plugins/magic-link';
 import { getIP } from '@better-auth/core/utils/ip';
@@ -31,7 +31,9 @@ export function accountOptions(env) {
     user: { modelName: 'hny_auth_user' },
     account: { modelName: 'hny_auth_account', accountLinking: { enabled: false } },
     session: { modelName: 'hny_auth_session', expiresIn: 3600, disableSessionRefresh: true, cookieCache: { enabled: false } },
-    verification: { modelName: 'hny_auth_verification', storeIdentifier: 'hashed' },
+    // Setup links remain stored until used. The wrapper cleans expired reset
+    // challenges separately so Better Auth cannot remove an unused setup link.
+    verification: { modelName: 'hny_auth_verification', storeIdentifier: 'hashed', disableCleanup: true },
     emailAndPassword: {
       enabled: true, disableSignUp: true, requireEmailVerification: true, minPasswordLength: 12, maxPasswordLength: 128,
       revokeSessionsOnPasswordReset: true, resetPasswordTokenExpiresIn: 1800,
@@ -63,6 +65,10 @@ function authFor(env) {
 
 async function credential(env, userId) {
   return env.DB.prepare('SELECT id FROM hny_auth_account WHERE userId = ? AND providerId = ? AND password IS NOT NULL LIMIT 1').bind(userId, 'credential').first();
+}
+
+async function clearSetupLinks(env, email) {
+  await env.DB.prepare("DELETE FROM hny_auth_verification WHERE json_valid(value) AND json_extract(value, '$.type') = 'magic-link' AND lower(json_extract(value, '$.email')) = ?").bind(email.toLowerCase()).run();
 }
 
 export async function mapSession(request, env, requirePassword = true) {
@@ -129,6 +135,7 @@ export async function handleMapAccount(request, env) {
     if (request.method !== 'POST') return privateJson({ error: 'method_not_allowed' }, 405);
     const body = await bodyOf(request, fields[action]);
     await env.DB.prepare('DELETE FROM hny_auth_limits WHERE expires_at < ?').bind(Date.now() - 3600000).run();
+    await env.DB.prepare("DELETE FROM hny_auth_verification WHERE (CASE WHEN json_valid(value) THEN json_extract(value, '$.type') END) IS NOT 'magic-link' AND (CASE WHEN typeof(expiresAt) IN ('integer','real') THEN expiresAt/1000 ELSE unixepoch(expiresAt) END) < ?").bind(Math.floor(Date.now()/1000)).run();
     await rate(env, 'all-mutations', 3000, 3600);
     const ip = getIP(request, { advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'], ipv6Subnet: 64 } } }) || 'unknown';
     // Account and global limits remain effective across addresses and Worker isolates.
@@ -153,6 +160,10 @@ export async function handleMapAccount(request, env) {
     if (fields[action].includes('password') && !validPassword(body.password)) throw failure('password_length', 400);
     if (fields[action].includes('token') && (typeof body.token !== 'string' || !tokenPattern.test(body.token))) throw failure('invalid_token', 400);
     const auth = authFor(env), headers = request.headers;
+    const context = await auth.$context;
+    // Finish initialization within this request, including when admission or
+    // an existing account makes the wrapper return before calling an auth API.
+    await context.checkSchema?.();
     if (action === 'register') {
       const existing = await env.DB.prepare('SELECT id FROM hny_auth_user WHERE email = ? LIMIT 1').bind(body.email).first();
       if (!existing || !await credential(env, existing.id)) await auth.api.signInMagicLink({ headers, body: { email: body.email } });
@@ -163,16 +174,15 @@ export async function handleMapAccount(request, env) {
       return privateJson({ status: 'check_email' });
     }
     if (action === 'reset') {
-      if (registrationRestricted(env)) {
-        const pending = await (await auth.$context).internalAdapter.findVerificationValue('reset-password:' + body.token);
-        if (!pending || new Date(pending.expiresAt).getTime() <= Date.now()) throw failure('invalid_token', 400);
-        const user = await env.DB.prepare('SELECT id, email FROM hny_auth_user WHERE id = ? LIMIT 1').bind(pending.value).first();
-        if (!user) throw failure('invalid_token', 400);
-        // A reset can create a first credential. Preserve ordinary password resets,
-        // while applying admission to accounts whose setup is still unfinished.
-        if (!await credential(env, user.id) && !await registrationAllowed(user.email, body.access_code, env)) throw failure('registration_restricted', 403);
-      }
+      const pending = await context.internalAdapter.findVerificationValue('reset-password:' + body.token);
+      if (!pending || new Date(pending.expiresAt).getTime() <= Date.now()) throw failure('invalid_token', 400);
+      const user = await env.DB.prepare('SELECT id, email FROM hny_auth_user WHERE id = ? LIMIT 1').bind(pending.value).first();
+      if (!user) throw failure('invalid_token', 400);
+      // A reset can create a first credential. Preserve ordinary password resets,
+      // while applying admission to accounts whose setup is still unfinished.
+      if (!await credential(env, user.id) && !await registrationAllowed(user.email, body.access_code, env)) throw failure('registration_restricted', 403);
       await auth.api.resetPassword({ headers, body: { token: body.token, newPassword: body.password } });
+      await clearSetupLinks(env, user.email);
       return privateJson({ status: 'password_reset' }, 200, [`${COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`]);
     }
     if (action === 'sign-in') {
@@ -187,16 +197,25 @@ export async function handleMapAccount(request, env) {
     }
     let verifiedRequest = request, cookies = [];
     if (action === 'verify') {
-      if (registrationRestricted(env)) {
-        const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body.token)));
-        const key = btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-        // Better Auth 1.7.12 owns identifier hashing and atomic token consumption.
-        // Read its purpose-bound record before calling verification or creating a user.
-        const pending = await (await auth.$context).internalAdapter.findVerificationValue('magic-link:' + key);
-        let value; try { value = JSON.parse(pending?.value); } catch {}
-        if (!pending || new Date(pending.expiresAt).getTime() <= Date.now() || value?.type !== 'magic-link') throw failure('invalid_token', 400);
-        if (!await registrationAllowed(value.email, body.access_code, env)) throw failure('registration_restricted', 403);
+      const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body.token)));
+      const key = btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+      // Setup proof has no time limit. Better Auth still owns identifier hashing
+      // and atomic consumption; a deleted proof can never be recreated here.
+      const pending = await context.internalAdapter.findVerificationValue('magic-link:' + key);
+      let value; try { value = JSON.parse(pending?.value); } catch {}
+      if (!pending || value?.type !== 'magic-link' || typeof value.email !== 'string') throw failure('invalid_token', 400);
+      if (!await registrationAllowed(value.email, body.access_code, env)) throw failure('registration_restricted', 403);
+      const existing = await env.DB.prepare('SELECT id FROM hny_auth_user WHERE email = ? LIMIT 1').bind(value.email.toLowerCase()).first();
+      if (existing && await credential(env, existing.id)) {
+        await clearSetupLinks(env, value.email);
+        throw failure('password_already_set', 409);
       }
+      // This timestamp bounds Better Auth's processing of the current request,
+      // not the lifetime of the emailed invitation. Only an existing, validated
+      // setup record is updated, after admission and before atomic consumption.
+      const refreshed = await env.DB.prepare('UPDATE hny_auth_verification SET expiresAt = ?, updatedAt = ? WHERE id = ? AND identifier = ? AND value = ? RETURNING id')
+        .bind(new Date(Date.now() + 30 * 60 * 1000).toISOString(), new Date().toISOString(), pending.id, pending.identifier, pending.value).first();
+      if (!refreshed) throw failure('invalid_token', 400);
       const response = await auth.api.magicLinkVerify({ headers, query: { token: body.token }, asResponse: true });
       if (!response.ok) throw failure('invalid_token', 400);
       cookies = cookieHeaders(response); verifiedRequest = sessionCookieRequest(request, response);
@@ -206,6 +225,7 @@ export async function handleMapAccount(request, env) {
     if (!session.password_required) return privateJson({ error: 'password_already_set' }, 409);
     if (!await registrationAllowed(session.email, body.access_code, env)) throw failure('registration_restricted', 403);
     await auth.api.setPassword({ headers: verifiedRequest.headers, body: { newPassword: body.password } });
+    await clearSetupLinks(env, session.email);
     return privateJson({ status: 'signed_in' }, 200, cookies);
   } catch (error) {
     if (error?.code && Number.isInteger(error.status)) return privateJson({ error: error.code }, error.status);

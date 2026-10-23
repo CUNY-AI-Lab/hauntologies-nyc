@@ -127,7 +127,7 @@ test('configured map reviewer independently reviews through account sessions whi
   assert.equal((await h.call('/api/contributions/dashboard', undefined, reviewer)).body.capabilities.can_review, false);
 });
 
-test('strict origin/routes, durable account rate limits and expired challenges',async t=>{
+test('strict origin/routes and durable mail limits preserve old unused setup links',async t=>{
   const h=await harness(t), email='expired@example.test';
   assert.equal((await h.call('/api/auth/register',{email},'',{origin:'https://other.example'})).status,403);
   assert.equal((await h.call('/api/auth/register',{email,recipient:'elsewhere@example.test'})).status,400);
@@ -136,7 +136,7 @@ test('strict origin/routes, durable account rate limits and expired challenges',
   assert.equal((await h.call('/api/auth/register',{email})).status,200);
   const token=await h.token(email);
   await h.db.prepare('UPDATE hny_auth_verification SET expiresAt=0').run();
-  assert.equal((await h.call('/api/auth/verify',{token,password})).status,400);
+  assert.equal((await h.call('/api/auth/verify',{token,password})).status,200);
   assert.equal((await h.call('/api/auth/register',{email})).status,200);
   assert.equal((await h.call('/api/auth/register',{email})).status,200);
   assert.equal((await h.call('/api/auth/register',{email})).status,429);

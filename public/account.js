@@ -51,7 +51,7 @@
         const hint = node('p', 'Use 12 to 128 characters.'); hint.className = 'small'; form.append(hint);
       }
     }
-    if (mode === 'register') form.append(node('p', 'Verify your email, then choose a password for Hauntologies. Event registration is separate.'));
+    if (mode === 'register') form.append(node('p', 'Verify your email, then choose a password for Hauntologies. Your verification link stays usable until you create your password. Event registration is separate.'));
     const submit = node('button', mode === 'sign-in' ? 'Sign in' : mode === 'register' ? 'Send verification email' : mode === 'request-reset' ? 'Send reset email' : 'Save password'); submit.type = 'submit'; submit.className = 'primary'; form.append(submit); formHost.append(form);
     form.addEventListener('submit', async event => {
       event.preventDefault(); if (busy) return;
@@ -70,7 +70,7 @@
           renderForm('sign-in', operation === 'register' ? 'Check your email for a verification link. If you already have an account, sign in or reset your password.' : 'If this address has an account, a reset link will arrive by email.');
         } else if (operation === 'reset') { challenge = null; identity(null); renderForm('sign-in', 'Password updated. Sign in with your new password.'); }
         else { challenge = null; await reconcile(); window.dispatchEvent(new CustomEvent('contributions-session-started')); }
-      } catch (error) { if (error.code === 'registration_restricted') admission?.reject(); status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.message; }
+      } catch (error) { if (error.code === 'registration_restricted') admission?.reject(); status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.code === 'invalid_token' && operation === 'verify' ? 'This verification link has already been used or is invalid. Request a new link.' : error.message; }
       finally { busy = false; submit.disabled = false; }
     });
     if (mode === 'sign-in') { button('Reset password', () => renderForm('request-reset')); button("Don't have an account? Register here.", () => renderForm('register')); }
