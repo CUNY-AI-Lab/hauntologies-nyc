@@ -61,7 +61,7 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contributio
 const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'Demolition list':['haunting','reported_haunting'].includes(r.category)?'Ghost story':r.category==='archival_gap'?'Archival gap':r.category==='vanished_place'?'Vanished place':r.category==='pending'?'Pending review':r.category==='submitted'?'Submitted record':'Place';
 function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&String(lat).trim()!==''&&String(lon).trim()!==''&&Number(lat)>=40.45&&Number(lat)<=40.98&&Number(lon)>=-74.30&&Number(lon)<=-73.65}
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
-let toolOpener='toolsButton';
+let toolOpener='toolsButton',placeLayout=null;
 const toolPanels=['toolsMenu','layersPanel','filtersPanel','researchSidecar'];
 let sidecarModalState=null;
 function setSidecarModal(active){
@@ -90,7 +90,7 @@ function closeTools(focus=false){
  setSidecarModal(false);
  for(const id of toolPanels)$(id).hidden=true;
  for(const id of ['toolsButton','filtersButton','mapToolsButton','layersButton','openResearch'])$(id).setAttribute('aria-expanded','false');
- document.body.classList.remove('sidecar-open');if(focus)$(toolOpener).focus({preventScroll:true});
+ document.body.classList.remove('sidecar-open','places-open');if(focus)$(toolOpener).focus({preventScroll:true});
 }
 function openSidecar(open=true){
  closeTools();toolOpener='toolsButton';$('researchSidecar').hidden=!open;$('openResearch').setAttribute('aria-expanded',String(open));
@@ -100,6 +100,8 @@ function switchPanel(id){
  openSidecar();document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
  $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Contribute';
+ document.body.classList.toggle('places-open',id==='casePanel');
+ if(id==='casePanel'){$('publishedEditsFeed').open=false;placeLayout?.layout();}
  if(id==='casePanel'){toolOpener='mapToolsButton';$('mapToolsButton').setAttribute('aria-expanded','true');}
  setSidecarModal(id==='draftPanel');
  if(id==='draftPanel')window.ContributionPoint?.show();
@@ -275,7 +277,8 @@ function renderRecords(){
  records.forEach(r=>{
   const n=AtlasModel.normalize(r),b=document.createElement('button');b.type='button';b.className='place-select';b.dataset.recordId=r.id;b.classList.toggle('active',selected===r.id);b.setAttribute('aria-pressed',String(selected===r.id));
   b.innerHTML=`<i class="dot ${esc(r.category||'draft')} ${esc(n.geoStatus)}" aria-hidden="true"></i><span class="place-title">${esc(r.title)}</span>`;
-  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;card.append(b);card.insertAdjacentHTML('beforeend',placeFacts(r));appendPlaceRecord(card,r);addContributionAction(card,r);
+  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;card.append(b);card.insertAdjacentHTML('beforeend',placeFacts(r));
+  const actions=document.createElement('div');actions.className='place-actions';appendPlaceRecord(actions,r);addContributionAction(actions,r);card.append(actions);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
    const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+' '+n.geoStatus+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+locationLabel(n),keyboard:true,riseOnHover:true});
@@ -291,11 +294,16 @@ function renderRecords(){
 function fitRecords(records){if(!map)return;const pts=records.filter(hasPoint).map(r=>{const c=AtlasModel.normalize(r).geometry.coordinates;return[c[1],c[0]]});if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[34,34],maxZoom:16,animate:false})}
 function visibleMapCenter(){
  const size=map.getSize(),panel=$('researchSidecar').getBoundingClientRect(),brand=document.querySelector('.brand').getBoundingClientRect();
- if(window.innerWidth>760)return L.point(Math.max(45,panel.left/2),size.y/2);
+ if(panel.left>120){
+  const x=panel.left/2,obstacles=[...document.querySelectorAll('.brand,.header-tools')].filter(node=>getComputedStyle(node).visibility!=='hidden').map(node=>node.getBoundingClientRect());
+  const top=Math.max(24,...obstacles.filter(r=>r.left<x&&r.right>x).map(r=>r.bottom+24));
+  const bottom=Math.min(size.y-24,...[...document.querySelectorAll('.contribution-navigation,.contributors-footer,.recenter-map')].map(node=>node.getBoundingClientRect()).filter(r=>r.left<x&&r.right>x).map(r=>r.top-24));
+  return L.point(x,(Math.min(top,bottom)+bottom)/2);
+ }
  const top=Math.min(brand.bottom+18,panel.top-45);return L.point(size.x/2,Math.max(24,(top+panel.top)/2));
 }
 function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.getVisibleParent&&pointLayer.getVisibleParent(marker)!==marker)map.setZoom(Math.min(map.getMaxZoom(),18),{animate:false});map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false});}
-function revealPlaceCard(card){if(!card)return;const panel=$('casePanel');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-16;}
+function revealPlaceCard(card){if(!card)return;const panel=$('casePanel');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-8;placeLayout?.remember();}
 function selectRecord(r){
  if(selectingContributionPlace){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
  selected=r.id;renderRecords();switchPanel('casePanel');map?.closePopup();
@@ -365,3 +373,60 @@ window.addEventListener('contributions-place-pick-requested',()=>{closeTools();s
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');$('chooseExistingPlace').focus();}});
 
 window.addEventListener('contributions-records-changed',event=>{if(!event.detail?.publicRefresh)refreshPublishedPlaces();});
+
+// Keep the visible reading position while browser chrome, text or orientation changes.
+function setupPlaceLayout(){
+ const panel=$('casePanel'),sidecar=$('researchSidecar');
+ const header=document.querySelector('.masthead'),tools=document.querySelector('.header-tools'),brand=document.querySelector('.brand');
+ const dockNodes=()=>[...document.querySelectorAll('.contribution-navigation,.contributors-footer,.recenter-map')];
+ let anchor=null,frame=0,lastWidth=innerWidth,lastHeight=innerHeight;
+ const active=()=>document.body.classList.contains('places-open')&&!sidecar.hidden;
+ const visible=node=>node.getBoundingClientRect().height&&(!node.closest('.place-record-content')||node.closest('.place-record').open);
+ const readingNodes=card=>[...card.querySelectorAll('.place-select,.place-description,.place-location,.place-coordinates,.place-links,.place-record > summary,.place-record-content > *,.place-contribute,.place-edit')];
+ const remember=()=>{
+  if(!active())return;
+  const bounds=panel.getBoundingClientRect();
+  const card=[...panel.querySelectorAll('.place-card')].find(node=>{const r=node.getBoundingClientRect();return r.bottom>bounds.top+8&&r.top<bounds.bottom;});
+  if(!card){anchor=null;return;}
+  const candidates=readingNodes(card);
+  const node=candidates.find(node=>visible(node)&&node.getBoundingClientRect().bottom>bounds.top+8)||card;
+  anchor={node,card,id:card.dataset.placeId,index:candidates.indexOf(node),offset:node.getBoundingClientRect().top-bounds.top};
+ };
+ const layout=()=>{
+  if(!active())return;
+  const saved=anchor,view=window.visualViewport;
+  const docks=dockNodes();for(const node of docks)observer.observe(node);
+  // Pinch zoom remains browser-controlled; layout reflow uses the CSS viewport.
+  const viewTop=view?.scale===1?view.offsetTop:0,viewBottom=view?.scale===1?view.offsetTop+view.height:innerHeight;
+  const bounds=sidecar.getBoundingClientRect(),overlaps=r=>r.right>bounds.left&&r.left<bounds.right;
+  const short=matchMedia('(max-height:640px)').matches;
+  const top=Math.ceil(Math.max(viewTop+12,...[tools,...short?[]:[brand]].map(node=>{const r=node.getBoundingClientRect();return overlaps(r)?r.bottom+8:viewTop+12;})));
+  const bottom=Math.floor(Math.min(viewBottom-12,...docks.map(node=>{const r=node.getBoundingClientRect();return overlaps(r)?r.top-8:viewBottom-12;})));
+  const values={'--places-top':top+'px','--places-height':Math.max(0,bottom-top)+'px'};
+  for(const [key,value]of Object.entries(values))if(sidecar.style.getPropertyValue(key)!==value)sidecar.style.setProperty(key,value);
+  const card=saved&&(saved.card.isConnected?saved.card:[...panel.querySelectorAll('.place-card')].find(node=>node.dataset.placeId===saved.id));
+  if(card){
+   // A public-record refresh may replace DOM nodes during the same resize.
+   const previous=saved.node.isConnected?saved.node:readingNodes(card)[saved.index];
+   const node=previous&&visible(previous)?previous:card;
+   const offset=node===previous?saved.offset:8;
+   panel.scrollTop+=node.getBoundingClientRect().top-panel.getBoundingClientRect().top-offset;
+  }
+  lastWidth=innerWidth;lastHeight=innerHeight;remember();
+ };
+ const schedule=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(layout);};
+ panel.addEventListener('scroll',()=>{if(innerWidth===lastWidth&&innerHeight===lastHeight)remember();},{passive:true});
+ panel.addEventListener('toggle',event=>{
+  if(!event.target.matches('.place-record'))return;
+  const card=event.target.closest('.place-card'),bounds=card.getBoundingClientRect(),view=panel.getBoundingClientRect();
+  if(!event.target.open&&bounds.height<=view.height-16&&(bounds.top<view.top||bounds.bottom>view.bottom))revealPlaceCard(card);
+  schedule();
+ },true);
+ const observer=new ResizeObserver(schedule);
+ for(const node of [header,tools,brand,...dockNodes(),$('recordList'),$('unlocatedList'),sidecar.querySelector('.popout-head')])observer.observe(node);
+ window.addEventListener('resize',schedule);
+ window.visualViewport?.addEventListener('resize',schedule);
+ window.visualViewport?.addEventListener('scroll',schedule);
+ return{layout,remember};
+}
+placeLayout=setupPlaceLayout();

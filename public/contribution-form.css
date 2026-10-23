@@ -100,3 +100,35 @@
 .place-record-content figcaption, .place-record-content dt { color:var(--muted); font-size:12px; }
 .place-record-content dd { margin:0 0 8px; }
 .place-description { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; }
+
+/* A compact card keeps its disclosure and actions together at every viewport. */
+#casePanel { padding:8px; scroll-padding-block:8px; overflow-anchor:none; }
+#casePanel .place-card { scroll-margin-block:8px; }
+#casePanel .place-select { padding:10px 12px 3px; }
+#casePanel .place-facts { padding:0 12px 0 29px; }
+#casePanel .place-description { margin:0 0 4px; }
+#casePanel .place-coordinates, #casePanel .place-coordinate-note { margin-top:4px; }
+#casePanel .place-links { margin-top:4px; gap:0 12px; }
+.place-actions { display:flex; flex-wrap:wrap; align-items:start; gap:4px 8px; padding:0 12px 8px; }
+.place-actions .place-record { margin:0; min-width:0; }
+.place-actions .place-record > summary { min-width:72px; min-height:44px; padding:11px 4px; }
+.place-actions .place-record[open] { flex-basis:100%; }
+.place-actions .place-record-content { padding:0 4px 8px; }
+.place-actions .place-record-content > h3:first-child { margin-top:4px; }
+#researchSidecar .recordlist .place-actions :is(.place-contribute,.place-edit) { margin:0; min-height:44px; padding:8px 11px; }
+body.places-open #researchSidecar { top:var(--places-top,202px); bottom:auto; height:var(--places-height,calc(100dvh - 326px)); max-height:var(--places-height,calc(100dvh - 326px)); }
+body.places-open #researchSidecar .popout-head { flex-wrap:wrap; }
+body.places-open #researchSidecar .popout-head h2 { margin-right:auto; }
+body.places-open #researchSidecar .return-to-edits { margin-left:0; }
+@media(max-height:640px) {
+  body.places-open .masthead { flex-direction:row; }
+  body.places-open .masthead .header-tools { position:relative; margin-left:auto; flex:0 1 440px; flex-direction:row; flex-wrap:wrap; gap:2px; }
+  body.places-open .masthead .header-tools > button { flex:1 1 52px; width:auto; min-width:44px; padding-inline:6px; }
+  body.places-open .masthead .header-tools .zoom-tools { flex:0 0 90px; }
+  body.places-open .masthead .brand { position:absolute; visibility:hidden; }
+}
+@media(min-width:600px) and (max-height:640px) {
+  body.places-open .masthead .header-tools { margin-left:0; flex:0 0 min(180px,calc(100vw - 488px)); flex-direction:column; }
+  body.places-open .masthead .header-tools > button { flex:0 0 auto; }
+  body.places-open .masthead .header-tools .zoom-tools { flex:0 0 auto; }
+}
