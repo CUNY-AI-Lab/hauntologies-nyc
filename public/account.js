@@ -25,6 +25,7 @@
     byId('accountEventLink').hidden = !!saved;
   }
   function button(label, action) { const result = node('button', label); result.type = 'button'; result.className = 'outline'; result.addEventListener('click', action); actions.append(result); return result; }
+  function listMessage(text) { const row = node('li', text); row.className = 'account-list-message'; list.replaceChildren(row); }
   function field(form, label, name, type, autocomplete) {
     const wrapper = node('label', label), input = node('input'); input.id = 'account-' + name; input.name = name; input.type = type; input.autocomplete = autocomplete; input.required = true;
     if (type === 'password') { input.minLength = 12; input.maxLength = 128; } else input.maxLength = 254;
@@ -68,7 +69,7 @@
     else button('Back to sign in', () => { challenge = null; renderForm('sign-in'); });
   }
   async function showAccount(version) {
-    byId('accountTitle').textContent = 'Account'; status.textContent = session.email; formHost.replaceChildren(); actions.replaceChildren(); list.replaceChildren();
+    byId('accountTitle').textContent = 'Account'; status.textContent = session.email; formHost.replaceChildren(); actions.replaceChildren(); listMessage('Loading…');
     button('Refresh', reconcile); button('Sign out', async () => {
       if (busy) return; busy = true;
       try { await api('/api/auth/sign-out', {}); identity(null); window.dispatchEvent(new CustomEvent('contributions-session-ended')); renderForm('sign-in', 'Signed out.'); }
@@ -78,14 +79,15 @@
     try {
       const data = await api('/api/contributions/dashboard');
       if (generation !== version || session?.actor_id !== actor || !dialog.open) return;
+      list.replaceChildren();
       for (const item of data.submissions || []) {
         if (item.is_own !== true || typeof item.id !== 'string') continue;
         const row = node('li'), link = node('a', item.title || item.id); link.href = '#submissionDetail';
         link.addEventListener('click', event => { event.preventDefault(); dialog.close(); window.dispatchEvent(new CustomEvent('contributions-review-requested', { detail: { submissionId: item.id } })); });
         row.append(link, node('p', labels[item.status] || 'Saved')); list.append(row);
       }
-      if (!list.children.length) list.append(node('li', 'Your contributions will appear here.'));
-    } catch (error) { if (generation === version) status.textContent = error.message; }
+      if (!list.children.length) listMessage('0 edits');
+    } catch (error) { if (generation === version) listMessage(error.message); }
   }
   async function reconcile() {
     const version = ++generation;

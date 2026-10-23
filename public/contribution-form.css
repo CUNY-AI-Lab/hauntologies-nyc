@@ -47,5 +47,15 @@
 .account-form { display: grid; gap: 16px; margin-block: 16px; }
 .account-form label { display: grid; gap: 6px; }
 .account-form input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 10px 12px; font: inherit; color: inherit; background: var(--bg, #131512); border: 1px solid var(--line, #57594f); border-radius: 6px; }
-#accountActions { gap: 10px; flex-wrap: wrap; }
-#accountActions button { min-height: 44px; white-space: normal; }
+#accountDialog .registration-content { display: grid; gap: 12px; }
+#accountStatus { margin: 0; overflow-wrap: anywhere; }
+#accountStatus:empty, #accountFormHost:empty, #accountActions:empty { display: none; }
+#accountActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#accountActions button { min-height: 44px; padding: 10px 12px; line-height: 22px; white-space: normal; }
+#accountRegistrationSection { margin: 0; }
+#accountRegistrationSection details { margin: 0 0 16px; padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+#accountRegistrationSection summary { min-height: 44px; padding: 11px 0; font-size: 13px; line-height: 22px; cursor: pointer; list-style-position: inside; }
+#accountRegistrationSection h3 { margin: 0 0 8px; font-size: 14px; }
+#accountRegistration { margin: 8px 0; overflow-wrap: anywhere; }
+#accountContributions { margin: 0; }
+#accountContributions > li.account-list-message { padding: 0; border: 0; color: var(--muted); }
