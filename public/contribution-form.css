@@ -136,5 +136,6 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .registration-admission { display:grid; gap:6px; min-width:0; }
 .registration-admission[hidden] { display:none; }
 .registration-admission label { display:grid; gap:6px; }
+.registration-admission label[hidden] { display:none; }
 .registration-admission input { margin-bottom:0; }
 .registration-admission-notice { margin:0; font-size:13px; line-height:1.45; color:inherit; }

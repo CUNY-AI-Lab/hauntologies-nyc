@@ -35,7 +35,7 @@
   function lock(){submit.disabled=busy;name.readOnly=email.readOnly=busy||!!request;admission?.lock(busy||!!request);form.setAttribute('aria-busy',String(busy));}
   function showError(value){message(error,value);if(!dialog||dialog.open)error.focus();}
   const errors={
-    registration_restricted:'CUNY students, faculty and staff only. Guests need an access code.',
+    registration_restricted:'Please use your CUNY email address. Guests can enter an access code below.',
     invalid_name:'Enter a name of 120 characters or fewer',
     invalid_email:'Enter a valid email address',
     rate_limited:'Too many attempts. Please try again later',

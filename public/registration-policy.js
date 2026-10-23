@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const notice = 'CUNY students, faculty and staff only. Guests need an access code.';
+  const notice = 'Please use your CUNY email address. Guests can enter an access code below.';
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 5000);
   const policy = fetch('/api/registration-policy', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
     .then(async response => { if (!response.ok) throw new Error('policy_unavailable'); return (await response.json()).restricted !== false; })
@@ -23,13 +23,23 @@
     input.autocomplete = 'off'; input.maxLength = 256; input.disabled = true;
     label.htmlFor = input.id; label.textContent = 'Access code'; label.append(input);
     hint.id = input.id + '-notice'; hint.className = 'registration-admission-notice'; hint.textContent = notice;
-    input.setAttribute('aria-describedby', hint.id); group.append(label, hint);
+    group.append(hint, label);
     if (!email) { const optional = document.createElement('p'); optional.className = 'registration-admission-notice'; optional.textContent = 'Leave blank for a CUNY email.'; group.append(optional); }
     if (anchor) anchor.after(group); else form.prepend(group);
     let restricted = false;
+    function describe(field, enabled) {
+      if (!field) return;
+      const current = field.getAttribute('aria-describedby');
+      const ids = new Set((current || '').split(/\s+/).filter(Boolean));
+      if (enabled) ids.add(hint.id); else ids.delete(hint.id);
+      const value = [...ids].join(' ');
+      if (value && value !== current) field.setAttribute('aria-describedby', value);
+      else if (!value && current !== null) field.removeAttribute('aria-describedby');
+    }
     function sync() {
       const shown = restricted && (!email || !!email.value.trim() && !isCunyEmail(email.value));
-      group.hidden = !shown; input.disabled = !shown; input.required = shown && !!email;
+      group.hidden = !restricted; label.hidden = !shown; input.disabled = !shown; input.required = shown && !!email;
+      describe(email, restricted); describe(input, shown);
       if (!shown) input.value = '';
     }
     email?.addEventListener('input', sync);
