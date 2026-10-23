@@ -10,6 +10,7 @@ import { CHECKS } from '../server/workflow-core.mjs';
 // Synthetic actors and an isolated local SQLite database; no Access grants.
 const actor = n => 'access_' + n.toString(16).padStart(64, '0');
 const owner = actor(1), reviewer = actor(2), stranger = actor(3);
+const mapActor = n => 'map_00000000-0000-4000-8000-' + n.toString(16).padStart(12, '0');
 const empty = { reviewers: [], publishers: [], stewards: [] };
 
 test('absent configuration and an explicit empty list grant no roles', () => {
@@ -31,6 +32,17 @@ test('only JSON arrays of canonical verified actor IDs are accepted', () => {
     JSON.stringify([owner + '\r']), JSON.stringify([owner + '\u2028']), JSON.stringify([owner + '\u2029']),
     JSON.stringify([' ' + owner]), JSON.stringify([owner + ' '])];
   for (const raw of invalid) assert.deepEqual(reviewAuthorization(raw), empty);
+});
+
+test('map reviewer IDs use exact canonical UUIDv4 identities and preserve whole-list rejection', () => {
+  const id = mapActor(1), ids = [reviewer, id];
+  assert.deepEqual(reviewAuthorization(JSON.stringify(ids)), { ...empty, reviewers: ids });
+  const invalid = [id.toUpperCase(), id.replace('-4000-', '-1000-'), id.replace('-8000-', '-7000-'),
+    id.replace('-4000-', '-0000-'), id.slice(0, -1), id + '0', id + '\n', id + '\r',
+    id + '\u2028', id + '\u2029', ' ' + id, id + ' ', id.replace('map_', 'cuny_'),
+    'map_owner@example.test'];
+  for (const bad of invalid) assert.deepEqual(reviewAuthorization(JSON.stringify([reviewer, bad])), empty);
+  assert.deepEqual(reviewAuthorization(JSON.stringify([id, id])), empty);
 });
 
 test('one invalid ID or duplicate denies the entire list without partial grants', () => {
@@ -135,4 +147,25 @@ test('malformed configuration leaves submission available but all reviewer right
     checkStatus(response, 403);
     assert.equal(response.body.error, 'independent_reviewer_unavailable');
   }
+});
+
+test('configured map reviewer retains private inspection, independent review and self-review boundaries', async t => {
+  const mapOwner = mapActor(1), mapReviewer = mapActor(2), mapStranger = mapActor(3);
+  const service = harness(t, JSON.stringify([mapReviewer]));
+  const submission = await submit(service, mapOwner);
+  checkStatus(await call(service, 'submission?id=' + submission.id, undefined, mapStranger), 404);
+  checkStatus(await call(service, 'submission?id=' + submission.id, undefined, mapReviewer), 200);
+  const approved = await call(service, 'review', reviewBody(submission), mapReviewer);
+  checkStatus(approved, 200);
+  assert.equal(approved.body.submission.status, 'approved');
+  const apply = await call(service, 'apply', { idempotency_key: crypto.randomUUID(), submission_id: submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, mapReviewer);
+  checkStatus(apply, 403);
+  assert.equal(apply.body.error, 'publisher_not_authorized');
+  const own = await submit(service, mapReviewer);
+  const self = await call(service, 'review', reviewBody(own), mapReviewer);
+  checkStatus(self, 403);
+  assert.equal(self.body.error, 'self_approval_forbidden');
+  const unchanged = await call(service, 'submission?id=' + own.id, undefined, mapReviewer);
+  assert.equal(unchanged.body.submission.status, 'submitted');
+  assert.equal(unchanged.body.submission.approval, null);
 });

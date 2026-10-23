@@ -38,6 +38,8 @@ Verified accounts can submit, revise, read and withhold their own contributions.
 
 New accounts receive no reviewer, publisher or attendee-dashboard grant. Those roles require a separate explicit selection of a verified immutable account ID; the first registrant gains no special role. Historical contributions and event RSVPs are not linked through an email match. Existing event rows remain intact.
 
+An explicitly selected reviewer can be configured through `CONTRIBUTIONS_REVIEWER_IDS`, a JSON array of exact verified actor IDs. Map accounts use `map_` followed by their canonical lowercase UUIDv4; legacy verified Access IDs remain supported. Before assigning a map reviewer, confirm its verified account, password credential and signed-in actor ID. This grants private review and triage only. Self-approval stays prohibited, and publication and attendee access retain their separate controls.
+
 ## Production release
 
 Target Worker: `hauntologies-nyc`, Cloudflare account `452c33847cf5cb1e46f391fca32fd1b5`. Existing D1 database: `hauntologies-nyc` / `df7f1e92-e339-4e25-ac30-989dd68d8dfc`. Public origin: `https://hauntologies-nyc.ailab-452.workers.dev`.

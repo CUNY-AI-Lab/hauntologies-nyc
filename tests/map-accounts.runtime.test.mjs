@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {harness,password,replacement} from './fixtures/map-accounts-harness.mjs';
 import {MAP_ORIGIN} from '../deployment/map-accounts.mjs';
+import {CHECKS} from '../server/workflow-core.mjs';
 
 test('email proof, password sign-in, one-hour cookie, own contribution and sign-out in Workers/D1', async t=>{
   const h=await harness(t), email='first@example.test';
@@ -52,6 +53,77 @@ test('reset is purpose-bound, one-use, revokes prior sessions and rejects prior 
   assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,401);
   assert.equal((await h.call('/api/auth/sign-in',{email,password:replacement})).status,200);
   const unknown=await h.call('/api/auth/request-reset',{email:'missing@example.test'});assert.deepEqual(unknown.body,{status:'check_email'});
+});
+
+test('configured map reviewer independently reviews through account sessions while ownership and publication limits hold', async t => {
+  const h = await harness(t);
+  const owner = await h.register('proposal-owner@example.test');
+  const reviewer = await h.register('proposal-reviewer@example.test');
+  const stranger = await h.register('proposal-stranger@example.test');
+  const session = await h.call('/api/auth/session', undefined, reviewer);
+  assert.equal(session.status, 200);
+  assert.equal(session.body.email, 'proposal-reviewer@example.test');
+  const reviewerId = session.body.actor_id;
+  assert.match(reviewerId, /^map_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+
+  const submit = async cookie => {
+    const raw = {schema_version:'1.0',type:'open_proposal',task_ids:[],title:'Synthetic reviewer proposal',summary:'Local reviewer acceptance only.',public_credit:{consent:false,label:''},sources:[],attachments:[],targets:[],payload:{explanation:'Local reviewer acceptance only.'}};
+    const result = await h.call('/api/contributions/submit', {idempotency_key:crypto.randomUUID(),submission_json:JSON.stringify(raw)}, cookie);
+    assert.equal(result.status, 201, JSON.stringify(result.body));
+    return result.body.submission;
+  };
+  const submission = await submit(owner), ownSubmission = await submit(reviewer);
+  const detail = '/api/contributions/submission?id=' + submission.id;
+  const reviewBody = value => ({idempotency_key:crypto.randomUUID(),submission_id:value.id,expected_revision:value.revision,payload_hash:value.payload_hash,diff_hash:value.diff_hash,checks:Object.fromEntries(CHECKS.map(key => [key,'pass'])),rationale:'Independent synthetic account review.'});
+
+  assert.equal((await h.call(detail, undefined, reviewer)).status, 404);
+  assert.equal((await h.call('/api/contributions/dashboard', undefined, reviewer)).body.capabilities.can_review, false);
+  await h.configureReviewers([reviewerId]);
+  assert.equal((await h.call('/api/auth/session', undefined, reviewer)).body.actor_id, reviewerId);
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_user').first()).n, 3);
+  const dashboard = await h.call('/api/contributions/dashboard', undefined, reviewer);
+  assert.equal(dashboard.status, 200);
+  assert.equal(dashboard.body.submissions.length, 2);
+  assert.equal(dashboard.body.capabilities.can_review, true);
+  assert.equal(dashboard.body.capabilities.can_triage, true);
+  assert.equal(dashboard.body.capabilities.can_apply, false);
+  assert.equal(dashboard.body.capabilities.can_rollback, false);
+  const inspected = await h.call(detail, undefined, reviewer);
+  assert.equal(inspected.status, 200);
+  assert.equal(inspected.body.submission.is_own, false);
+
+  const forged = {'oai-authenticated-user-id':reviewerId,'x-authenticated-user-id':reviewerId};
+  assert.equal((await h.call(detail, undefined, stranger, forged)).status, 404);
+  assert.equal((await h.call(detail, undefined, '', forged)).status, 401);
+  assert.equal((await h.call('/api/contributions/review', reviewBody(submission), '', forged)).status, 401);
+  const unauthorized = await h.call('/api/contributions/review', reviewBody(submission), stranger, forged);
+  assert.equal(unauthorized.status, 403);
+  assert.equal(unauthorized.body.error, 'reviewer_not_authorized');
+
+  const approved = await h.call('/api/contributions/review', reviewBody(submission), reviewer);
+  assert.equal(approved.status, 200, JSON.stringify(approved.body));
+  assert.equal(approved.body.submission.status, 'approved');
+  const storedApproval = await h.db.prepare('SELECT reviewer_id FROM workflow_approvals WHERE submission_id=?').bind(submission.id).first();
+  assert.equal(storedApproval.reviewer_id, reviewerId);
+  assert.equal((await h.call(detail, undefined, owner)).body.submission.status, 'approved');
+  assert.equal((await h.call(detail, undefined, stranger)).status, 404);
+
+  const selfReview = await h.call('/api/contributions/review', reviewBody(ownSubmission), reviewer);
+  assert.equal(selfReview.status, 403);
+  assert.equal(selfReview.body.error, 'self_approval_forbidden');
+  const own = await h.call('/api/contributions/submission?id=' + ownSubmission.id, undefined, reviewer);
+  assert.equal(own.body.submission.status, 'submitted');
+  assert.equal(own.body.submission.approval, null);
+  const apply = await h.call('/api/contributions/apply', {idempotency_key:crypto.randomUUID(),submission_id:submission.id,expected_revision:submission.revision,approval_hash:approved.body.submission.approval.approval_hash}, reviewer);
+  assert.equal(apply.status, 403);
+  assert.equal(apply.body.error, 'publisher_not_authorized');
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM workflow_jobs').first()).n, 0);
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM approved_records').first()).n, 0);
+
+  await h.configureReviewers([]);
+  assert.equal((await h.call('/api/auth/session', undefined, reviewer)).body.actor_id, reviewerId);
+  assert.equal((await h.call(detail, undefined, reviewer)).status, 404);
+  assert.equal((await h.call('/api/contributions/dashboard', undefined, reviewer)).body.capabilities.can_review, false);
 });
 
 test('strict origin/routes, durable account rate limits and expired challenges',async t=>{

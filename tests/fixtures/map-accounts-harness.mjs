@@ -16,22 +16,24 @@ export async function harness(t, {mailFailure = false} = {}) {
       import { createDemoWorker } from './deployment/demo-gate.mjs';
       import { createWorkflowService } from './server/workflow-service.mjs';
       import { createWorkflowStore } from './server/workflow-store.mjs';
+      import { reviewAuthorization } from './server/review-authorization.mjs';
       export default { async fetch(request, env, ctx) {
         env.ACCOUNT_MAIL = { async send(input) {
           if (env.MAIL_FAILURE === 'true') return {status:'delivery_unknown'};
           await env.DB.prepare('INSERT INTO hny_test_mail (email,kind,token) VALUES (?,?,?)').bind(input.email,input.kind,input.token).run();
           return { status:'accepted' };
         }};
-        const handler = {fetch: req => createWorkflowService({store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}}).handle(req)};
+        const handler = {fetch: req => createWorkflowService({store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}, authorization:reviewAuthorization(env.CONTRIBUTIONS_REVIEWER_IDS)}).handle(req)};
         return createDemoWorker(handler).fetch(request,env,ctx);
       }};
     `, resolveDir: root }, bundle: true, write: false, format: 'esm', platform: 'node', conditions: ['workerd', 'node'], target: 'es2022' });
     bundle = compiled.outputFiles[0].text;
   }
   const directory = await mkdtemp(path.join(tmpdir(), 'hny-auth-test-'));
-  const mf = new Miniflare({ modules: [{type:'ESModule',path:'worker.mjs',contents:bundle}], compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], d1Persist: directory, bindings: { MAP_ACCOUNTS_ENABLED:'true', MAP_AUTH_SECRET:'local-fixture-secret-only-12345678901234567890', MAIL_FAILURE: String(mailFailure) } });
+  const baseOptions = { modules: [{type:'ESModule',path:'worker.mjs',contents:bundle}], compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], d1Persist: directory, bindings: { MAP_ACCOUNTS_ENABLED:'true', MAP_AUTH_SECRET:'local-fixture-secret-only-12345678901234567890', MAIL_FAILURE: String(mailFailure) } };
+  const mf = new Miniflare(baseOptions);
   t.after(async () => { await mf.dispose(); await rm(directory,{recursive:true,force:true}); });
-  const db = await mf.getD1Database('DB');
+  let db = await mf.getD1Database('DB');
   for (const file of (await readdir(path.join(root,'drizzle'))).filter(name=>name.endsWith('.sql')).sort()) {
     const sql = await readFile(path.join(root,'drizzle',file),'utf8');
     // D1 exec accepts one statement per line, including trigger bodies.
@@ -55,7 +57,13 @@ export async function harness(t, {mailFailure = false} = {}) {
     const result=await call('/api/auth/verify',{token:await token(email),password});
     assert.equal(result.status,200,JSON.stringify(result.body));assert.ok(result.cookie);return result.cookie;
   };
-  return {mf,db,call,token,register};
+  // Reconfigure the local Worker after observing a registered actor, preserving D1
+  // and the remaining bindings as a production configuration update would.
+  const configureReviewers = async ids => {
+    await mf.setOptions({...baseOptions, bindings:{...baseOptions.bindings, CONTRIBUTIONS_REVIEWER_IDS:JSON.stringify(ids)}});
+    db = await mf.getD1Database('DB');
+  };
+  return {mf,get db(){return db;},call,token,register,configureReviewers};
 }
 function splitSql(sql) {
   const lines=sql.split('\n'); const statements=[]; let current=''; let trigger=false;
