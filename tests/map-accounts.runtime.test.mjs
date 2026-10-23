@@ -12,7 +12,7 @@ test('email proof, password sign-in, one-hour cookie, own contribution and sign-
   const token=await h.token(email);assert.ok(token);
   const stored=await h.db.prepare('SELECT identifier,value FROM hny_auth_verification').all();assert.ok(!JSON.stringify(stored.results).includes(token));
   const verified=await h.call('/api/auth/verify',{token,password});assert.equal(verified.status,200,JSON.stringify(verified.body));
-  const cookies=verified.headers.getSetCookie().join(';');assert.match(cookies,/HttpOnly/i);assert.match(cookies,/Secure/i);assert.match(cookies,/SameSite=Lax/i);assert.match(cookies,/Max-Age=3600/i);assert.doesNotMatch(cookies,/Domain=/i);
+  const cookies=verified.headers.getSetCookie().join(';');assert.match(cookies,/^__Host-hauntologies-session=/);assert.match(cookies,/HttpOnly/i);assert.match(cookies,/; Secure(?:;|$)/i);assert.match(cookies,/SameSite=Lax/i);assert.match(cookies,/Max-Age=3600/i);assert.doesNotMatch(cookies,/Domain=/i);
   assert.equal((await h.call('/api/auth/verify',{token,password})).status,400);
   const signed=await h.call('/api/auth/sign-in',{email,password});assert.equal(signed.status,200);assert.deepEqual(signed.body,{status:'signed_in'});
   const session=await h.call('/api/auth/session',undefined,signed.cookie);assert.match(session.body.actor_id,/^map_/);assert.equal(session.body.email,email);
@@ -47,6 +47,7 @@ test('reset is purpose-bound, one-use, revokes prior sessions and rejects prior 
   assert.equal((await h.call('/api/auth/verify',{token,password:replacement})).status,400);
   const responses=await Promise.all([h.call('/api/auth/reset',{token,password:replacement}),h.call('/api/auth/reset',{token,password:replacement})]);
   assert.deepEqual(responses.map(r=>r.status).sort(),[200,400]);
+  assert.equal(responses.find(r=>r.status===200).cookie,'__Host-hauntologies-session=');
   assert.equal((await h.call('/api/auth/session',undefined,cookie)).status,401);
   assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,401);
   assert.equal((await h.call('/api/auth/sign-in',{email,password:replacement})).status,200);

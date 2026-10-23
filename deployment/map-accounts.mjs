@@ -40,7 +40,10 @@ export function accountOptions(env) {
     // The public wrapper below owns durable rate limits, including server API calls.
     rateLimit: { enabled: false },
     advanced: {
-      useSecureCookies: true, database: { generateId: 'uuid' },
+      // Disable Better Auth's automatic __Secure- name prefix so the explicit
+      // __Host- name below keeps its browser-enforced host-only semantics.
+      // Secure remains mandatory for every cookie through these attributes.
+      useSecureCookies: false, defaultCookieAttributes: { secure: true }, database: { generateId: 'uuid' },
       cookies: { session_token: { name: COOKIE, attributes: { path: '/', secure: true, httpOnly: true, sameSite: 'lax', maxAge: 3600 } } },
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
     },
