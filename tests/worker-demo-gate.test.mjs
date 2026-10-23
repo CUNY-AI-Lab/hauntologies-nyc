@@ -36,3 +36,16 @@ test('private image downloads retain cache protection and verified identity at t
  assert.equal((await blocked.worker.fetch(new Request('https://example.test/api/contributions/attachment?id=synthetic',{headers:{'oai-authenticated-user-id':'forged'}}),{},{})).status,401);
  assert.equal(blocked.seen.length,0);
 });
+
+
+test('prepared registration policy and handler resolve the shipped eligibility module', async () => {
+ const {readFile}=await import('node:fs/promises');
+ const gate=await readFile(new URL('../dist/server/demo-gate.mjs',import.meta.url),'utf8');
+ const registration=await readFile(new URL('../dist/server/registration.mjs',import.meta.url),'utf8');
+ assert.ok(gate.includes("from './registration-eligibility.mjs'"));
+ assert.ok(registration.includes("from './registration-eligibility.mjs'"));
+ assert.equal(await readFile(new URL('../dist/server/registration-eligibility.mjs',import.meta.url),'utf8'),await readFile(new URL('../server/registration-eligibility.mjs',import.meta.url),'utf8'));
+ const config=JSON.parse(await readFile(new URL('../dist/server/wrangler.live.json',import.meta.url),'utf8'));
+ assert.equal(config.vars.REGISTRATION_ELIGIBILITY_ENABLED,'true');
+ assert.equal(config.vars.REGISTRATION_GUEST_CODE,undefined);
+});

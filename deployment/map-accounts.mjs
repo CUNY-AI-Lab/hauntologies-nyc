@@ -1,3 +1,4 @@
+import { normalizeRegistrationEmail, registrationAllowed, registrationRestricted } from '../server/registration-eligibility.mjs';
 import { betterAuth } from 'better-auth';
 import { magicLink } from 'better-auth/plugins/magic-link';
 import { getIP } from '@better-auth/core/utils/ip';
@@ -104,8 +105,8 @@ async function bodyOf(request, allowed) {
 }
 
 const fields = {
-  register: ['email'], 'sign-in': ['email', 'password'], 'request-reset': ['email'],
-  verify: ['token', 'password'], 'set-password': ['password'], reset: ['token', 'password'], 'sign-out': [],
+  register: ['email', 'access_code'], 'sign-in': ['email', 'password'], 'request-reset': ['email'],
+  verify: ['token', 'password', 'access_code'], 'set-password': ['password', 'access_code'], reset: ['token', 'password', 'access_code'], 'sign-out': [],
 };
 const validPassword = value => typeof value === 'string' && value.length >= 12 && value.length <= 128;
 function cookieHeaders(response) { return response.headers.getSetCookie(); }
@@ -134,13 +135,18 @@ export async function handleMapAccount(request, env) {
     // Campus participants may share one network address. Recipient and global
     // limits still bound email volume independently of this shared-IP allowance.
     await rate(env, 'ip:' + ip, 120, 900);
-    if (['register', 'request-reset'].includes(action)) await rate(env, 'mail-global', 60, 3600);
     if (fields[action].includes('email')) {
+      if (action === 'register') {
+        body.email = normalizeRegistrationEmail(body.email, true);
+        if (!body.email) throw failure('invalid_email', 400);
+      }
       if (typeof body.email !== 'string' || body.email.length > 254 || !emailPattern.test(body.email)) throw failure('invalid_email', 400);
       body.email = body.email.toLowerCase();
       await rate(env, 'account:' + body.email, 12, 900);
     }
+    if (action === 'register' && !await registrationAllowed(body.email, body.access_code, env)) throw failure('registration_restricted', 403);
     if (['register', 'request-reset'].includes(action)) {
+      await rate(env, 'mail-global', 60, 3600);
       await rate(env, 'mail:' + body.email, 3, 3600);
       await rate(env, 'mail-ip:' + ip, 60, 3600);
     }
@@ -157,6 +163,15 @@ export async function handleMapAccount(request, env) {
       return privateJson({ status: 'check_email' });
     }
     if (action === 'reset') {
+      if (registrationRestricted(env)) {
+        const pending = await (await auth.$context).internalAdapter.findVerificationValue('reset-password:' + body.token);
+        if (!pending || new Date(pending.expiresAt).getTime() <= Date.now()) throw failure('invalid_token', 400);
+        const user = await env.DB.prepare('SELECT id, email FROM hny_auth_user WHERE id = ? LIMIT 1').bind(pending.value).first();
+        if (!user) throw failure('invalid_token', 400);
+        // A reset can create a first credential. Preserve ordinary password resets,
+        // while applying admission to accounts whose setup is still unfinished.
+        if (!await credential(env, user.id) && !await registrationAllowed(user.email, body.access_code, env)) throw failure('registration_restricted', 403);
+      }
       await auth.api.resetPassword({ headers, body: { token: body.token, newPassword: body.password } });
       return privateJson({ status: 'password_reset' }, 200, [`${COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`]);
     }
@@ -172,6 +187,16 @@ export async function handleMapAccount(request, env) {
     }
     let verifiedRequest = request, cookies = [];
     if (action === 'verify') {
+      if (registrationRestricted(env)) {
+        const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body.token)));
+        const key = btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+        // Better Auth 1.7.12 owns identifier hashing and atomic token consumption.
+        // Read its purpose-bound record before calling verification or creating a user.
+        const pending = await (await auth.$context).internalAdapter.findVerificationValue('magic-link:' + key);
+        let value; try { value = JSON.parse(pending?.value); } catch {}
+        if (!pending || new Date(pending.expiresAt).getTime() <= Date.now() || value?.type !== 'magic-link') throw failure('invalid_token', 400);
+        if (!await registrationAllowed(value.email, body.access_code, env)) throw failure('registration_restricted', 403);
+      }
       const response = await auth.api.magicLinkVerify({ headers, query: { token: body.token }, asResponse: true });
       if (!response.ok) throw failure('invalid_token', 400);
       cookies = cookieHeaders(response); verifiedRequest = sessionCookieRequest(request, response);
@@ -179,6 +204,7 @@ export async function handleMapAccount(request, env) {
     const session = await mapSession(verifiedRequest, env, false);
     if (!session) throw failure('sign_in_required', 401);
     if (!session.password_required) return privateJson({ error: 'password_already_set' }, 409);
+    if (!await registrationAllowed(session.email, body.access_code, env)) throw failure('registration_restricted', 403);
     await auth.api.setPassword({ headers: verifiedRequest.headers, body: { newPassword: body.password } });
     return privateJson({ status: 'signed_in' }, 200, cookies);
   } catch (error) {

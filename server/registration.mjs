@@ -1,3 +1,4 @@
+import { normalizeRegistrationEmail, registrationAllowed, registrationAttemptAllowed, registrationRestricted } from './registration-eligibility.mjs';
 // Public event intake only. No attendee reads, identity claims, email sends or map writes.
 export const REGISTRATION_EVENT = Object.freeze({
   id: 'hauntologies-2026-10-30', date: '2026-10-30', start_time: '15:00', end_time: '18:30',
@@ -10,16 +11,6 @@ function reply(status, value, headers = {}) {
 }
 const reject = (status, error, headers) => reply(status, { ok: false, error }, headers);
 const sha256 = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
-function validEmail(value) {
-  if (value.length > 254) return false;
-  const parts = value.split('@');
-  if (parts.length !== 2) return false;
-  const [local, domain] = parts, labels = domain.split('.');
-  return local.length > 0 && local.length <= 64 && /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(local)
-    && !local.startsWith('.') && !local.endsWith('.') && !local.includes('..') && labels.length >= 2
-    && labels.every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))
-    && /[a-z]/i.test(labels.at(-1));
-}
 async function readBody(request) {
   const length = request.headers.get('content-length');
   if (length !== null && (!/^\d+$/.test(length) || Number(length) > REGISTRATION_LIMITS.body_bytes)) throw 'body_too_large';
@@ -57,13 +48,12 @@ export async function handleRegistration(request, env) {
   let body;
   try { body = await readBody(request); }
   catch (error) { return reject(error === 'body_too_large' ? 413 : 400, error === 'body_too_large' ? error : 'invalid_json'); }
-  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(k => !['name', 'email', 'website'].includes(k))
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(k => !['name', 'email', 'website', 'access_code'].includes(k))
       || (Object.hasOwn(body, 'website') && (typeof body.website !== 'string' || body.website !== ''))) return reject(400, 'invalid_request');
   if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 120 || /[\u0000-\u001f\u007f]/u.test(body.name)) return reject(400, 'invalid_name');
-  if (typeof body.email !== 'string' || !validEmail(body.email.trim())) return reject(400, 'invalid_email');
-  const name = body.name.trim(), email = body.email.trim();
-  // Names and email local parts retain their spelling. Only domain case is normalized.
-  const at = email.lastIndexOf('@'), canonicalEmail = email.slice(0, at) + email.slice(at).toLowerCase();
+  const canonicalEmail = normalizeRegistrationEmail(body.email);
+  if (!canonicalEmail) return reject(400, 'invalid_email');
+  const name = body.name.trim();
   if (!env?.DB?.prepare || !env.DB.batch) return reject(503, 'registration_unavailable');
   try {
     const db = env.DB, event = REGISTRATION_EVENT.id;
@@ -71,6 +61,10 @@ export async function handleRegistration(request, env) {
     const find = () => db.prepare('SELECT id, payload_hash FROM event_registrations WHERE event_id = ? AND idempotency_hash = ?').bind(event, keyHash).first();
     const existing = await find();
     if (existing) return receipt(existing, payloadHash, 200);
+    if (registrationRestricted(env)) {
+      if (!await registrationAttemptAllowed(request, env)) return reject(429, 'rate_limited', { 'Retry-After': '900' });
+      if (!await registrationAllowed(canonicalEmail, body.access_code, env)) return reject(403, 'registration_restricted');
+    }
     const now = Date.now(), seconds = Math.floor(now / 1000), windowStart = Math.floor(seconds / REGISTRATION_LIMITS.window_seconds) * REGISTRATION_LIMITS.window_seconds;
     // Cloudflare overwrites this header on its public edge. It is a rate hint, never an identity.
     const ip = request.headers.get('cf-connecting-ip'), client = ip && ip.length <= 64 && /^[0-9a-f:.]+$/i.test(ip) ? ip : 'unknown';

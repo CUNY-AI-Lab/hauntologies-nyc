@@ -10,10 +10,11 @@ export const password = 'Synthetic-local-password-482!';
 export const replacement = 'Synthetic-replacement-password-293!';
 const root = path.resolve(import.meta.dirname, '../..');
 let bundle;
-export async function harness(t, {mailFailure = false} = {}) {
+export async function harness(t, {mailFailure = false, eligibilityEnabled = false, guestCode} = {}) {
   if (!bundle) {
     const compiled = await build({ stdin: { contents: `
       import { createDemoWorker } from './deployment/demo-gate.mjs';
+      import { handleRegistration } from './server/registration.mjs';
       import { createWorkflowService } from './server/workflow-service.mjs';
       import { createWorkflowStore } from './server/workflow-store.mjs';
       import { reviewAuthorization } from './server/review-authorization.mjs';
@@ -24,13 +25,13 @@ export async function harness(t, {mailFailure = false} = {}) {
           return { status:'accepted' };
         }};
         const handler = {fetch: req => createWorkflowService({store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}, authorization:reviewAuthorization(env.CONTRIBUTIONS_REVIEWER_IDS), geography:{boundaries:${await readFile(path.join(root,'public/data/nyc-borough-boundaries.geojson'),'utf8')}}, staticRecords:[{id:'second-avenue-deli',title:'Synthetic existing place',latitude:40.75,longitude:-73.98}]}).handle(req)};
-        return createDemoWorker(handler).fetch(request,env,ctx);
+        return createDemoWorker(handler, handleRegistration).fetch(request,env,ctx);
       }};
     `, resolveDir: root }, bundle: true, write: false, format: 'esm', platform: 'node', conditions: ['workerd', 'node'], target: 'es2022' });
     bundle = compiled.outputFiles[0].text;
   }
   const directory = await mkdtemp(path.join(tmpdir(), 'hny-auth-test-'));
-  const baseOptions = { modules: [{type:'ESModule',path:'worker.mjs',contents:bundle}], compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], d1Persist: directory, bindings: { MAP_ACCOUNTS_ENABLED:'true', MAP_AUTH_SECRET:'local-fixture-secret-only-12345678901234567890', MAIL_FAILURE: String(mailFailure) } };
+  const baseOptions = { modules: [{type:'ESModule',path:'worker.mjs',contents:bundle}], compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], d1Persist: directory, bindings: { MAP_ACCOUNTS_ENABLED:'true', MAP_AUTH_SECRET:'local-fixture-secret-only-12345678901234567890', MAIL_FAILURE: String(mailFailure), REGISTRATION_ELIGIBILITY_ENABLED:String(eligibilityEnabled), ...(guestCode === undefined ? {} : {REGISTRATION_GUEST_CODE:guestCode}) } };
   const mf = new Miniflare(baseOptions);
   t.after(async () => { await mf.dispose(); await rm(directory,{recursive:true,force:true}); });
   let db = await mf.getD1Database('DB');
@@ -52,18 +53,22 @@ export async function harness(t, {mailFailure = false} = {}) {
     return {status:response.status,body:value,headers:response.headers,cookie:response.headers.getSetCookie().map(s=>s.split(';',1)[0]).join('; ')};
   };
   const token = async (email,kind='verify_email') => (await db.prepare('SELECT token FROM hny_test_mail WHERE email=? AND kind=? ORDER BY rowid DESC LIMIT 1').bind(email,kind).first())?.token;
-  const register = async email => {
-    assert.equal((await call('/api/auth/register',{email})).status,200);
-    const result=await call('/api/auth/verify',{token:await token(email),password});
+  const register = async (email, access_code) => {
+    assert.equal((await call('/api/auth/register',{email, ...(access_code ? {access_code} : {})})).status,200);
+    const result=await call('/api/auth/verify',{token:await token(email),password, ...(access_code ? {access_code} : {})});
     assert.equal(result.status,200,JSON.stringify(result.body));assert.ok(result.cookie);return result.cookie;
   };
   // Reconfigure the local Worker after observing a registered actor, preserving D1
   // and the remaining bindings as a production configuration update would.
-  const configureReviewers = async ids => {
-    await mf.setOptions({...baseOptions, bindings:{...baseOptions.bindings, CONTRIBUTIONS_REVIEWER_IDS:JSON.stringify(ids)}});
+  let bindings = {...baseOptions.bindings};
+  const configure = async changes => {
+    bindings = {...bindings, ...changes};
+    await mf.setOptions({...baseOptions, bindings});
     db = await mf.getD1Database('DB');
   };
-  return {mf,get db(){return db;},call,token,register,configureReviewers};
+  const configureReviewers = ids => configure({CONTRIBUTIONS_REVIEWER_IDS:JSON.stringify(ids)});
+  const configureEligibility = (enabled, code) => configure({REGISTRATION_ELIGIBILITY_ENABLED:String(enabled),REGISTRATION_GUEST_CODE:code || ''});
+  return {mf,get db(){return db;},call,token,register,configureReviewers,configureEligibility};
 }
 function splitSql(sql) {
   const lines=sql.split('\n'); const statements=[]; let current=''; let trigger=false;

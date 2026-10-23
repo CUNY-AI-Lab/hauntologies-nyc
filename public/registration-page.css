@@ -28,3 +28,9 @@ button:disabled { cursor: wait; opacity: .7; }
 .map-account-setup { margin-top:28px; padding-top:20px; border-top:1px solid #827563; }
 .map-account-setup h2 { margin:0 0 12px; font-size:20px; font-weight:400; }
 .map-account-setup a { display:block; min-height:44px; padding-block:10px; color:#ebc395; text-underline-offset:3px; }
+
+.registration-admission { display:grid; gap:6px; min-width:0; }
+.registration-admission[hidden] { display:none; }
+.registration-admission label { display:grid; gap:6px; }
+.registration-admission input { margin-bottom:0; }
+.registration-admission-notice { margin:0; font-size:13px; line-height:1.45; color:inherit; }

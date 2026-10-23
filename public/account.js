@@ -10,13 +10,13 @@
   let session = null, mode = 'sign-in', challenge = null, busy = false, opener = null, generation = 0;
   const node = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
   const labels = { draft: 'Draft', submitted: 'Pending review', changes_requested: 'Changes requested', approved: 'Approved', merged: 'Published', withheld: 'Withheld' };
-  const messages = { rate_limited: 'Please wait before trying again.', invalid_credentials: 'Check your email and password, then try again.', invalid_email: 'Enter your email address.', password_length: 'Use a password with 12 to 128 characters.', invalid_token: 'This link has expired or has already been used. Request a new link.', password_already_set: 'Your password is already set. Sign in with it or request a reset.', mail_unavailable: 'Email delivery is temporarily unavailable. Please try again later.', account_unavailable: 'Account service is temporarily unavailable. Please try again.', sign_in_required: 'Sign in to continue.' };
+  const messages = { registration_restricted: 'CUNY students, faculty and staff only. Guests need an access code.', rate_limited: 'Please wait before trying again.', invalid_credentials: 'Check your email and password, then try again.', invalid_email: 'Enter your email address.', password_length: 'Use a password with 12 to 128 characters.', invalid_token: 'This link has expired or has already been used. Request a new link.', password_already_set: 'Your password is already set. Sign in with it or request a reset.', mail_unavailable: 'Email delivery is temporarily unavailable. Please try again later.', account_unavailable: 'Account service is temporarily unavailable. Please try again.', sign_in_required: 'Sign in to continue.' };
   async function api(path, body) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
       const value = await response.json();
-      if (!response.ok) throw Object.assign(new Error(messages[value.error] || 'Please try again.'), { status: response.status });
+      if (!response.ok) throw Object.assign(new Error(messages[value.error] || 'Please try again.'), { status: response.status, code: value.error });
       return value;
     } finally { clearTimeout(timer); }
   }
@@ -36,12 +36,14 @@
     wrapper.htmlFor = input.id; wrapper.append(input); form.append(wrapper); return input;
   }
   function renderForm(nextMode, message = '') {
+    generation++; // A chosen form supersedes any earlier session check.
     mode = nextMode; formHost.replaceChildren(); actions.replaceChildren(); list.replaceChildren(); status.textContent = message;
     byId('accountRegistrationSection').hidden = true;
     const titles = { 'sign-in': 'Sign in', register: 'Register', 'request-reset': 'Reset password', verify: 'Create your password', reset: 'Reset password', 'set-password': 'Create your password' };
     byId('accountTitle').textContent = titles[mode];
     const form = node('form'); form.className = 'account-form';
-    if (['sign-in', 'register', 'request-reset'].includes(mode)) field(form, 'Email', 'email', 'email', 'email');
+    const email = ['sign-in', 'register', 'request-reset'].includes(mode) ? field(form, 'Email', 'email', 'email', 'email') : null;
+    const admission = ['register', 'verify', 'set-password', 'reset'].includes(mode) ? window.HauntologiesAdmission?.attach({ form, email, anchor: email?.parentElement, deferred: mode === 'reset' }) : null;
     if (['sign-in', 'verify', 'reset', 'set-password'].includes(mode)) {
       field(form, 'Password', 'password', 'password', mode === 'sign-in' ? 'current-password' : 'new-password');
       if (mode !== 'sign-in') {
@@ -53,9 +55,11 @@
     const submit = node('button', mode === 'sign-in' ? 'Sign in' : mode === 'register' ? 'Send verification email' : mode === 'request-reset' ? 'Send reset email' : 'Save password'); submit.type = 'submit'; submit.className = 'primary'; form.append(submit); formHost.append(form);
     form.addEventListener('submit', async event => {
       event.preventDefault(); if (busy) return;
+      await admission?.ready;
+      if (busy || !form.isConnected || !form.reportValidity()) return;
       const values = Object.fromEntries(new FormData(form));
       if (values.confirmation !== undefined && values.password !== values.confirmation) { status.textContent = 'Enter the same password in both fields.'; return; }
-      const operation = mode, payload = {};
+      const operation = mode, payload = { ...admission?.payload() };
       if (values.email) payload.email = values.email.trim();
       if (values.password) payload.password = values.password;
       if (['verify', 'reset'].includes(operation)) payload.token = challenge;
@@ -66,7 +70,7 @@
           renderForm('sign-in', operation === 'register' ? 'Check your email for a verification link. If you already have an account, sign in or reset your password.' : 'If this address has an account, a reset link will arrive by email.');
         } else if (operation === 'reset') { challenge = null; identity(null); renderForm('sign-in', 'Password updated. Sign in with your new password.'); }
         else { challenge = null; await reconcile(); window.dispatchEvent(new CustomEvent('contributions-session-started')); }
-      } catch (error) { status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.message; }
+      } catch (error) { if (error.code === 'registration_restricted') admission?.reject(); status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.message; }
       finally { busy = false; submit.disabled = false; }
     });
     if (mode === 'sign-in') { button('Reset password', () => renderForm('request-reset')); button("Don't have an account? Register here.", () => renderForm('register')); }

@@ -1,3 +1,4 @@
+import { registrationRestricted } from '../server/registration-eligibility.mjs';
 // Public map with account-derived identity for private contribution routes.
 // Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
@@ -16,6 +17,10 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       } catch { return new Response('Invalid path',{status:400}); }
       path=path.replace(/\/+/g,'/').toLowerCase();
       const mapEnabled = mapAccountsReady(env);
+      if (rawPath === '/api/registration-policy' && ['GET','HEAD'].includes(request.method)) {
+        const response = privateJson({ restricted: registrationRestricted(env) });
+        return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
+      }
       if (['/api/published-edits','/api/published-records'].includes(rawPath) && ['GET','HEAD'].includes(request.method) ) {
         try {
           const query=new URL(request.url).searchParams;if([...query.keys()].some(key=>key!=='after')||query.getAll('after').length>1||rawPath==='/api/published-edits'&&query.size||query.has('after')&&!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(query.get('after')))return privateJson({error:'invalid_page'},400);

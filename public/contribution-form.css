@@ -132,3 +132,9 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
   body.places-open .masthead .header-tools > button { flex:0 0 auto; }
   body.places-open .masthead .header-tools .zoom-tools { flex:0 0 auto; }
 }
+
+.registration-admission { display:grid; gap:6px; min-width:0; }
+.registration-admission[hidden] { display:none; }
+.registration-admission label { display:grid; gap:6px; }
+.registration-admission input { margin-bottom:0; }
+.registration-admission-notice { margin:0; font-size:13px; line-height:1.45; color:inherit; }
