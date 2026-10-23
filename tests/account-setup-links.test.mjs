@@ -9,9 +9,12 @@ test('unused verification survives elapsed time and reset cleanup while reset li
   const h = await harness(t), email = 'later@gc.cuny.edu', existing = 'reset@gc.cuny.edu';
   await h.register(existing);
   assert.equal((await h.call('/api/auth/register', { email })).status, 200);
+  assert.equal((await h.db.prepare('SELECT expires_at FROM hny_test_mail WHERE email=?').bind(email).first()).expires_at, null);
   const setup = await h.token(email);
   assert.equal((await h.call('/api/auth/request-reset', { email: existing })).status, 200);
   const reset = await h.token(existing, 'reset_password');
+  const resetExpiry = Date.parse((await h.db.prepare("SELECT expires_at FROM hny_test_mail WHERE email=? AND kind='reset_password'").bind(existing).first()).expires_at);
+  assert.ok(resetExpiry > Date.now() && resetExpiry <= Date.now() + 30 * 60 * 1000);
   // Historical timestamps model an invitation opened long after its old deadline.
   await h.db.prepare('UPDATE hny_auth_verification SET createdAt=?, expiresAt=?').bind(oldDate, oldDate).run();
   const rejected = await h.call('/api/auth/reset', { token: reset, password: replacement });

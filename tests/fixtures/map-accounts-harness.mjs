@@ -21,7 +21,7 @@ export async function harness(t, {mailFailure = false, eligibilityEnabled = fals
       export default { async fetch(request, env, ctx) {
         env.ACCOUNT_MAIL = { async send(input) {
           if (env.MAIL_FAILURE === 'true') return {status:'delivery_unknown'};
-          await env.DB.prepare('INSERT INTO hny_test_mail (email,kind,token) VALUES (?,?,?)').bind(input.email,input.kind,input.token).run();
+          await env.DB.prepare('INSERT INTO hny_test_mail (email,kind,token,expires_at) VALUES (?,?,?,?)').bind(input.email,input.kind,input.token,input.expiresAt).run();
           return { status:'accepted' };
         }};
         const handler = {fetch: req => createWorkflowService({store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}, authorization:reviewAuthorization(env.CONTRIBUTIONS_REVIEWER_IDS), geography:{boundaries:${await readFile(path.join(root,'public/data/nyc-borough-boundaries.geojson'),'utf8')}}, staticRecords:[{id:'second-avenue-deli',title:'Synthetic existing place',latitude:40.75,longitude:-73.98}]}).handle(req)};
@@ -45,7 +45,7 @@ export async function harness(t, {mailFailure = false, eligibilityEnabled = fals
       await db.batch(statements.map(s=>db.prepare(s)));
     }
   }
-  await db.prepare('CREATE TABLE hny_test_mail (email TEXT, kind TEXT, token TEXT)').run();
+  await db.prepare('CREATE TABLE hny_test_mail (email TEXT, kind TEXT, token TEXT, expires_at TEXT)').run();
   let ip = 1;
   const call = async (route, body, cookie='', extras={}) => {
     const response = await mf.dispatchFetch(MAP_ORIGIN+route, {method:body===undefined?'GET':'POST',headers:{origin:MAP_ORIGIN,'content-type':'application/json','cf-connecting-ip':'192.0.2.'+(ip++), ...(cookie?{cookie}:{}), ...extras}, ...(body===undefined?{}:{body:JSON.stringify(body)})});

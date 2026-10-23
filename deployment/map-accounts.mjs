@@ -22,7 +22,7 @@ export function mapAccountsReady(env) {
 
 export function accountOptions(env) {
   async function send(kind, email, token) {
-    const result = await env.ACCOUNT_MAIL.send({ kind, email, token, requestId: crypto.randomUUID(), expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() });
+    const result = await env.ACCOUNT_MAIL.send({ kind, email, token, requestId: crypto.randomUUID(), expiresAt: kind === 'verify_email' ? null : new Date(Date.now() + 30 * 60 * 1000).toISOString() });
     if (result?.status !== 'accepted') throw failure('mail_unavailable', 503);
   }
   return {
