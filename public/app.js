@@ -8,12 +8,16 @@ const NYC_BOUNDS=[[40.47737324425922,-74.25874745984156],[40.91766180885905,-73.
 const LAYERS=window.HAUNT_LAYERS||[], layerById=new Map(LAYERS.map(layer=>[layer.id,layer]));
 const layerOpacities=new Map();
 const pilot={...window.HAUNT_PILOT};
-let drafts=[],selected=pilot.id,picking=false,map,imagery,pointLayer,baseErrors=0,loadToken=0;
+let drafts=[],selected=pilot.id,picking=false,selectingContributionPlace=false,map,imagery,pointLayer,baseErrors=0,loadToken=0;
 try{drafts=JSON.parse(localStorage.getItem(STORAGE)||'[]').filter(r=>(validCoordinates(r.latitude,r.longitude)||((r.latitude===null||r.latitude==='')&&(r.longitude===null||r.longitude==='')))&&(safeUrl(r.source_url)||r.original_submission||r.sources?.length)).slice(0,500)}catch{}
 const sourceInventory=window.NYC_INVENTORY||{records:[],audits:[]};
 pilot.category='pilot';pilot.borough='Manhattan';
-let hostedRecords=[];
-const allRecords=()=>[pilot,...sourceInventory.records,...hostedRecords,...drafts];
+let hostedRecords=[],publishedPlaces=[];
+const allRecords=()=>[...new Map([...drafts,pilot,...sourceInventory.records,...publishedPlaces].map(record=>[record.id,record])).values()];
+let publishedRequest=0,publishedSignature='';
+async function refreshPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const response=await fetch('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''),{cache:'no-store'});if(!response.ok)return false;const page=await response.json();if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+window.HauntologiesPublic=Object.freeze({refresh:refreshPublishedPlaces});
+window.addEventListener('focus',refreshPublishedPlaces);
 function setHostedRecords(records){hostedRecords=records;populateFacets();renderRecords()}
 const hasPoint=r=>Boolean(AtlasModel.normalize(r).geometry);
 const markers=new Map();
@@ -95,12 +99,12 @@ function openSidecar(open=true){
 function switchPanel(id){
  openSidecar();document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
- $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Submit';
+ $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Contribute';
  if(id==='casePanel'){toolOpener='mapToolsButton';$('mapToolsButton').setAttribute('aria-expanded','true');}
  setSidecarModal(id==='draftPanel');
  if(id==='draftPanel')window.ContributionPoint?.show();
 }
-$('toolsButton').addEventListener('click',()=>{const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
+$('toolsButton').addEventListener('click',async()=>{if($('toolsButton').disabled)return;$('toolsButton').disabled=true;try{const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'});if(response.status===401){try{sessionStorage.setItem('hauntologies-return-edit','true');}catch{}location.assign('/register?return=edit');return;}if(!response.ok){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}const session=await response.json();if(session.password_required){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}}catch{window.dispatchEvent(new CustomEvent('account-open-requested'));return;}finally{$('toolsButton').disabled=false;}const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
 document.addEventListener('pointerdown',e=>{
  if(document.querySelector('dialog[open]')||e.target.closest('.header-tools'))return;
@@ -109,10 +113,10 @@ document.addEventListener('pointerdown',e=>{
 },{capture:true});
 $('mapToolsButton').addEventListener('click',()=>{
  if(!$('researchSidecar').hidden&&$('casePanel').classList.contains('active')){closeTools(true);return;}
- switchPanel('casePanel');$('sidecarTitle').focus({preventScroll:true});
+ switchPanel('casePanel');revealPlaceCard([...$('casePanel').querySelectorAll('.place-card')].find(card=>card.dataset.placeId===selected));$('sidecarTitle').focus({preventScroll:true});
 });
 $('layersButton').addEventListener('click',()=>{const open=$('layersPanel').hidden;closeTools();toolOpener='layersButton';$('layersPanel').hidden=!open;$('layersButton').setAttribute('aria-expanded',String(open));if(open)$('layersTitle').focus()});
-for(const [button,view,title] of [['submitTool','submissionView','Submit'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()});
+for(const [button,view,title] of [['submitTool','submissionView','Contribute'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()});
 $('openResearch').addEventListener('click',()=>switchPanel('casePanel'));
 for(const id of ['closeResearch','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
@@ -271,7 +275,7 @@ function renderRecords(){
  records.forEach(r=>{
   const n=AtlasModel.normalize(r),b=document.createElement('button');b.type='button';b.className='place-select';b.dataset.recordId=r.id;b.classList.toggle('active',selected===r.id);b.setAttribute('aria-pressed',String(selected===r.id));
   b.innerHTML=`<i class="dot ${esc(r.category||'draft')} ${esc(n.geoStatus)}" aria-hidden="true"></i><span class="place-title">${esc(r.title)}</span>`;
-  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;card.append(b);card.insertAdjacentHTML('beforeend',placeFacts(r));addContributionAction(card,r);
+  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;card.append(b);card.insertAdjacentHTML('beforeend',placeFacts(r));appendPlaceRecord(card,r);addContributionAction(card,r);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
    const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+' '+n.geoStatus+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+locationLabel(n),keyboard:true,riseOnHover:true});
@@ -290,10 +294,12 @@ function visibleMapCenter(){
  if(window.innerWidth>760)return L.point(Math.max(45,panel.left/2),size.y/2);
  const top=Math.min(brand.bottom+18,panel.top-45);return L.point(size.x/2,Math.max(24,(top+panel.top)/2));
 }
-function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});map.panBy(map.getSize().divideBy(2).subtract(visibleMapCenter()),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.zoomToShowLayer)pointLayer.zoomToShowLayer(marker,()=>{map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false})})}
+function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.getVisibleParent&&pointLayer.getVisibleParent(marker)!==marker)map.setZoom(Math.min(map.getMaxZoom(),18),{animate:false});map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false});}
+function revealPlaceCard(card){if(!card)return;const panel=$('casePanel');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-16;}
 function selectRecord(r){
- selected=r.id;renderRecords();switchPanel('casePanel');map?.closePopup();revealRecord(r);
- const button=[...$('recordList').querySelectorAll('button[data-record-id]'),...$('unlocatedList').querySelectorAll('button[data-record-id]')].find(b=>b.dataset.recordId===r.id);button?.scrollIntoView({block:'nearest'});button?.focus({preventScroll:true});
+ if(selectingContributionPlace){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
+ selected=r.id;renderRecords();switchPanel('casePanel');map?.closePopup();
+ const button=[...$('recordList').querySelectorAll('button[data-record-id]'),...$('unlocatedList').querySelectorAll('button[data-record-id]')].find(b=>b.dataset.recordId===r.id);revealPlaceCard(button?.closest('.place-card'));button?.focus({preventScroll:true});revealRecord(r);
 }
 function resetFilters(fit=true){$('search').value='';for(const id of ['filterStatus','filterPeriod',...Object.keys(facetControls)])$(id).value='all';$('periodStart').value='';$('periodEnd').value='';togglePeriod();renderRecords();if(fit)fitRecords(filtered())}
 function togglePeriod(){const active=$('filterPeriod').value==='custom';$('periodStart').disabled=!active;$('periodEnd').disabled=!active;if($('periodBounds'))$('periodBounds').hidden=!active;}
@@ -302,9 +308,9 @@ for(const id of ['filterStatus','filterPeriod',...Object.keys(facetControls)])$(
 for(const id of ['periodStart','periodEnd'])$(id).addEventListener('input',()=>{renderRecords();fitRecords(filtered())});
 $('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFilters').addEventListener('click',()=>resetFilters());
 function addContributionAction(card,r){
- if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!hostedRecords.some(x=>x.id===r.id)))return;
+ if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
  const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
- button.addEventListener('click',()=>{switchPanel('draftPanel');$('sidecarTitle').textContent='Submit';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
+ button.addEventListener('click',()=>{switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
  const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
  edit.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}})));card.append(edit);
 }
@@ -314,6 +320,17 @@ function placeFacts(r){
   ? '<p class="place-coordinate-note">Location unresolved</p>'
   : `<dl class="place-coordinates"><dt>${p.approximate?'Approx. coordinates':'Coordinates'}</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
  return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${coordinates}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+}
+
+function appendPlaceRecord(card,r){
+ const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('div');details.className='place-record';summary.textContent='Record';body.className='place-record-content';details.append(summary,body);
+ const text=(tag,value)=>{const el=document.createElement(tag);el.textContent=String(value);return el;};
+ body.append(text('h3',r.title));const description=PlaceSummary.view(r).description;if(description)body.append(text('p',description));
+ const p=PlaceSummary.view(r);if(p.latitude!==null)body.append(text('p',p.latitude+', '+p.longitude));
+ const photo=r.image||{},url=photo.localUrl&&/^assets\/[A-Za-z0-9_./-]+$/.test(photo.localUrl)?photo.localUrl:safeUrl(photo.url||r.image_url);
+ if(url){const figure=document.createElement('figure'),image=document.createElement('img');image.src=url;image.alt=photo.alt||photo.caption||r.image_caption||r.title;image.loading='lazy';figure.append(image);if(photo.caption||r.image_caption)figure.append(text('figcaption',photo.caption||r.image_caption));if(photo.creator||photo.license)figure.append(text('p',[photo.creator,photo.license].filter(Boolean).join(' · ')));body.append(figure);}
+ const sources=Array.isArray(r.sources)?r.sources:[];if(sources.length||r.source_url){body.append(text('h4','Sources'));const list=document.createElement('ul');for(const source of sources.length?sources:[{url:r.source_url,title:r.source_title}]){const row=document.createElement('li'),url=safeUrl(source.url);if(url){const a=text('a',source.title||source.citation||source.source_ref||'Source');a.href=url;a.target='_blank';a.rel='noopener noreferrer';row.append(a);}else row.append(text('span',source.citation||source.title||'Source'));if(source.evidence_note)row.append(text('p',source.evidence_note));list.append(row);}body.append(list);}
+ const metadata=[['Location',r.location_text||r.place_original],['Borough',r.borough],['Dates',r.time_original||r.event_date_start],['Date basis',r.time_basis],['Location basis',r.geo_basis||r.location_precision],['Uncertainty',r.uncertainty_note],['Rights',r.rights_or_license]];const dl=document.createElement('dl');for(const[label,value]of metadata)if(value!==undefined&&value!==null&&value!==''){dl.append(text('dt',label),text('dd',value));}if(dl.children.length)body.append(dl);card.append(details);
 }
 
 function renderDetail(r){
@@ -339,3 +356,12 @@ $('exportCsv')?.addEventListener('click',()=>download([exportKeys.join(','),...a
 function parseCSV(text){const rows=[];let row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell=''}else cell+=c}if(quoted)throw Error('CSV has an unclosed quoted field.');if(cell||row.length){row.push(cell);rows.push(row)}const headers=rows.shift()?.map(x=>x.trim().replace(/^\uFEFF/,''))||[];return rows.map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]||''])))}
 $('importFile')?.addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>1000000)throw Error('Choose a file smaller than 1 MB.');const text=await file.text();let rows;if(/\.csv$/i.test(file.name))rows=parseCSV(text);else{const json=JSON.parse(text);if(json.type!=='FeatureCollection'||!Array.isArray(json.features))throw Error('Choose a GeoJSON FeatureCollection containing Point features.');rows=json.features.map(f=>{if(f.geometry===null)return{...f.properties,longitude:null,latitude:null};if(f.geometry?.type!=='Point')throw Error('Only Point features or null geometry (unlocated records) are supported.');return{...f.properties,longitude:f.geometry.coordinates[0],latitude:f.geometry.coordinates[1]}})}if(!rows.length)throw Error('No points were found.');if(rows.length+drafts.length>500)throw Error('Import would exceed the 500-point local limit.');await NycGeometry.ready;const imported=rows.map(draftFrom);drafts.push(...imported);populateFacets();const saved=persist();$('importStatus').classList.remove('error');$('importStatus').textContent=imported.length+' points imported as local drafts.'+(saved?'':' Browser storage unavailable; export now.');renderRecords()}catch(err){$('importStatus').textContent=err.message;$('importStatus').classList.add('error')}e.target.value=''});
 window.addEventListener('offline',()=>{$('mapStatus').textContent='Offline'});window.addEventListener('online',()=>changeYear($('layerSelect').value));populateFacets();togglePeriod();selected=pilot.id;closeTools();renderRecords();recenterNYC();
+
+window.addEventListener('edits-place-requested',async event=>{await refreshPublishedPlaces();const record=allRecords().find(item=>item.id===event.detail?.recordId);if(!record)return;resetFilters(false);selectRecord(record);});
+
+refreshPublishedPlaces();
+
+window.addEventListener('contributions-place-pick-requested',()=>{closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');$('chooseExistingPlace').focus();}});
+
+window.addEventListener('contributions-records-changed',event=>{if(!event.detail?.publicRefresh)refreshPublishedPlaces();});

@@ -20,6 +20,7 @@ test('email proof, password sign-in, one-hour cookie, own contribution and sign-
   const raw={schema_version:'1.0',type:'open_proposal',task_ids:[],title:'Synthetic contribution',summary:'Local account acceptance only.',public_credit:{consent:false,label:''},sources:[],attachments:[],targets:[],payload:{explanation:'Local account acceptance only.'}};
   const saved=await h.call('/api/contributions/submit',{idempotency_key:crypto.randomUUID(),submission_json:JSON.stringify(raw)},signed.cookie);assert.equal(saved.status,201,JSON.stringify(saved.body));
   const second=await h.register('second@example.test');
+  const mismatched=await h.call('/api/contributions/submit',{idempotency_key:crypto.randomUUID(),submission_json:JSON.stringify(raw)},second,{'X-Hauntologies-Actor':session.body.actor_id});assert.equal(mismatched.status,409);assert.equal(mismatched.body.error,'account_changed');
   assert.equal((await h.call('/api/contributions/submission?id='+saved.body.submission.id,undefined,second)).status,404);
   const images=JSON.parse(await readFile(new URL('./fixtures/attachment-images.json',import.meta.url),'utf8'));
   const form=new FormData();
@@ -177,4 +178,12 @@ test('participants sharing a campus address can register within global and recip
   const h=await harness(t);
   for(let i=0;i<13;i++) assert.equal((await h.call('/api/auth/register',{email:`campus${i}@example.test`},'',{'cf-connecting-ip':'192.0.2.200'})).status,200);
   assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_test_mail').first()).n,13);
+});
+
+test('anonymous public projections exclude private proposals and owner edit pages require an account',async t=>{
+ const h=await harness(t),cookie=await h.register('private-feed@example.test');
+ const raw={schema_version:'1.0',type:'open_proposal',task_ids:[],title:'PRIVATE TITLE',summary:'PRIVATE TEXT',public_credit:{consent:false,label:''},sources:[],attachments:[],targets:[],payload:{explanation:'PRIVATE TEXT'}};
+ assert.equal((await h.call('/api/contributions/submit',{idempotency_key:crypto.randomUUID(),submission_json:JSON.stringify(raw)},cookie)).status,201);
+ for(const path of ['/api/published-edits','/api/published-records']){const result=await h.call(path);assert.equal(result.status,200);assert.deepEqual(result.body,path==='/api/published-records'?{records:[],next_cursor:null}:{items:[]});assert.equal((await h.call(path,{})).status,401);}
+ assert.equal((await h.call('/api/contributions/edits')).status,401);const own=await h.call('/api/contributions/edits?page=1',undefined,cookie);assert.equal(own.status,200);assert.equal(own.body.total,1);assert.equal(own.body.items[0].title,'PRIVATE TITLE');
 });

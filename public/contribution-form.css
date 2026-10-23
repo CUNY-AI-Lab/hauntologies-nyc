@@ -59,3 +59,44 @@
 #accountRegistration { margin: 8px 0; overflow-wrap: anywhere; }
 #accountContributions { margin: 0; }
 #accountContributions > li.account-list-message { padding: 0; border: 0; color: var(--muted); }
+#accountRegistrationSection > button { min-height:44px; padding:10px 12px; }
+#accountContributions { margin-top:8px; }
+#ownEditsDialog { width:min(620px,calc(100vw - 24px)); }
+.edits-content { padding:16px; }
+#ownEditsStatus { margin:0 0 12px; }
+#ownEditsList, #publishedEditsList { padding:0; margin:0; list-style:none; }
+#ownEditsList > li { padding:12px 0; border-top:1px solid var(--line); }
+#ownEditsList p, #publishedEditsList p { font-size:12px; color:var(--muted); margin:4px 0; }
+.edit-title { display:block; width:100%; text-align:left; padding:8px 0; background:none; border:0; color:var(--ink); min-height:44px; overflow-wrap:anywhere; }
+.edit-targets, .edits-pagination { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.edit-targets button, .edits-pagination button { min-height:44px; padding:8px 12px; }
+.edits-pagination { justify-content:space-between; margin-top:16px; }
+.return-to-edits { min-height:44px; padding:8px 12px; margin-left:auto; background:var(--paper); }
+#publishedEditsFeed { pointer-events:auto; margin-top:12px; font:13px/1.5 Arial,Helvetica,sans-serif; }
+#publishedEditsFeed > summary { cursor:pointer; min-height:44px; padding:11px 12px; border:1px solid var(--line); width:fit-content; list-style-position:inside; }
+#publishedEditsFeed[open] { max-height:min(360px,50dvh); overflow:auto; overscroll-behavior:contain; }
+#publishedEditsStatus { margin-top:8px; color:var(--muted); }
+#publishedEditsList > li { border-top:1px solid var(--line); padding:8px 0; }
+#publishedEditsList button { display:block; min-height:44px; text-align:left; width:100%; white-space:normal; padding:8px; }
+#ownEditsDialog .popout-head { position:sticky; top:0; background:var(--paper); z-index:1; }
+/* Places uses one bounded scroller, so a card heading cannot hide inside a nested list. */
+#casePanel .recordlist { max-height:none; overflow:visible; }
+#casePanel .place-card { scroll-margin-block:16px; }
+#casePanel { scroll-padding-block:16px; }
+.contribution-location-search { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+.contribution-location-search > p { grid-column:1/-1; font-size:12px; margin:0; }
+.contribution-location-search > p:empty { display:none; }
+#freeformPlacePicker { display:grid; gap:8px; }
+#freeformPlacePicker > button { justify-self:start; }
+#typedContributionForm > .workflow-details { margin-block:10px; }
+#typedContributionForm > .workflow-details > summary { min-height:44px; min-width:100px; padding:11px 12px; }
+#typedContributionForm > .workflow-details[open] { border:1px solid var(--line); padding:10px; }
+#extraSources { display:grid; gap:10px; margin-block:10px; }
+.place-record { margin:8px 14px 12px; }
+.place-record > summary { min-height:44px; cursor:pointer; padding:11px 0; }
+.place-record-content { overflow-wrap:anywhere; font-size:13px; }
+.place-record-content img { max-width:100%; height:auto; }
+.place-record-content figure { margin:12px 0; }
+.place-record-content figcaption, .place-record-content dt { color:var(--muted); font-size:12px; }
+.place-record-content dd { margin:0 0 8px; }
+.place-description { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; }

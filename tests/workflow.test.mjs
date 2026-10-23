@@ -974,3 +974,61 @@ test('shared tasks remain visible to another signed-in actor after service resta
   assert.equal(task.version,2);
   assertStatus(await call(h,'/api/contributions/tasks',undefined,{actor:null}),401);
 });
+
+test('own edit pagination remains complete and stable beyond reviewer queue limits', async t => {
+  const h=harness();t.after(()=>h.db.close());
+  for(let n=0;n<107;n++)await submit(h,envelope({title:'Owned edit '+n}));
+  for(let n=0;n<105;n++)assertStatus(await call(h,'/api/contributions/submit',submitBody(envelope({title:'Other edit '+n}),nextKey(h,'other')),{actor:'other'}),201);
+  const own=[];
+  for(let page=1;page<=6;page++){const r=await call(h,'/api/contributions/edits?page='+page);assertStatus(r,200);assert.equal(r.body.total,107);assert.equal(r.body.total_pages,6);own.push(...r.body.items);assert(r.body.items.every(item=>item.title.startsWith('Owned')));}
+  assert.equal(own.length,107);assert.equal(new Set(own.map(item=>item.id)).size,107);
+  assert.deepEqual((await call(h,'/api/contributions/edits?page=2')).body,(await call(h,'/api/contributions/edits?page=2')).body);
+});
+
+test('edit listing ignores reviewer authority and rejects invalid pagination',async t=>{
+  const h=harness();t.after(()=>h.db.close());await submit(h);
+  const reviewer=await call(h,'/api/contributions/edits?page=1',undefined,{actor:'reviewer'});assertStatus(reviewer,200);assert.equal(reviewer.body.total,0);assert.deepEqual(reviewer.body.items,[]);
+  for(const query of ['page=0','page=-1','page=1.5','page=1&page=2','page=100000','owner_id=owner'])assertStatus(await call(h,'/api/contributions/edits?'+query),400);
+  assertStatus(await call(h,'/api/contributions/edits',undefined,{actor:null}),401);
+});
+
+test('concurrent withholding defeats a revision and retry preserves the withheld decision',async t=>{
+  const h=harness();t.after(()=>h.db.close());const created=await submit(h),before=created.submission;
+  const revise=h.store.revise;let intercepted=false;
+  h.store.revise=async(...args)=>{if(!intercepted){intercepted=true;assertStatus(await call(h,'/api/contributions/triage',{idempotency_key:nextKey(h,'withhold'),submission_id:before.id,expected_revision:1,action:'withhold',rationale:'Concurrent privacy decision.'}),200);}return revise(...args);};
+  const body={idempotency_key:nextKey(h,'revise'),submission_id:before.id,expected_revision:1,submission_json:JSON.stringify(envelope({title:'Preserved private revision'}))};
+  assertStatus(await call(h,'/api/contributions/revise',body),409);
+  assert.equal((await h.store.getSubmission(before.id)).review_state,'withheld');assert.equal(rowCount(h,'workflow_revisions'),1);assert.equal(rowCount(h,'approved_records'),0);
+  const retried=await call(h,'/api/contributions/revise',body);assertStatus(retried,200);assert.equal(retried.body.submission.status,'withheld');assert.equal(retried.body.submission.revision,2);
+  const replayed=await call(h,'/api/contributions/revise',body);assertStatus(replayed,200);assert.equal(replayed.body.reused,true);assert.equal(rowCount(h,'workflow_revisions'),2);
+});
+
+test('published feed uses the immutable published revision and excludes pending, rollback and private fields',async t=>{
+  const {publishedEdits}=await import('../server/published-edits.mjs');const h=harness();t.after(()=>h.db.close());
+  const payload=envelope({public_credit:{consent:true,label:'Public fixture credit'}});payload.payload.Entries[0].contributor='Public fixture credit';const created=await submit(h,payload);
+  assert.deepEqual(await publishedEdits(h.db),[]);const approved=await approve(h,created.submission);assert.deepEqual(await publishedEdits(h.db),[]);
+  const staged=await stage(h,approved);assert.deepEqual(await publishedEdits(h.db),[]);assertStatus(await verify(h,staged.job),200);
+  const original=await publishedEdits(h.db);assert.equal(original.length,1);assert.equal(original[0].credit,'Public fixture credit');assert.deepEqual(Object.keys(original[0]).sort(),['credit','id','published_at','targets']);assert.deepEqual(Object.keys(original[0].targets[0]).sort(),['record_id','title']);
+  const draft=envelope({title:'PRIVATE NEW TITLE',summary:'private@example.test',public_credit:{consent:true,label:'PRIVATE NEW CREDIT'}});
+  assertStatus(await call(h,'/api/contributions/revise',{idempotency_key:nextKey(h,'private-revision'),submission_id:created.submission.id,expected_revision:1,submission_json:JSON.stringify(draft)}),200);
+  assert.deepEqual(await publishedEdits(h.db),original);assert(!JSON.stringify(original).includes('private@example.test'));assert(!JSON.stringify(original).includes('raw_json'));
+  assertStatus(await call(h,'/api/contributions/rollback',{idempotency_key:nextKey(h,'rollback'),job_id:staged.job.id,rationale:'Synthetic rollback.'},{actor:'publisher'}),200);assert.deepEqual(await publishedEdits(h.db),[]);
+});
+
+test('public saved records use verified canonical fields and ignore a newer private proposal',async t=>{
+ const {publishedRecords}=await import('../server/published-edits.mjs');const h=harness();t.after(()=>h.db.close());
+ const base=await submit(h);assert.deepEqual(await publishedRecords(h.db),[]);const approved=await approve(h,base.submission),staged=await stage(h,approved);assert.deepEqual(await publishedRecords(h.db),[]);assertStatus(await verify(h,staged.job),200);
+ const initial=await publishedRecords(h.db);assert.equal(initial.length,1);const record=initial[0];const publicTarget=await call(h,'/api/contributions/target?id='+encodeURIComponent(record.id),undefined,{actor:'another-contributor'});assertStatus(publicTarget,200);assert.deepEqual(publicTarget.body.target.record,record);assert.equal(Object.hasOwn(publicTarget.body.target.record,'raw_json'),false);assert.equal(record.title,envelope().payload.Entries[0].title);assert.equal(record.latitude,null);assert.equal(record.description,envelope().payload.Entries[0].claim_text);assert.equal(record.sources[0].citation,envelope().payload.Sources[0].citation);
+ for(const key of ['owner_id','raw_json','original_submission_json','review_notes','reviewer','metadata','hosted_payload'])assert.equal(Object.hasOwn(record,key),false);
+ const privateRevision=envelope({summary:'PRIVATE PERSONAL RESEARCH',title:'PRIVATE NEW TITLE'});assertStatus(await call(h,'/api/contributions/revise',{idempotency_key:nextKey(h,'private'),submission_id:base.submission.id,expected_revision:1,submission_json:JSON.stringify(privateRevision)}),200);assert.deepEqual(await publishedRecords(h.db),initial);
+ assertStatus(await call(h,'/api/contributions/rollback',{idempotency_key:nextKey(h,'rollback'),job_id:staged.job.id,rationale:'Synthetic rollback.'},{actor:'publisher'}),200);assert.deepEqual(await publishedRecords(h.db),[]);
+});
+
+test('public record pages traverse more than 1000 verified records without dropping stable IDs',async t=>{
+ const {publishedRecordPage}=await import('../server/published-edits.mjs');const h=harness();t.after(()=>h.db.close());
+ const base=await submit(h),approved=await approve(h,base.submission),staged=await stage(h,approved);assertStatus(await verify(h,staged.job),200);
+ const original=await h.db.prepare('SELECT * FROM approved_records LIMIT 1').first();
+ for(let n=0;n<1001;n++)await h.db.prepare('INSERT INTO approved_records (id,owner_id,preview_id,raw_json,raw_hash,derived_json,preview_hash,approved_at) VALUES (?,?,?,?,?,?,?,?)').bind('pagination-'+String(n).padStart(4,'0'),original.owner_id,'pagination-'+n,original.raw_json,original.raw_hash,original.derived_json,original.preview_hash,original.approved_at).run();
+ const records=[];let cursor='',pages=0;do{const page=await publishedRecordPage(h.db,cursor);assert.ok(page.records.length<=500);records.push(...page.records);cursor=page.next_cursor;pages++;}while(cursor);
+ assert.equal(pages,3);assert.equal(records.length,1002);assert.equal(new Set(records.map(r=>r.id)).size,1002);
+});

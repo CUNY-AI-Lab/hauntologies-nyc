@@ -2,6 +2,7 @@
 // Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
 import { handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
+import { publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
 const privateJson = (value, status = 200) => Response.json(value, { status, headers: {
   'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer'
 } });
@@ -15,6 +16,13 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       } catch { return new Response('Invalid path',{status:400}); }
       path=path.replace(/\/+/g,'/').toLowerCase();
       const mapEnabled = mapAccountsReady(env);
+      if (['/api/published-edits','/api/published-records'].includes(rawPath) && ['GET','HEAD'].includes(request.method) ) {
+        try {
+          const query=new URL(request.url).searchParams;if([...query.keys()].some(key=>key!=='after')||query.getAll('after').length>1||rawPath==='/api/published-edits'&&query.size||query.has('after')&&!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(query.get('after')))return privateJson({error:'invalid_page'},400);
+          const data = rawPath==='/api/published-edits'?{items:await publishedEdits(env.DB)}:await publishedRecordPage(env.DB,query.get('after')||'');
+          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
+        } catch { return privateJson({error:'feed_unavailable'},503); }
+      }
       if (path === '/api/auth' || path.startsWith('/api/auth/')) {
         if (rawPath !== path) return privateJson({error:'invalid_path'},400);
         return handleMapAccount(request, env);
@@ -44,6 +52,10 @@ export function createDemoWorker(handler, registration, authenticate = authentic
         try { actor = mapEnabled ? (await mapSession(request, env))?.actor_id : withdrawnIdentity ? null : await authenticate(request, env); }
         catch { return privateJson({error:'account_unavailable'},503); }
         if (actor) {
+          // A tab can retain a draft while another tab changes the session.
+          // This assertion binds its write to the expected account; it never grants identity.
+          const expectedActor=request.headers.get('X-Hauntologies-Actor');
+          if(!['GET','HEAD'].includes(request.method)&&expectedActor&&expectedActor!==actor)return privateJson({error:'account_changed'},409);
           if (rawPath === '/api/contributions/sign-in' || rawPath === '/api/contributions/session') {
             if (!['GET','HEAD'].includes(request.method)) return new Response(null, { status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'} });
             if (rawPath.endsWith('/sign-in')) return new Response(null, { status:303, headers:{Location:'/', 'Cache-Control':'no-store'} });
@@ -51,6 +63,7 @@ export function createDemoWorker(handler, registration, authenticate = authentic
             return request.method === 'HEAD' ? new Response(null, { headers:response.headers }) : response;
           }
           const headers = stripIdentityHeaders(request);
+          headers.delete('X-Hauntologies-Actor');
           headers.delete('cookie');
           headers.set('oai-authenticated-user-id', actor);
           const response = await handler.fetch(new Request(request, { headers }), env, ctx);

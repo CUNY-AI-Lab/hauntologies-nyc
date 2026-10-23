@@ -4,6 +4,9 @@
   if (!dialog || !trigger) return;
   const status = byId('accountStatus'), actions = byId('accountActions'), list = byId('accountContributions'), registration = byId('accountRegistration');
   const formHost = document.createElement('div'); formHost.id = 'accountFormHost'; status.after(formHost);
+  const returnKey='hauntologies-return-edit';
+  if(new URLSearchParams(location.search).get('edit')==='1'){try{sessionStorage.setItem(returnKey,'true');}catch{}const url=new URL(location.href);url.searchParams.delete('edit');history.replaceState(null,'',url.pathname+url.search+url.hash);}
+  function returnToEdit(){let requested=false;try{requested=sessionStorage.getItem(returnKey)==='true';if(requested)sessionStorage.removeItem(returnKey);}catch{}if(requested){if(dialog.open)dialog.close();byId('toolsButton').click();}}
   let session = null, mode = 'sign-in', challenge = null, busy = false, opener = null, generation = 0;
   const node = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
   const labels = { draft: 'Draft', submitted: 'Pending review', changes_requested: 'Changes requested', approved: 'Approved', merged: 'Published', withheld: 'Withheld' };
@@ -18,6 +21,7 @@
     } finally { clearTimeout(timer); }
   }
   function identity(value) {
+    if(session?.actor_id&&session.actor_id!==value?.actor_id)window.dispatchEvent(new CustomEvent('contributions-session-ended'));
     session = value; trigger.disabled = false; trigger.textContent = value && !value.password_required ? 'Account' : 'Sign in';
     trigger.setAttribute('aria-label', trigger.textContent);
     byId('accountRegistrationSection').hidden = !(value && !value.password_required);
@@ -77,16 +81,9 @@
     });
     const actor = session.actor_id;
     try {
-      const data = await api('/api/contributions/dashboard');
+      const data = await api('/api/contributions/edits?page=1');
       if (generation !== version || session?.actor_id !== actor || !dialog.open) return;
-      list.replaceChildren();
-      for (const item of data.submissions || []) {
-        if (item.is_own !== true || typeof item.id !== 'string') continue;
-        const row = node('li'), link = node('a', item.title || item.id); link.href = '#submissionDetail';
-        link.addEventListener('click', event => { event.preventDefault(); dialog.close(); window.dispatchEvent(new CustomEvent('contributions-review-requested', { detail: { submissionId: item.id } })); });
-        row.append(link, node('p', labels[item.status] || 'Saved')); list.append(row);
-      }
-      if (!list.children.length) listMessage('0 edits');
+      listMessage(data.total + (data.total === 1 ? ' edit' : ' edits'));
     } catch (error) { if (generation === version) listMessage(error.message); }
   }
   async function reconcile() {
@@ -95,6 +92,7 @@
       const value = await api('/api/auth/session');
       if (version !== generation) return; identity(value);
       if (dialog.open) { if (value.password_required) renderForm('set-password'); else await showAccount(version); }
+      if(!value.password_required)returnToEdit();
     } catch (error) {
       if (version !== generation) return; identity(null);
       if (error.status === 401) window.dispatchEvent(new CustomEvent('contributions-session-ended'));
@@ -105,6 +103,8 @@
   function readChallenge() {
     const match = location.hash.match(/^#account-(verify|reset)=([A-Za-z0-9_-]{24,128})$/);
     if (match) { challenge = match[2]; history.replaceState(null, '', location.pathname + location.search); open(); renderForm(match[1]); return true; }
+    if(session&&!session.password_required&&['#account-register','#sign-in'].includes(location.hash)){history.replaceState(null,'',location.pathname+location.search);return true;}
+    if (location.hash === '#account-register') { history.replaceState(null, '', location.pathname + location.search); opener=trigger;if(!dialog.open)dialog.showModal();renderForm('register');return true; }
     if (location.hash === '#sign-in') { history.replaceState(null, '', location.pathname + location.search); open(); return true; }
     return false;
   }

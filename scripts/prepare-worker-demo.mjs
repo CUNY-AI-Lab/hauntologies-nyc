@@ -15,6 +15,10 @@ Object.assign(config,{
   vars:{...config.vars,CAIL_ENABLED:'false'}
 });
 await fs.copyFile(new URL('../deployment/demo-gate.mjs',import.meta.url),new URL('../dist/server/demo-gate.mjs',import.meta.url));
+// Keep the public projection import local to the prepared Worker bundle.
+const gateFile=new URL('../dist/server/demo-gate.mjs',import.meta.url);
+await fs.writeFile(gateFile,(await fs.readFile(gateFile,'utf8')).replace('../server/published-edits.mjs','./published-edits.mjs'));
+await fs.copyFile(new URL('../server/published-edits.mjs',import.meta.url),new URL('../dist/server/published-edits.mjs',import.meta.url));
 // Vinext emits no_bundle:true. Bundle this adapter's dependency explicitly so
 // the generated Worker never tries to resolve a bare npm import at runtime.
 await build({entryPoints:[fileURLToPath(new URL('../deployment/access-identity.mjs',import.meta.url))],outfile:fileURLToPath(new URL('../dist/server/access-identity.mjs',import.meta.url)),bundle:true,format:'esm',platform:'browser',target:'es2022'});

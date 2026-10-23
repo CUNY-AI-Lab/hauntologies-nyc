@@ -25,3 +25,6 @@ button:disabled { cursor: wait; opacity: .7; }
 [hidden] { display: none !important; }
 @media (max-width: 380px) { body { padding: 12px; } main { padding-top: 16px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+.map-account-setup { margin-top:28px; padding-top:20px; border-top:1px solid #827563; }
+.map-account-setup h2 { margin:0 0 12px; font-size:20px; font-weight:400; }
+.map-account-setup a { display:block; min-height:44px; padding-block:10px; color:#ebc395; text-underline-offset:3px; }

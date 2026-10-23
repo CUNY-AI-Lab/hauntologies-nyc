@@ -1,16 +1,16 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="contributors.css"><link rel="stylesheet" href="contribution-form.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="app.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contribution-image.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration.js"></script><script defer src="account.js"></script><script defer src="record-edit-model.js"></script><script defer src="record-editor.js"></script><script defer src="contributors.js"></script></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="contributors.css"><link rel="stylesheet" href="contribution-form.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="app.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contribution-image.js"></script><script defer src="place-input.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration.js"></script><script defer src="account.js"></script><script defer src="edits.js"></script><script defer src="record-edit-model.js"></script><script defer src="record-editor.js"></script><script defer src="contributors.js"></script></head>
 <body>
 <a class="skip-link" href="#mapToolsButton">Places</a>
 <header class="masthead">
-  <div class="brand"><p class="eyebrow">Halloween Hackathon</p><h1>Hauntologies of New York</h1><p id="programCredits" class="program-credits"><span>Graduate Center, Room 5307</span><span><time datetime="2026-10-30T15:00:00-04:00">Friday, October 30 · 3–6:30 p.m.</time></span><span>M.A. Program in Digital Humanities</span><span>M.S. Program in Data Analysis and Visualization</span></p></div>
+  <div class="brand"><p class="eyebrow">Halloween Hackathon</p><h1>Hauntologies of New York</h1><p id="programCredits" class="program-credits"><span>Graduate Center, Room 5307</span><span><time datetime="2026-10-30T15:00:00-04:00">Friday, October 30 · 3–6:30 p.m.</time></span><span>M.A. Program in Digital Humanities</span><span>M.S. Program in Data Analysis and Visualization</span></p><details id="publishedEditsFeed"><summary>Published edits</summary><div id="publishedEditsStatus" role="status"></div><ol id="publishedEditsList"></ol></details></div>
   <nav class="header-tools" aria-label="Map controls"><button class="outline" id="mapToolsButton" type="button" aria-controls="researchSidecar" aria-expanded="false">Places</button><button class="outline" id="filtersButton" type="button" aria-controls="filtersPanel" aria-expanded="false">Filters <span id="filtersActiveCount" class="filter-active-count" hidden>0</span></button><button class="outline" id="layersButton" type="button" aria-controls="layersPanel" aria-expanded="false">Layers</button><div id="zoomTools" class="zoom-tools" role="group" aria-label="Zoom"></div></nav>
 </header>
 <nav class="contribution-navigation" aria-label="Participation"><button class="outline" id="accountButton" type="button" aria-haspopup="dialog" aria-controls="accountDialog" aria-label="Checking sign-in" disabled>…</button><button class="outline" id="toolsButton" type="button" aria-controls="toolsMenu" aria-expanded="false" aria-label="Edit">Edit</button></nav>
 <nav id="toolsMenu" class="tools-menu" aria-label="Contributions" hidden>
   <button id="tasksTool" type="button" aria-controls="researchSidecar">Tasks</button>
-  <button id="submitTool" type="button" aria-controls="researchSidecar">Submit</button>
+  <button id="submitTool" type="button" aria-controls="researchSidecar">Contribute</button>
   <button id="reviewTool" type="button" aria-controls="researchSidecar">Review</button>
 </nav>
 <main class="workspace">
@@ -49,8 +49,8 @@
     </div>
   </aside>
   <aside id="researchSidecar" class="research popout" aria-labelledby="sidecarTitle" hidden>
-    <div class="sidecar-head popout-head"><h2 id="sidecarTitle" tabindex="-1">Places</h2><button id="closeResearch" class="close-control" type="button" aria-label="Close"><span aria-hidden="true">×</span></button></div>
-    <nav class="tabs" aria-label="Panels" hidden><button id="caseTab" class="active" data-panel="casePanel">Places</button><button id="draftTab" data-panel="draftPanel">Submit</button><button id="sourcesTab" data-panel="sourcesPanel">Sources</button></nav>
+    <div class="sidecar-head popout-head"><h2 id="sidecarTitle" tabindex="-1">Places</h2><button id="returnToEdits" type="button" class="outline return-to-edits" hidden>Back to edits</button><button id="closeResearch" class="close-control" type="button" aria-label="Close"><span aria-hidden="true">×</span></button></div>
+    <nav class="tabs" aria-label="Panels" hidden><button id="caseTab" class="active" data-panel="casePanel">Places</button><button id="draftTab" data-panel="draftPanel">Contribute</button><button id="sourcesTab" data-panel="sourcesPanel">Sources</button></nav>
 <section id="casePanel" class="panel active" tabindex="-1">
 
 <div id="inventorySummary" class="inventory-summary" hidden></div>
@@ -60,10 +60,10 @@
 <article id="detail" tabindex="-1" aria-label="Selected record"></article>
 </section>
 <section id="draftPanel" class="panel"><section id="contributionWorkspace" class="contribution-workspace" aria-labelledby="contributionWorkspaceTitle">
-  <h2 id="contributionWorkspaceTitle" hidden>Submit</h2>
+  <h2 id="contributionWorkspaceTitle" hidden>Contribute</h2>
   <p id="workflowConnection" class="workflow-connection" role="status"></p>
   <div class="workflow-tabs" role="group" aria-label="Contribution views" hidden>
-    <button type="button" class="active" data-workflow-view="submissionView" aria-pressed="true">Submit</button>
+    <button type="button" class="active" data-workflow-view="submissionView" aria-pressed="true">Contribute</button>
     <button type="button" data-workflow-view="reviewView" aria-pressed="false">Review</button>
   </div>
   <section id="taskView" class="workflow-view" hidden aria-labelledby="taskTitle">
@@ -79,33 +79,35 @@
     <h3>Shared tasks</h3><button type="button" id="refreshSharedTasks" class="outline">Refresh tasks</button><p id="sharedTaskCount" class="count" aria-live="polite"></p><p id="sharedTaskStatus" role="status"></p><div id="taskLedger" class="task-ledger"></div><section id="earlierLocalTasks" hidden></section>
   </section>
   <section id="submissionView" class="workflow-view" aria-labelledby="typedFormTitle">
-    <h3 id="typedFormTitle" class="sr-only" tabindex="-1">Submit</h3>
+    <h3 id="typedFormTitle" class="sr-only" tabindex="-1">Contribute</h3>
     <div id="workflowErrors" class="workflow-errors" role="alert" tabindex="-1" hidden></div>
     <form id="typedContributionForm" novalidate>
       <p id="revisionContext" class="notice" hidden></p>
-      <label for="contributionSummary">What would you like to contribute?<textarea id="contributionSummary" rows="3" required></textarea></label>
       <div id="freeformPlaceChoice" class="contribution-place-choice">
         <label for="contributionPlaceMode">Place<select id="contributionPlaceMode"><option value="new">New place</option><option value="existing">Existing place</option></select></label>
-        <label id="freeformPlacePicker" for="freeformPlaceSelect" hidden>Existing place<select id="freeformPlaceSelect"><option value="">Choose a place</option></select></label>
+        <div id="freeformPlacePicker" hidden><label for="existingPlaceSearch">Find place<input id="existingPlaceSearch" type="search" placeholder="Name or latitude, longitude"></label><label for="freeformPlaceSelect" class="sr-only">Existing place</label><select id="freeformPlaceSelect"><option value="">Choose a place</option></select><button id="chooseExistingPlace" type="button" class="outline">Choose on map</button></div>
       </div>
       <div id="freeformRecordContext" class="buttonrow" hidden><span id="freeformRecordLabel" role="status"></span><button id="removeFreeformRecord" class="textbutton" type="button">Remove</button></div>
-      <details id="freeformLocation" class="workflow-details"><summary>Location</summary>
+      <details id="freeformTitle" class="workflow-details"><summary>Title</summary><label for="contributionObjectTitle">Title<input id="contributionObjectTitle" maxlength="300"></label></details>
+      <div id="newPlaceLocation" class="contribution-location-search"><label for="newLocationSearch">Location<input id="newLocationSearch" list="newLocationMatches" placeholder="Place name, coordinates or OpenStreetMap link"><datalist id="newLocationMatches"></datalist></label><button id="chooseContributionPoint" type="button" class="outline">Pin</button><p id="newLocationStatus" role="status"></p></div>
+      <details id="freeformLocation" class="workflow-details"><summary>Coordinates</summary>
         <div class="contribution-coordinates">
           <label for="contributionLatitude">Latitude<input id="contributionLatitude" type="number" step="any" min="-90" max="90" inputmode="decimal"></label>
           <label for="contributionLongitude">Longitude<input id="contributionLongitude" type="number" step="any" min="-180" max="180" inputmode="decimal"></label>
         </div>
-        <div class="buttonrow"><button id="chooseContributionPoint" type="button" class="outline">Choose on map</button><button id="cancelContributionPoint" type="button" class="textbutton" disabled>Cancel</button></div>
+        <div class="buttonrow"><button id="cancelContributionPoint" type="button" class="textbutton" disabled>Cancel</button></div>
       </details>
       <details id="freeformContext" class="workflow-details"><summary>Sources</summary>
-        <label for="freeformSources">Links or references<textarea id="freeformSources" rows="3"></textarea></label>
+        <label for="freeformSources">Links or references<textarea id="freeformSources" rows="3"></textarea></label><div id="extraSources"></div><button id="addFreeformSource" type="button" class="outline">Add source</button>
       </details>
       <details id="freeformImages" class="workflow-details"><summary>Images</summary>
         <label for="contributionImages">Add images<input id="contributionImages" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="contributionImageLimits"></label>
         <p id="contributionImageLimits" class="small">Up to 3 images, 1 MB each. JPEG, PNG or WebP</p>
         <div id="contributionImageError" role="alert" hidden></div><div id="stagedContributionImages"></div>
       </details>
-      <details id="freeformDetails" class="workflow-details"><summary>Details</summary>
-        <div id="contributionAttributes"></div><button id="addContributionAttribute" type="button" class="outline">Add detail</button>
+      <details id="freeformDescription" class="workflow-details"><summary>Description</summary><label for="contributionSummary">Description<textarea id="contributionSummary" rows="3" required></textarea></label></details>
+      <details id="freeformDetails" class="workflow-details"><summary>Item</summary>
+        <div id="contributionAttributes"></div><button id="addContributionAttribute" type="button" class="outline">Add item</button>
       </details>
       <div id="typedCompatibilityFields" hidden inert>
       <label for="contributionFlow">Contribution<select id="contributionFlow"><option value="new">New point or area</option><option value="clarify">Clarify a record</option><option value="other">Other contribution</option></select></label>
@@ -127,7 +129,7 @@
     </form>
     <section id="contributionPreview" class="workflow-preview" aria-labelledby="previewContributionTitle" tabindex="-1" hidden></section>
     <div id="contributionReceipt" class="workflow-receipt" role="status" tabindex="-1" hidden></div>
-    <section id="contributionImageProgress" class="workflow-receipt" aria-label="Images" hidden><p id="contributionImageStatus" role="status"></p><button id="retryContributionImages" type="button" class="outline" hidden>Retry images</button></section>
+    <section id="contributionImageProgress" class="workflow-receipt" aria-label="Images" hidden><p id="contributionImageStatus" role="status"></p><button id="retryContributionImages" type="button" class="outline" hidden>Resume upload</button></section>
   </section>
   <section id="reviewView" class="workflow-view" hidden aria-labelledby="reviewQueueTitle">
     <h3 id="reviewQueueTitle" class="sr-only" tabindex="-1">Review</h3>
@@ -149,15 +151,21 @@
     <p id="accountStatus" role="status"></p><div id="accountActions" class="button-row"></div>
     <section id="accountRegistrationSection" hidden>
       <details><summary>Registration</summary><p id="accountRegistration" class="registration-receipt"></p><a id="accountEventLink" href="/register">Event registration</a></details>
-      <h3>Edits</h3><ul id="accountContributions"></ul>
+      <button id="openOwnEdits" type="button" class="outline">Edits</button><ul id="accountContributions"></ul>
     </section>
+  </div>
+</dialog>
+<dialog id="ownEditsDialog" class="registration-dialog" aria-labelledby="ownEditsTitle">
+  <div class="popout-head"><h2 id="ownEditsTitle">Edits</h2><button id="closeOwnEdits" class="close-control" type="button" aria-label="Close edits"><span aria-hidden="true">×</span></button></div>
+  <div class="edits-content"><p id="ownEditsStatus" role="status"></p><ol id="ownEditsList"></ol>
+    <nav class="edits-pagination" aria-label="Edit pages"><button id="previousEdits" class="outline" type="button">Previous</button><span id="editsPage" aria-live="polite"></span><button id="nextEdits" class="outline" type="button">Next</button></nav>
   </div>
 </dialog>
 <dialog id="recordEditorDialog" class="record-editor" aria-labelledby="recordEditorTitle">
   <div class="popout-head"><h2 id="recordEditorTitle">Edit</h2><button id="closeRecordEditor" class="close-control" type="button" aria-label="Close editor"><span aria-hidden="true">×</span></button></div>
   <div class="record-editor-content">
     <p id="recordEditorName" class="record-editor-name"></p>
-    <div class="record-editor-service"><p id="recordEditorStatus" class="small" role="status"></p><button id="reloadRecordEditor" class="textbutton" type="button" hidden>Retry</button></div>
+    <div class="record-editor-service"><p id="recordEditorStatus" class="small" role="status"></p><button id="reloadRecordEditor" class="textbutton" type="button" hidden>Load current record</button></div>
     <form id="recordEditorForm" novalidate>
       <label for="recordChangeMessage">Explanation<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
       <div id="recordEditorFields"></div>
@@ -166,7 +174,7 @@
     <div id="recordEditorErrors" role="alert" tabindex="-1" hidden></div>
     <section id="recordEditorPreview" aria-labelledby="recordEditorPreviewTitle" tabindex="-1" hidden>
       <h3 id="recordEditorPreviewTitle">Preview</h3><p id="recordEditorPreviewMode" class="small"></p><div id="recordEditorDiff"></div>
-      <button id="submitRecordEdit" class="primary" type="button" disabled>Submit</button>
+      <button id="submitRecordEdit" class="primary" type="button" disabled>Contribute</button>
     </section>
     <div id="recordEditorReceipt" role="status" tabindex="-1" hidden></div>
   </div>
