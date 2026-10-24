@@ -174,6 +174,12 @@
     }
   }
   window.addEventListener('contributions-point-changed', event => showPlate(event.detail?.point || null));
+  // A place plotted with the map's pin tool arrives already named by its cross streets.
+  window.addEventListener('contributions-plot-confirmed', event => {
+    const {latitude, longitude, name} = event.detail || {};
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    choosePoint({latitude, longitude, title: name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`, kind: 'Plotted'});
+  });
   clear.addEventListener('click', () => { $('cancelContributionPoint').click(); input.focus(); });
   // contributions.js restores a draft before this script loads.
   showPlate(window.ContributionPoint.get());

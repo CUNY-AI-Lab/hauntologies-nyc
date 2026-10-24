@@ -4,6 +4,13 @@ Source for the NYC Leaflet map and event registration, using Vinext (Vite with a
 
 Use Node.js 22.13 or newer. Install with `npm run install:ci` and run locally with `npm run dev`.
 
+To try contributing and reviewing on your own machine, run `npm run local` and open http://127.0.0.1:8790. Sign in from the map's Sign in button with a testing account; the password for both is `haunted-local-only`:
+
+- `contributor@local.test` submits places and sees their own work.
+- `reviewer@local.test` can also review and publish.
+
+The local server runs the real contribution service on SQLite in `.local/` (gitignored); `npm run local -- --fresh` starts over. Registration, password resets and image uploads need production services and are off locally.
+
 Build and prepare the existing Worker release:
 
 ```sh

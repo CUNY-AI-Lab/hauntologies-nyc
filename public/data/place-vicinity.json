@@ -1,0 +1,1042 @@
+{
+ "demolished-nyc-001": {
+  "at": "40.695140,-73.991470",
+  "near": "Pierrepont Plaza & Clinton St",
+  "area": "Brooklyn Heights, Brooklyn"
+ },
+ "demolished-nyc-002": {
+  "at": "40.704990,-74.009600",
+  "near": "Beaver St & William St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-004": {
+  "at": "40.709720,-74.013330",
+  "near": "Bankers Trust Plaza & Washington St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-005": {
+  "at": "40.706940,-74.009720",
+  "near": "Trump Building & Pine St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-006": {
+  "at": "40.707800,-74.010500",
+  "near": "Pine St & Wall St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-007": {
+  "at": "40.704720,-74.013060",
+  "near": "Broadway & Canyon Of Heroes",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-008": {
+  "at": "40.702940,-74.012670",
+  "near": "New York Plaza & Ny Plaza",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-009": {
+  "at": "40.716400,-73.994500",
+  "near": "Chrystie St & Grand St",
+  "area": "Chinatown, Manhattan"
+ },
+ "demolished-nyc-010": {
+  "at": "40.732220,-73.989110",
+  "near": "East 12th St & NYU Founders Hall",
+  "area": "East Village, Manhattan"
+ },
+ "demolished-nyc-011": {
+  "at": "40.754000,-73.980000",
+  "near": "5th Ave & Fifth Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-012": {
+  "at": "40.775000,-73.965000",
+  "near": "5th Ave & Fifth Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-013": {
+  "at": "40.764440,-73.966110",
+  "near": "Lexington Ave & East 63rd St",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-014": {
+  "at": "40.739720,-74.008890",
+  "near": "Gansevoort St & The Whitney",
+  "area": "West Village, Manhattan"
+ },
+ "demolished-nyc-015": {
+  "at": "40.608330,-74.038610",
+  "near": "Ft Hamilton & 69th Street Pier",
+  "area": "Fort Hamilton, Brooklyn"
+ },
+ "demolished-nyc-016": {
+  "at": "40.559860,-74.099070",
+  "near": "Smith Tabeek Ave & Joann Smith Tabeek Ave",
+  "area": "New Dorp Beach, Staten Island"
+ },
+ "demolished-nyc-017": {
+  "at": "40.837000,-73.848000",
+  "near": "Parker St & Zerega Ave",
+  "area": "Westchester, Bronx"
+ },
+ "demolished-nyc-018": {
+  "at": "40.881025,-73.876501",
+  "near": "Tryon Ave & Wayne Ave",
+  "area": "Norwood, Bronx"
+ },
+ "demolished-nyc-019": {
+  "at": "40.776080,-73.944430",
+  "near": "East End Ave & East 87th St",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-020": {
+  "at": "40.763890,-73.953610",
+  "near": "East 68th St & Rockefeller U Presidents House",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-021": {
+  "at": "40.762500,-73.955560",
+  "near": "Rockefeller University & The Rockefeller University",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-022": {
+  "at": "40.736416,-73.999588",
+  "near": "West 12th St",
+  "area": "West Village, Manhattan"
+ },
+ "demolished-nyc-023": {
+  "at": "40.745152,-73.945670",
+  "near": "Crane St & Davis St",
+  "area": "Long Island City, Queens"
+ },
+ "demolished-nyc-024": {
+  "at": "40.770889,-73.967667",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-025": {
+  "at": "40.726940,-73.995560",
+  "near": "B'Way & Broadway",
+  "area": "Greenwich Village, Manhattan"
+ },
+ "demolished-nyc-026": {
+  "at": "40.763311,-73.974097",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-027": {
+  "at": "40.765547,-73.971901",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-028": {
+  "at": "40.769981,-73.965500",
+  "near": "East 70th St & Park Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-029": {
+  "at": "40.769402,-73.969113",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-030": {
+  "at": "40.704440,-74.013890",
+  "near": "Alexander Hamilton Us Custom Hse & Us Custom House",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-031": {
+  "at": "40.782430,-73.959680",
+  "near": "Fifth Ave & Museum Mile",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-032": {
+  "at": "40.769490,-73.969180",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-033": {
+  "at": "40.786034,-73.957051",
+  "near": "Museum Mile & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-034": {
+  "at": "40.782164,-73.959957",
+  "near": "East 87th St & Fifth Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-035": {
+  "at": "40.769402,-73.969113",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-036": {
+  "at": "40.742400,-73.986300",
+  "near": "Madison Ave & Madison Square Plaza",
+  "area": "Flatiron District, Manhattan"
+ },
+ "demolished-nyc-037": {
+  "at": "40.809900,-73.939800",
+  "near": "Percy Sutton Ave & Sutton Ave",
+  "area": "Central Harlem, Manhattan"
+ },
+ "demolished-nyc-038": {
+  "at": "40.758554,-73.974617",
+  "near": "East 52nd St & Madison Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-039": {
+  "at": "40.768078,-73.970218",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-040": {
+  "at": "40.770500,-73.968200",
+  "near": "Fifth Ave & Coulter Pl",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-041": {
+  "at": "40.709528,-74.001500",
+  "near": "Pearl St & Water St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-042": {
+  "at": "40.781100,-73.984500",
+  "near": "West 73rd St & West End Ave",
+  "area": "Upper West Side, Manhattan"
+ },
+ "demolished-nyc-043": {
+  "at": "40.764100,-73.977100",
+  "near": "Avenue Of Americas & Avenue Of The Americas",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-044": {
+  "at": "40.759609,-73.976805",
+  "near": "5th Ave & West 51st St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-045": {
+  "at": "40.775222,-73.964667",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-046": {
+  "at": "40.769917,-73.968472",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-047": {
+  "at": "40.760030,-73.976470",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-048": {
+  "at": "40.779603,-73.961489",
+  "near": "5th Ave & Fifth Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-049": {
+  "at": "40.766361,-73.970806",
+  "near": "East 63rd St & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-050": {
+  "at": "40.726833,-74.005280",
+  "near": "Charlton St & Vandam St",
+  "area": "SoHo, Manhattan"
+ },
+ "demolished-nyc-051": {
+  "at": "40.753610,-73.983890",
+  "near": "6th Ave & Avenue Of Americas",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-052": {
+  "at": "40.711200,-74.008600",
+  "near": "Park Row & Ann St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-053": {
+  "at": "40.754440,-73.974250",
+  "near": "East 46th St & Park Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-054": {
+  "at": "40.771390,-73.967500",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Upper East Side, Manhattan"
+ },
+ "demolished-nyc-055": {
+  "at": "40.693702,-73.990383",
+  "near": "Christopher Columbus Park & Columbus Park",
+  "area": "Downtown Brooklyn, Brooklyn"
+ },
+ "demolished-nyc-056": {
+  "at": "40.752927,-73.978724",
+  "near": "Vanderbilt Ave & East 42 St Extension",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-057": {
+  "at": "40.708486,-74.012915",
+  "near": "Trinity Pl & Greenwich St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-058": {
+  "at": "40.708486,-74.012915",
+  "near": "Trinity Pl & Greenwich St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-059": {
+  "at": "40.707637,-74.011663",
+  "near": "Canyon Of Heroes & Broadway",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-060": {
+  "at": "40.706054,-74.013581",
+  "near": "B'Way & Trinity Pl",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-061": {
+  "at": "40.753900,-73.980500",
+  "near": "5th Ave & Fifth Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-062": {
+  "at": "40.707650,-74.007920",
+  "near": "Cedar St & Liberty St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-063": {
+  "at": "40.707582,-74.007860",
+  "near": "Cedar St & Liberty St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-064": {
+  "at": "40.707290,-74.011720",
+  "near": "New St & Wall St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-065": {
+  "at": "40.706670,-74.011390",
+  "near": "New St & Broad St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-066": {
+  "at": "40.704722,-74.014444",
+  "near": "Marine Pl & Broadway",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-067": {
+  "at": "40.709230,-74.011250",
+  "near": "Cedar St & B'Way",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-068": {
+  "at": "40.713060,-74.009440",
+  "near": "Barclay St & Church St",
+  "area": "Tribeca, Manhattan"
+ },
+ "demolished-nyc-069": {
+  "at": "40.713060,-74.009440",
+  "near": "Barclay St & Church St",
+  "area": "Tribeca, Manhattan"
+ },
+ "demolished-nyc-070": {
+  "at": "40.752697,-73.979981",
+  "near": "Library Way & East 41st St",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-071": {
+  "at": "40.752768,-73.978382",
+  "near": "Vanderbilt Ave & East 42 St Extension",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-072": {
+  "at": "40.706500,-74.011100",
+  "near": "New St & Broad St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-073": {
+  "at": "40.709858,-74.011117",
+  "near": "Broadway & The Canyon Of Heroes",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-074": {
+  "at": "40.708330,-74.010560",
+  "near": "The Equitable Building & B'Way",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-075": {
+  "at": "40.707570,-74.010500",
+  "near": "Pine St & Wall St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-077": {
+  "at": "40.747200,-73.985800",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-078": {
+  "at": "40.703800,-74.013000",
+  "near": "Whitehall St & Bridge St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-079": {
+  "at": "40.707780,-74.011670",
+  "near": "Canyon Of Heroes & Broadway",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-080": {
+  "at": "40.706400,-74.011000",
+  "near": "Broad St & Wall St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-081": {
+  "at": "40.768330,-73.982780",
+  "near": "The Shops At Columbus Circle & One Columbus Circle",
+  "area": "Upper West Side, Manhattan"
+ },
+ "demolished-nyc-082": {
+  "at": "40.712000,-74.005300",
+  "near": "Nassau St & Spruce St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-083": {
+  "at": "40.711390,-74.005280",
+  "near": "Printing House Square & Nassau St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-084": {
+  "at": "40.738000,-73.988000",
+  "near": "East 19th St & Park Avenue South",
+  "area": "Gramercy, Manhattan"
+ },
+ "demolished-nyc-085": {
+  "at": "40.753330,-73.978670",
+  "near": "East 42 St Extension & East 42nd St",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-086": {
+  "at": "40.713000,-74.006000",
+  "near": "City Hall Park & Broadway",
+  "area": "City Hall Area, Manhattan"
+ },
+ "demolished-nyc-087": {
+  "at": "40.709720,-74.010830",
+  "near": "Broadway & The Canyon Of Heroes",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-088": {
+  "at": "40.711110,-74.008610",
+  "near": "Ann St & B'Way",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-089": {
+  "at": "40.760183,-73.984481",
+  "near": "Seventh Ave & 7th Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-090": {
+  "at": "40.734370,-73.997530",
+  "near": "West 10th St & West Tenth St",
+  "area": "Greenwich Village, Manhattan"
+ },
+ "demolished-nyc-091": {
+  "at": "40.706700,-74.012300",
+  "near": "Exchange Pl & Canyon Of Heroes",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-092": {
+  "at": "40.755830,-73.975560",
+  "near": "East 48th St & Madison Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-093": {
+  "at": "40.710830,-74.009720",
+  "near": "B'Way & Broadway",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-094": {
+  "at": "40.711670,-74.012500",
+  "near": "Joe Dimaggio Highway & Wsh",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-095": {
+  "at": "40.711940,-74.011390",
+  "near": "Wtc Tower 2 & Wtc Complex",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-096": {
+  "at": "40.713767,-74.011159",
+  "near": "Park Pl & Bmcc Fiterman Hall",
+  "area": "Tribeca, Manhattan"
+ },
+ "demolished-nyc-097": {
+  "at": "40.734568,-73.988489",
+  "near": "Strasberg Way & Irving Pl",
+  "area": "Gramercy, Manhattan"
+ },
+ "demolished-nyc-098": {
+  "at": "40.730139,-73.991806",
+  "near": "Astor Pl & East 8th St",
+  "area": "East Village, Manhattan"
+ },
+ "demolished-nyc-099": {
+  "at": "40.745566,-73.998563",
+  "near": "Eighth Ave & 8th Ave",
+  "area": "Chelsea, Manhattan"
+ },
+ "demolished-nyc-100": {
+  "at": "40.809170,-73.949170",
+  "near": "West 125th St",
+  "area": "Central Harlem, Manhattan"
+ },
+ "demolished-nyc-101": {
+  "at": "40.754170,-73.987500",
+  "near": "7th Ave & Seventh Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-102": {
+  "at": "40.734500,-73.999600",
+  "near": "Avenue Of The Americas & Greenwich Ave",
+  "area": "West Village, Manhattan"
+ },
+ "demolished-nyc-103": {
+  "at": "40.716300,-74.001900",
+  "near": "Co Memorial Way & Court Officer Memorial Way",
+  "area": "City Hall Area, Manhattan"
+ },
+ "demolished-nyc-104": {
+  "at": "40.717600,-73.989300",
+  "near": "Essex St Academy & New Design HS",
+  "area": "Lower East Side, Manhattan"
+ },
+ "demolished-nyc-105": {
+  "at": "40.716300,-74.001900",
+  "near": "Co Memorial Way & Court Officer Memorial Way",
+  "area": "City Hall Area, Manhattan"
+ },
+ "demolished-nyc-106": {
+  "at": "40.866110,-73.810280",
+  "near": "Pelham Rd & Pelham Shore Rd",
+  "area": "Pelham Bay Park, Bronx"
+ },
+ "demolished-nyc-107": {
+  "at": "40.716940,-74.013890",
+  "near": "PS 89 & Public School 89",
+  "area": "Battery Park City, Manhattan"
+ },
+ "demolished-nyc-108": {
+  "at": "40.711500,-74.014900",
+  "near": "West St & Ny 9 A",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-109": {
+  "at": "40.711670,-74.011670",
+  "near": "Oculus Wtc & World Trade Center Transit Hub",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-110": {
+  "at": "40.711300,-74.014900",
+  "near": "West St & Ny 9 A",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-111": {
+  "at": "40.742780,-73.985560",
+  "near": "East 26th St & Madison Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-112": {
+  "at": "40.752800,-73.977200",
+  "near": "East 42nd St & East 42nd Street Extension",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-113": {
+  "at": "40.750300,-73.993100",
+  "near": "Louis Plaza & Eighth Ave",
+  "area": "Chelsea, Manhattan"
+ },
+ "demolished-nyc-114": {
+  "at": "40.566680,-74.113320",
+  "near": "Hylan Blvd & Lindbergh Ave",
+  "area": "New Dorp Beach, Staten Island"
+ },
+ "demolished-nyc-115": {
+  "at": "40.793826,-73.972808",
+  "near": "B'Way & Broadway",
+  "area": "Upper West Side, Manhattan"
+ },
+ "demolished-nyc-116": {
+  "at": "40.808610,-73.947220",
+  "near": "West 125th St & Dr Martin Luther King Jr Blvd",
+  "area": "Central Harlem, Manhattan"
+ },
+ "demolished-nyc-117": {
+  "at": "40.750100,-73.983400",
+  "near": "Fifth Ave & 5th Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-118": {
+  "at": "40.750944,-73.845500",
+  "near": "Armstrong Center & Armstrong Tennis Stadium",
+  "area": "Flushing Meadows, Queens"
+ },
+ "demolished-nyc-119": {
+  "at": "40.755560,-73.848060",
+  "near": "Tom Seaver Way & Seaver Way",
+  "area": "Flushing Meadows, Queens"
+ },
+ "demolished-nyc-120": {
+  "at": "40.826940,-73.928060",
+  "near": "Macombs Road Park & Heritage Field Playground",
+  "area": "Concourse, Bronx"
+ },
+ "demolished-nyc-121": {
+  "at": "40.644170,-74.075280",
+  "near": "Richmd Ter & Black Lives Matter Blvd",
+  "area": "St. George, Staten Island"
+ },
+ "demolished-nyc-122": {
+  "at": "40.742780,-73.985560",
+  "near": "East 26th St & Madison Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-123": {
+  "at": "40.742780,-73.985560",
+  "near": "East 26th St & Madison Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-124": {
+  "at": "40.762400,-73.987700",
+  "near": "West 49th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-125": {
+  "at": "40.831670,-73.937220",
+  "near": "Douglas Blvd & Frederick Douglas Blvd",
+  "area": "Washington Heights, Manhattan"
+ },
+ "demolished-nyc-126": {
+  "at": "40.819105,-73.951190",
+  "near": "Convent Ave & Harlem Stage Gatehouse",
+  "area": "Hamilton Heights, Manhattan"
+ },
+ "demolished-nyc-127": {
+  "at": "40.753610,-73.986110",
+  "near": "West 39th St & B'Way",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-128": {
+  "at": "40.757878,-73.987336",
+  "near": "West 44th St & A S Ochs St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-129": {
+  "at": "40.756800,-73.989600",
+  "near": "8th Ave & Times Square",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-130": {
+  "at": "40.756900,-73.987700",
+  "near": "Adolph S Ochs St & West 43rd St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-131": {
+  "at": "40.762500,-73.979440",
+  "near": "Avenue Of Americas & Sixth Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-132": {
+  "at": "40.717000,-74.005000",
+  "near": "Worth St & Leonard St",
+  "area": "Tribeca, Manhattan"
+ },
+ "demolished-nyc-133": {
+  "at": "40.758300,-73.985800",
+  "near": "G Abbott Way & West 45th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-134": {
+  "at": "40.747210,-73.988584",
+  "near": "West 30th St & Broadway",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-135": {
+  "at": "40.715891,-73.996550",
+  "near": "Bowery & Danny Chen Way",
+  "area": "Chinatown, Manhattan"
+ },
+ "demolished-nyc-136": {
+  "at": "40.755139,-73.987083",
+  "near": "Seventh Ave & Fashion Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-137": {
+  "at": "40.761950,-73.983900",
+  "near": "7th Ave & West 51st St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-138": {
+  "at": "40.753620,-73.987100",
+  "near": "B'Way & Broadway",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-139": {
+  "at": "40.758700,-73.980600",
+  "near": "6th Ave & Americas Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-140": {
+  "at": "40.770100,-73.980600",
+  "near": "Central Park West & Cen Park West",
+  "area": "Upper West Side, Manhattan"
+ },
+ "demolished-nyc-141": {
+  "at": "40.713000,-74.003000",
+  "near": "Center St & David N Dinkins Municipal Bldg",
+  "area": "City Hall Area, Manhattan"
+ },
+ "demolished-nyc-142": {
+  "at": "40.717000,-73.995000",
+  "near": "Hester St & Bowery",
+  "area": "Chinatown, Manhattan"
+ },
+ "demolished-nyc-143": {
+  "at": "40.754372,-73.985320",
+  "near": "Avenue Of The Americas & Avenue Of Americas",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-144": {
+  "at": "40.770800,-73.981700",
+  "near": "Broadway & B'Way",
+  "area": "Upper West Side, Manhattan"
+ },
+ "demolished-nyc-145": {
+  "at": "40.746500,-73.988700",
+  "near": "B'Way & Broadway",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-146": {
+  "at": "40.745589,-73.988933",
+  "near": "B'Way & West 28th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-147": {
+  "at": "40.737780,-73.997220",
+  "near": "West 14th St & Americas Ave",
+  "area": "Chelsea, Manhattan"
+ },
+ "demolished-nyc-148": {
+  "at": "40.758700,-73.985600",
+  "near": "B'Way & Broadway",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-149": {
+  "at": "40.743000,-73.986000",
+  "near": "East 26th St & Madison Ave",
+  "area": "Midtown East, Manhattan"
+ },
+ "demolished-nyc-150": {
+  "at": "40.750361,-73.986739",
+  "near": "Avenue Of The Americas & West 35th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-152": {
+  "at": "40.718184,-73.993860",
+  "near": "Chrystie St & Grand St",
+  "area": "Lower East Side, Manhattan"
+ },
+ "demolished-nyc-153": {
+  "at": "40.751110,-73.988194",
+  "near": "B'Way & Broadway",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-154": {
+  "at": "40.734000,-73.989500",
+  "near": "Fourth Ave & East 14th St",
+  "area": "East Village, Manhattan"
+ },
+ "demolished-nyc-155": {
+  "at": "40.709770,-74.008838",
+  "near": "John St & Nassau St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-156": {
+  "at": "40.752639,-73.987083",
+  "near": "Broadway & West 38th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-157": {
+  "at": "40.813390,-73.944870",
+  "near": "Acp Blvd & Acp",
+  "area": "Central Harlem, Manhattan"
+ },
+ "demolished-nyc-158": {
+  "at": "40.740480,-73.985960",
+  "near": "East 23rd St & Park Avenue South",
+  "area": "Flatiron District, Manhattan"
+ },
+ "demolished-nyc-159": {
+  "at": "40.742200,-73.990100",
+  "near": "5th Ave & Fifth Ave",
+  "area": "Flatiron District, Manhattan"
+ },
+ "demolished-nyc-160": {
+  "at": "40.749300,-73.988780",
+  "near": "B'Way & Broadway",
+  "area": "Chelsea, Manhattan"
+ },
+ "demolished-nyc-161": {
+  "at": "40.753350,-73.985961",
+  "near": "West 39th St & Americas Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-162": {
+  "at": "40.719720,-73.993890",
+  "near": "Bowery & Delancy St",
+  "area": "Lower East Side, Manhattan"
+ },
+ "demolished-nyc-163": {
+  "at": "40.723450,-73.991417",
+  "near": "Bowery & Chrystie St",
+  "area": "Lower East Side, Manhattan"
+ },
+ "demolished-nyc-164": {
+  "at": "40.766495,-73.979470",
+  "near": "7th Ave & West 59th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-165": {
+  "at": "40.729390,-73.993170",
+  "near": "B'Way & Broadway",
+  "area": "NoHo, Manhattan"
+ },
+ "demolished-nyc-166": {
+  "at": "40.755800,-73.983300",
+  "near": "6th Ave & Sixth Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-167": {
+  "at": "40.717000,-74.010000",
+  "near": "Duane St & Reade St",
+  "area": "Tribeca, Manhattan"
+ },
+ "demolished-nyc-168": {
+  "at": "40.724641,-73.996936",
+  "near": "Crosby St & B'Way",
+  "area": "SoHo, Manhattan"
+ },
+ "demolished-nyc-169": {
+  "at": "40.715800,-74.004500",
+  "near": "O'Dwyer Way & Paul O'Dwyer Way",
+  "area": "City Hall Area, Manhattan"
+ },
+ "demolished-nyc-170": {
+  "at": "40.692000,-73.988600",
+  "near": "H Ross Tubman Ave & Harriet Ross Tubman Ave",
+  "area": "Downtown Brooklyn, Brooklyn"
+ },
+ "demolished-nyc-171": {
+  "at": "40.711512,-74.007600",
+  "near": "Park Row & Theater Alley",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-172": {
+  "at": "40.759440,-73.982500",
+  "near": "6th Ave & West 49th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-173": {
+  "at": "40.760844,-73.981783",
+  "near": "West 50th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-174": {
+  "at": "40.722561,-73.999023",
+  "near": "Broadway & B'Way",
+  "area": "SoHo, Manhattan"
+ },
+ "demolished-nyc-175": {
+  "at": "40.709170,-74.008330",
+  "near": "Maiden Ln & Nassau St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-176": {
+  "at": "40.759240,-73.983330",
+  "near": "West 48th St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-177": {
+  "at": "40.734040,-73.990700",
+  "near": "Fourth Ave & 4th Ave",
+  "area": "East Village, Manhattan"
+ },
+ "demolished-nyc-178": {
+  "at": "40.725900,-73.996200",
+  "near": "B'Way & Crosby St",
+  "area": "NoHo, Manhattan"
+ },
+ "demolished-nyc-179": {
+  "at": "40.762560,-73.978730",
+  "near": "6th Ave & Sixth Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-180": {
+  "at": "40.643060,-74.096110",
+  "near": "Fillmore St & Lafayette Ave",
+  "area": "Randall Manor, Staten Island"
+ },
+ "demolished-nyc-181": {
+  "at": "40.706300,-74.013200",
+  "near": "Trinity Pl & Broadway",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-182": {
+  "at": "40.751900,-73.978300",
+  "near": "East 42nd St & Library Way",
+  "area": "Murray Hill, Manhattan"
+ },
+ "demolished-nyc-183": {
+  "at": "40.772780,-73.969720",
+  "near": "72nd Street Transverse & Olmstead Dr",
+  "area": "Central Park, Manhattan"
+ },
+ "demolished-nyc-184": {
+  "at": "40.707220,-74.010280",
+  "near": "Nassau St & Pine St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-185": {
+  "at": "40.707780,-74.004720",
+  "near": "Pearl St & Fulton St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-186": {
+  "at": "40.713100,-74.004600",
+  "near": "Chambers St & Reade St",
+  "area": "City Hall Area, Manhattan"
+ },
+ "demolished-nyc-187": {
+  "at": "40.705486,-74.007964",
+  "near": "Wall St & Beaver St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-188": {
+  "at": "40.716826,-74.001358",
+  "near": "Center St & Co Memorial Way",
+  "area": "City Hall Area, Manhattan"
+ },
+ "demolished-nyc-189": {
+  "at": "40.712000,-74.007400",
+  "near": "Park Row & Beekman St",
+  "area": "Financial District, Manhattan"
+ },
+ "demolished-nyc-190": {
+  "at": "40.742500,-73.988900",
+  "near": "General Worth Square & Worth Square",
+  "area": "Flatiron District, Manhattan"
+ },
+ "demolished-nyc-191": {
+  "at": "40.754170,-73.982220",
+  "near": "SUNY College Of Optometry & West 42nd St",
+  "area": "Midtown West, Manhattan"
+ },
+ "demolished-nyc-192": {
+  "at": "40.773800,-73.982800",
+  "near": "Broadway & The Juilliard School",
+  "area": "Upper West Side, Manhattan"
+ },
+ "demolished-nyc-193": {
+  "at": "40.828087,-73.933847",
+  "near": "East 161st St & West 155th St",
+  "area": "Highbridge, Bronx"
+ },
+ "demolished-nyc-194": {
+  "at": "40.832220,-73.934440",
+  "near": "Hrlm Drive Sr West & Harlem Drive West Sr",
+  "area": "Washington Heights, Manhattan"
+ },
+ "hauntpedia-merchants-house": {
+  "at": "40.727660,-73.992340",
+  "near": "East 4th St & East Fourth St",
+  "area": "NoHo, Manhattan"
+ },
+ "hauntpedia-morris-jumel": {
+  "at": "40.834470,-73.938580",
+  "near": "Edgecomb Ave & Jumel Ter",
+  "area": "Washington Heights, Manhattan"
+ },
+ "hauntpedia-house-of-death": {
+  "at": "40.733617,-73.996517",
+  "near": "West 10th St & West Tenth St",
+  "area": "Greenwich Village, Manhattan"
+ },
+ "hauntpedia-dakota": {
+  "at": "40.776667,-73.976389",
+  "near": "Central Park West & Cpw",
+  "area": "Upper West Side, Manhattan"
+ },
+ "hauntpedia-chelsea-hotel": {
+  "at": "40.744370,-73.996820",
+  "near": "West 23rd St",
+  "area": "Chelsea, Manhattan"
+ },
+ "hauntpedia-empire-state": {
+  "at": "40.748440,-73.985660",
+  "near": "5th Ave & Fifth Ave",
+  "area": "Midtown West, Manhattan"
+ },
+ "hauntpedia-new-amsterdam": {
+  "at": "40.755970,-73.988040",
+  "near": "New 42nd St & West 41st St",
+  "area": "Midtown West, Manhattan"
+ },
+ "hauntpedia-washington-square": {
+  "at": "40.730890,-73.997590",
+  "near": "No Washington Square & Washington Square Park",
+  "area": "Greenwich Village, Manhattan"
+ },
+ "hauntpedia-st-marks": {
+  "at": "40.730350,-73.987090",
+  "near": "2nd Ave & Second Ave",
+  "area": "East Village, Manhattan"
+ },
+ "hauntpedia-manhattan-well": {
+  "at": "40.724047,-74.000399",
+  "near": "Spring St & Greene St",
+  "area": "SoHo, Manhattan"
+ },
+ "hauntpedia-kreischer": {
+  "at": "40.532520,-74.238220",
+  "near": "Arthur Kill Rd & Tiller Ct",
+  "area": "Charleston, Staten Island"
+ },
+ "featured-ccny-shepard-hall": {
+  "at": "40.820522,-73.948296",
+  "near": "Convent Ave & Ccny Shepard Hall",
+  "area": "Hamilton Heights, Manhattan"
+ },
+ "featured-brooklyn-most-holy-trinity": {
+  "at": "40.706940,-73.944170",
+  "near": "Most Holy Trinity Church & Montrose Ave",
+  "area": "Williamsburg, Brooklyn"
+ },
+ "featured-queens-moving-image": {
+  "at": "40.756211,-73.923964",
+  "near": "35th Ave & 36th St",
+  "area": "Astoria, Queens"
+ },
+ "featured-bronx-collins-auditorium": {
+  "at": "40.862820,-73.886450",
+  "near": "Fordham U Collins Auditorium & Fordham U Collins Hall",
+  "area": "Fordham, Bronx"
+ },
+ "featured-csi-wsia": {
+  "at": "40.601830,-74.148510",
+  "near": "Coll Of Si Bookstore & Coll Of Si Cafeteria",
+  "area": "Bulls Head, Staten Island"
+ },
+ "second-avenue-deli": {
+  "at": "40.729485,-73.986578",
+  "near": "2nd Ave & East 10th St",
+  "area": "East Village, Manhattan"
+ }
+}
