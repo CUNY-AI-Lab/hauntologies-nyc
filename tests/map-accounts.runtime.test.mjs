@@ -88,8 +88,8 @@ test('configured map reviewer independently reviews through account sessions whi
   assert.equal(dashboard.body.submissions.length, 2);
   assert.equal(dashboard.body.capabilities.can_review, true);
   assert.equal(dashboard.body.capabilities.can_triage, true);
-  assert.equal(dashboard.body.capabilities.can_apply, false);
-  assert.equal(dashboard.body.capabilities.can_rollback, false);
+  assert.equal(dashboard.body.capabilities.can_apply, true);
+  assert.equal(dashboard.body.capabilities.can_rollback, true);
   const inspected = await h.call(detail, undefined, reviewer);
   assert.equal(inspected.status, 200);
   assert.equal(inspected.body.submission.is_own, false);
@@ -117,8 +117,9 @@ test('configured map reviewer independently reviews through account sessions whi
   assert.equal(own.body.submission.status, 'submitted');
   assert.equal(own.body.submission.approval, null);
   const apply = await h.call('/api/contributions/apply', {idempotency_key:crypto.randomUUID(),submission_id:submission.id,expected_revision:submission.revision,approval_hash:approved.body.submission.approval.approval_hash}, reviewer);
-  assert.equal(apply.status, 403);
-  assert.equal(apply.body.error, 'publisher_not_authorized');
+  // The reviewer may publish, but a proposal with no map point cannot change the map.
+  assert.equal(apply.status, 409);
+  assert.equal(apply.body.error, 'open_proposal_review_only');
   assert.equal((await h.db.prepare('SELECT count(*) n FROM workflow_jobs').first()).n, 0);
   assert.equal((await h.db.prepare('SELECT count(*) n FROM approved_records').first()).n, 0);
 
