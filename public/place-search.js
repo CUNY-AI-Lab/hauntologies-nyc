@@ -456,10 +456,13 @@
 
   function layout() {
     // In a horizontal Tools tray the toggle sits at the tray's left end, so
-    // the field and panel drop below the tray into the popout column instead.
+    // the field and panel drop below the tray into the popout column. On a
+    // phone they drop below the title card, beside the control column, so
+    // the field never covers the event details.
     const tray = root.closest('#mapToolTray');
     const row = Boolean(tray) && getComputedStyle(tray).flexDirection.startsWith('row');
-    root.classList.toggle('in-tray', row);
+    const below = row || narrow();
+    root.classList.toggle('drops-below', below);
     if (row) {
       const top = tray.getBoundingClientRect().bottom + 8, inset = narrow() ? 12 : 20;
       root.style.setProperty('--search-top', top + 'px');
@@ -469,10 +472,18 @@
       return;
     }
     const box = toggle.getBoundingClientRect(), masthead = document.querySelector('.masthead').getBoundingClientRect();
+    if (below) {
+      const brand = document.querySelector('.masthead .brand')?.getBoundingClientRect() || masthead;
+      const top = Math.max(brand.bottom, box.bottom) + 8;
+      root.style.setProperty('--search-top', top + 'px');
+      root.style.setProperty('--search-right', (innerWidth - box.left + 6) + 'px');
+      root.style.setProperty('--search-width', Math.max(160, box.left - 6 - masthead.left) + 'px');
+      root.style.setProperty('--search-panel-max', Math.max(160, innerHeight - top - 50 - 24) + 'px');
+      return;
+    }
     const room = Math.max(160, Math.min(380, box.left - masthead.left - 6));
     root.style.setProperty('--search-room', room + 'px');
-    // On narrow screens the panel also spans under the toggle; either way it starts where the field does.
-    root.style.setProperty('--search-panel-width', (narrow() ? room + 6 + box.width : room) + 'px');
+    root.style.setProperty('--search-panel-width', room + 'px');
     root.style.setProperty('--search-panel-max', Math.max(160, innerHeight - box.bottom - 96) + 'px');
   }
 
