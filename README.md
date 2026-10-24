@@ -24,7 +24,7 @@ Registering does not create a map account, which you need only to save contribut
 
 ## The map
 
-The map you will be adding to is live at https://hauntologies-nyc.ailab-452.workers.dev and opens on New York City, where anyone can search it for places and addresses, filter it by borough, type of place, period and certainty of location, and switch on aerial imagery of the city from 1924 forward to see what a place looked like then. Signing in lets you propose a new place with its sources and photographs, add to a place that is already on the map, or propose corrections to one, and a shared task list suggests where to start, with tasks such as documenting one reported haunting or clarifying one ambiguous date. Every proposal goes to a reviewer other than the contributor, and an approved proposal reaches the public map only when a publisher adds it.
+The map you will be adding to is live at https://hauntologies-nyc.ailab-452.workers.dev and opens on New York City, where anyone can search it for places and addresses, filter it by borough, type of place, period and certainty of location, and switch on aerial imagery of the city from 1924 forward to see what a place looked like then. Signing in lets you propose a new place with its sources and photographs, write a note about a place that is already on the map, or propose corrections to one, and a shared task list suggests where to start, with tasks such as documenting one reported haunting or clarifying one ambiguous date. Every proposal goes to a reviewer, who is someone other than the contributor except when an admin approves their own work, and an approved proposal reaches the public map only when a publisher adds it.
 
 ## Where to go from here
 

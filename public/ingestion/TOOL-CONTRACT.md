@@ -6,7 +6,7 @@ This contract governs how a model would help turn submitted text into map entrie
 
 The code in `server/` follows most of this contract and departs from it in a few places that matter to anyone building against it. The four service contracts below name functions that the code does not use, and its real surface is `/api/ingest/preview`, `/api/ingest/confirm`, `/api/ingest/status`, `/api/review` and `/api/records`, where preview takes `submission_json`, an idempotency key and `public_material_confirmed` and builds the derived data on the server, and confirm takes only `preview_id`, `preview_hash` and `acknowledge_unlocated`.
 
-The person who confirms is the signed-in owner of the submission, so no independent reviewer sees a record before it is approved, where the workflow below calls for a signed-in reviewer, and the public gate blocks every ingest route today, so none of this flow runs on the live site. Nothing reads `Retry-After` or `X-Should-Retry`, the provider treats a 402 or 429 response as a quota or rate-limit error and never retries, and each extraction makes three gateway requests, one for the model list, one for the quota and one for the completion, which is sent with a temperature of 0 and a limit of 1,200 output tokens.
+The person who confirms is the signed-in owner of the submission, so no independent reviewer sees a record before it is approved, where the workflow below calls for a signed-in reviewer, and the public gate blocks every ingest route today, so none of this flow runs on the live site. Nothing reads `Retry-After` or `X-Should-Retry`, nothing bounds per-user concurrency beyond the daily request cap, the provider treats a 402 or 429 response as a quota or rate-limit error and never retries, and each extraction makes three gateway requests, one for the model list, one for the quota and one for the completion, which is sent with a temperature of 0 and a limit of 1,200 output tokens.
 
 ## The gateway
 
@@ -92,9 +92,9 @@ These four contracts describe the intended service boundaries, and the routes li
 - Bound input bytes, output tokens, model calls, request time, per-user concurrency and rate, and verify that the provider supports hard output caps, since nobody should assume that the `temperature`, `response_format` or `tool_choice` extensions work.
 - Nothing retries automatically after an uncertain result, malformed output, a model mismatch or quota exhaustion, the gateway's `Retry-After` and `X-Should-Retry: false` headers must be honored, and the untouched input stays available for a manual retry.
 - Latitude and longitude are finite numbers together or null together, and an empty string is never coerced to zero.
-- The NYC bounds reject only obvious outliers, so trusted five-borough polygons decide whether a point belongs to the city, and a point outside NYC is never moved inside it.
+- Use trusted five-borough polygons to decide whether a point belongs to the city, treat a bounding box only as a check for obvious outliers, and never move a point outside NYC inside it.
 - The geocoder and source URLs are derived by the host and validated, except that a point the participant provides keeps the participant's own coordinate source URL after the same URL filter.
-- Logs hold technical IDs, status and usage only, and never keys, full prompts, raw participant content or raw upstream error bodies.
+- Keep logs to technical IDs, status and usage, and never write keys, full prompts, raw participant content or raw upstream error bodies into them.
 
 ## Acceptance checks
 

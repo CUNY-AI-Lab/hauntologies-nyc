@@ -4,19 +4,19 @@ This guide covers the Images control in the contribution form, and it is the nat
 
 ## What the form accepts
 
-A contribution can carry up to three images in JPEG, PNG or WebP format, each no larger than 5 MB when you choose it and no larger than 8,192 pixels on a side or 16,777,216 pixels in total, with SVG files and animated images rejected. The browser checks the file's signature and dimensions before decoding it and redraws the picture into a new copy, lowering the quality and then the dimensions, and turning a PNG into a lossy WebP if it has to, until the copy is under 1 MB, and it tells you the original and the reduced size, so the server receives only the reduced copy and your original file never leaves your device.
+A contribution can carry up to three images in JPEG, PNG or WebP format, each no larger than 5 MB when you choose it and no larger than 8,192 pixels on a side or 16,777,216 pixels in total, with SVG files and animated images rejected. The browser checks the file's signature and dimensions before decoding it and redraws the picture into a new copy, lowering the quality and then the dimensions, and turning a PNG into a lossy WebP if it has to, until the copy is under 1 MB, and it says so when it had to reduce the pixel dimensions, so the server receives only the reduced copy, with camera and location metadata removed, and your original file never leaves your device.
 
 Each image also carries a Caption, Alt text, a Credit, a Source link and a Rights field that starts as unknown, which the site keeps as your own words alongside the picture.
 
 ## Saving and retrying
 
-The form saves your text first and uploads images afterward, with each image showing Not uploaded until the site confirms that it arrived, so an image that fails leaves the contribution saved, and while the files you chose are still held in the tab and the failure is one the server can recover from, the Contribute view shows Resume upload, which retries them against the same contribution with the account that saved it, whereas an image the server rejects for its type or size, or because a limit is reached, has to be replaced. Files you have chosen wait only in the browser's memory, so closing the tab with files waiting brings up the browser's standard warning, although a crash or a reload can still lose them.
+The form saves your text first and uploads images afterward, with each image showing Not uploaded yet, and a note that nothing leaves the device before you submit, and then Uploading and Uploaded with your contribution once the site confirms that it arrived, so an image that fails leaves the contribution saved, and while the files you chose are still held in the tab and the failure is one the server can recover from, the Contribute view shows Resume upload, which retries them against the same contribution with the account that saved it, whereas an image the server rejects for its type or size, or because a limit is reached, has to be replaced. Files you have chosen wait only in the browser's memory, so closing the tab with files waiting brings up the browser's standard warning, although a crash or a reload can still lose them.
 
 A successful upload creates a new revision of the contribution and sets aside any earlier approval, because the evidence has changed, so a contribution that was already approved becomes a Draft that has to be submitted for review again.
 
 ## Who can see an image
 
-Only the contributor and reviewers can open an image, and only as a private download with a server-generated filename, with caching and content sniffing switched off and a sandbox policy applied. No public address exists for an image, and approving a contribution does not publish its images, since images never alter public records automatically.
+Only the contributor and reviewers can open an image, along with publishers once the contribution is approved, and only as a private download with a server-generated filename, with caching and content sniffing switched off and a sandbox policy applied. No public address exists for an image, and approving a contribution does not publish its images, since images never alter public records automatically.
 
 ## What the server checks
 
