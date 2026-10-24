@@ -194,6 +194,7 @@ test('mail budgets count dispatched messages and keep one network address from t
   // A recipient over budget gets the same answer as any other address, without mail.
   for(let i=0;i<5;i++) assert.deepEqual((await h.call('/api/auth/register',{email:'pending@example.test'})).body,{status:'check_email'});
   assert.equal(await mails('pending@example.test'),3);
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_verification').first()).n,3);
   const done='done@example.test';await h.register(done);
   for(let i=0;i<5;i++){
     assert.deepEqual((await h.call('/api/auth/request-reset',{email:done})).body,{status:'check_email'});
@@ -224,6 +225,10 @@ test('failed sign-ins from one network cannot lock another person out of their a
   // The account total still bounds guessing spread over several networks.
   for(let n=21;n<25;n++) for(let i=0;i<12;i++) await h.call('/api/auth/sign-in',{email,password:replacement},'',from('198.51.100.'+n));
   assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,429);
+  // A day cap keeps distributed guessing below the old single account cap.
+  const other='other-target@example.test';await h.register(other);
+  await seedLimit(h.db,'account-day:'+other,86400,1000);
+  assert.equal((await h.call('/api/auth/sign-in',{email:other,password})).status,429);
 });
 
 test('guest-code checks spend durable attempts per account and per network address',async t=>{

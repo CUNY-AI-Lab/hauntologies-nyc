@@ -190,8 +190,11 @@ export async function handleMapAccount(request, env) {
       body.email = body.email.toLowerCase();
       // Keyed per network and account first, so failed attempts from one network cannot lock
       // the account for everyone; the looser account total takes several networks.
+      // The day cap keeps guesses spread over networks below the old single
+      // 12/15min account cap (1152 a day).
       await rate(env, 'account-ip:' + ip + ':' + body.email, 12, 900);
       await rate(env, 'account:' + body.email, 60, 900);
+      await rate(env, 'account-day:' + body.email, 1000, 86400);
     }
     if (action === 'register' && !await admitted(env, body.email, body.access_code, ip, false)) throw failure('registration_restricted', 403);
     if (['register', 'request-reset'].includes(action)) {
@@ -201,6 +204,9 @@ export async function handleMapAccount(request, env) {
       // Admission's 500 daily messages.
       await rate(env, 'mail-ip:' + ip, 80, 3600);
       await rate(env, 'mail-ip-day:' + ip, 160, 86400);
+      // A spent recipient is answered before Better Auth stores another link that
+      // could not be mailed; setup links never expire, so they must stay bounded.
+      if (await exhausted(env, 'mail:' + body.email, MAIL_RECIPIENT, 3600)) return privateJson({ status: 'check_email' });
     }
     if (fields[action].includes('password') && !validPassword(body.password)) throw failure('password_length', 400);
     if (fields[action].includes('token') && (typeof body.token !== 'string' || !tokenPattern.test(body.token))) throw failure('invalid_token', 400);
