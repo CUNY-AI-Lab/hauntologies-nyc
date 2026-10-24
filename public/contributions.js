@@ -277,11 +277,12 @@
   let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
   let draftStorageKey='hauntologies-contribution-draft:anonymous';let draftRevisionBlocked=null;
   // Drafts outlive the tab: sign-in and email verification can continue in a new tab, and a
-  // session can expire mid-edit. They stay on this device for 14 days, are cleared once the
-  // contribution is saved, and can be discarded. Staged images stay in memory only.
-  const anonymousDraftKey='hauntologies-contribution-draft:anonymous',draftLifetime=14*24*60*60*1000;
+  // session can expire mid-edit. Account drafts stay 14 days, signed-out drafts one day; both are
+  // cleared once the contribution is saved, can be discarded, and account drafts end at sign-out.
+  // Staged images stay in memory only.
+  const anonymousDraftKey='hauntologies-contribution-draft:anonymous',draftLifetime=key=>(key===anonymousDraftKey?1:14)*24*60*60*1000;
   function readStoredDraft(key){
-    for(const store of [localStorage,sessionStorage]){try{const value=JSON.parse(store.getItem(key)||'null');if(value&&(!Number.isFinite(value.saved_at)||Date.now()-value.saved_at<draftLifetime))return value;}catch{}}
+    for(const store of [localStorage,sessionStorage]){try{const value=JSON.parse(store.getItem(key)||'null');if(value&&(!Number.isFinite(value.saved_at)||Date.now()-value.saved_at<draftLifetime(key)))return value;}catch{}}
     return null;
   }
   function forgetDraft(key){for(const store of [localStorage,sessionStorage]){try{store.removeItem(key);}catch{}}}
@@ -352,17 +353,26 @@
       draftRevisionBlocked=null;loadRevision(data.submission);restoreDraftFields(value);saveDraft();
     }catch(error){serviceFailure(error,restoreRevisionDraft);}
   }
+  const validDraft=value=>!(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string');
+  const sameDraft=(a,b)=>['object_title','explanation','sources'].every(key=>(a?.[key]||'').trim()===(b?.[key]||'').trim());
+  function applyDraft(value,label){
+    if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
+    restoreDraftFields(value);draftNotice(label+(draftTime(value)?' from '+draftTime(value):'')+'.',true);if(draftRevisionBlocked){restoreRevisionDraft();}
+    else if(value.record_id)chooseOpenReference(value.record_id,value.title);
+  }
+  // A draft written while signed out may belong to someone else on a shared computer, so it is
+  // offered rather than filled in. Restoring it while signed in moves it to that account.
+  function offerDraft(value){
+    const notice=byId('draftNotice');if(!notice)return;notice.replaceChildren(document.createTextNode('An unsent draft'+(draftTime(value)?' from '+draftTime(value):'')+' is on this device. '));notice.hidden=false;
+    notice.append(button('Restore draft',()=>{applyDraft(value,'Restored your unsent draft');if(draftStorageKey!==anonymousDraftKey){saveDraft();forgetDraft(anonymousDraftKey);}},'textbutton'),' ',button('Discard',()=>{forgetDraft(anonymousDraftKey);draftNotice('Draft discarded');},'textbutton'));
+  }
   function restoreDraft(){
     try{
-      // The newest of this account's draft and one written while signed out wins; a signed-out
-      // draft then moves to the account so it is not left behind for the next person.
-      const own=readStoredDraft(draftStorageKey),anonymous=draftStorageKey===anonymousDraftKey?null:readStoredDraft(anonymousDraftKey);
-      const value=anonymous&&(!own||(anonymous.saved_at||0)>(own.saved_at||0))?anonymous:own;
-      if(value&&value===anonymous){try{localStorage.setItem(draftStorageKey,JSON.stringify(value));}catch{}forgetDraft(anonymousDraftKey);}
-      if(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string')return;
-      if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
-      restoreDraftFields(value);draftNotice('Restored your unsent draft'+(draftTime(value)?' from '+draftTime(value):'')+'.',true);if(draftRevisionBlocked){restoreRevisionDraft();}
-      else if(value.record_id)chooseOpenReference(value.record_id,value.title);
+      const signedOut=draftStorageKey===anonymousDraftKey,own=signedOut?null:readStoredDraft(draftStorageKey),anonymous=readStoredDraft(anonymousDraftKey);
+      // Signing in from this tab: the form already holds the signed-out draft, so it stays with the account.
+      if(anonymous&&!signedOut&&validDraft(anonymous)&&sameDraft(anonymous,draftValue())){forgetDraft(anonymousDraftKey);saveDraft();return;}
+      if(own&&validDraft(own))applyDraft(own,'Restored your unsent draft');
+      if(anonymous&&validDraft(anonymous)&&!sameDraft(anonymous,draftValue())&&(!own||(anonymous.saved_at||0)>(own.saved_at||0)))offerDraft(anonymous);
     }catch{}
   }
   function showOpenReference(){
@@ -807,7 +817,9 @@
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;
     byId('draftTab').click();switchView('reviewView');await loadSubmission(id);
   });
-  window.addEventListener('contributions-session-ended',event=>clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute'));
+  window.addEventListener('contributions-session-ended',event=>{const accountKey=privateActor?draftStorageKey:null;clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute');
+    // Signing out on purpose removes the account's draft; an expired session keeps it for the next sign-in.
+    if(event.detail?.signedOut&&accountKey){forgetDraft(accountKey);draftNotice('');}});
   window.addEventListener('contributions-session-started',()=>loadDashboard());
   window.addEventListener('focus',async()=>{if(privateActor){const old=privateActor;try{const confirmed=await sessionActor();if(privateActor===old&&confirmed!==old)clearPrivateView('Account changed');}catch{if(privateActor===old)clearPrivateView('Sign in to contribute');}}});
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
