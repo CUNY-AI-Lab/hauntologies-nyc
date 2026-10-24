@@ -206,3 +206,12 @@ test('a configured publisher reaches apply; freeform proposals stay review-only'
   checkStatus(byPublisher, 409);
   assert.equal(byPublisher.body.error, 'open_proposal_review_only');
 });
+
+test('admins hold reviewer and publisher roles and are listed separately', () => {
+  const admin = mapActor(9);
+  const config = reviewAuthorization(JSON.stringify([reviewer]), undefined, JSON.stringify([admin]));
+  assert.deepEqual(config, { reviewers: [reviewer, admin], publishers: [admin], stewards: [], admins: [admin] });
+  assert.deepEqual(reviewAuthorization(undefined, undefined, JSON.stringify([admin])), { reviewers: [admin], publishers: [admin], stewards: [], admins: [admin] });
+  assert.deepEqual(reviewAuthorization(JSON.stringify([reviewer]), undefined, JSON.stringify([admin, 'invalid'])), { ...empty, reviewers: [reviewer] });
+  assert.deepEqual(reviewAuthorization(undefined, undefined, undefined), empty);
+});

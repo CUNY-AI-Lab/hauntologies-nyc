@@ -19,8 +19,13 @@ function actorList(raw) {
 // list (CONTRIBUTIONS_PUBLISHER_IDS) and have no effect without a valid reviewer list, because
 // nothing can be approved without an independent reviewer. An invalid publisher list grants no
 // publishers and leaves reviewers as configured.
-export function reviewAuthorization(rawReviewers, rawPublishers) {
-  const reviewers = actorList(rawReviewers);
-  if (!reviewers) return DISABLED;
-  return Object.freeze({ reviewers, publishers: (reviewers.length && actorList(rawPublishers)) || EMPTY, stewards: EMPTY });
+// Admins (CONTRIBUTIONS_ADMIN_IDS) hold both roles and alone may approve their own work; each
+// such approval is marked in its binding so the history shows it skipped independent review.
+export function reviewAuthorization(rawReviewers, rawPublishers, rawAdmins) {
+  const admins = actorList(rawAdmins) || EMPTY, listed = actorList(rawReviewers);
+  if (!listed && !admins.length) return DISABLED;
+  const unique = ids => Object.freeze([...new Set(ids)]);
+  const reviewers = unique([...(listed || EMPTY), ...admins]);
+  const publishers = unique([...((listed?.length && actorList(rawPublishers)) || EMPTY), ...admins]);
+  return Object.freeze({ reviewers, publishers, stewards: EMPTY, ...(admins.length ? { admins } : {}) });
 }

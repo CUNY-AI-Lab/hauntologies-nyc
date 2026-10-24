@@ -6,7 +6,7 @@ export async function publishedEdits(db) {
       AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
     JOIN workflow_submissions s ON s.id=j.submission_id
-    WHERE j.status='verified' AND a.reviewer_id<>s.owner_id
+    WHERE j.status='verified' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)
     ORDER BY j.updated_at DESC,j.id ASC LIMIT 20`).all();
   return results.flatMap(row => {
     try {
@@ -31,7 +31,7 @@ export async function publishedRecordPage(db,after=''){
   const {results=[]}=await db.prepare(`SELECT r.id,r.raw_json,r.derived_json,r.preview_hash FROM approved_records r
     JOIN workflow_jobs j ON j.id=r.preview_hash AND j.status='verified'
     JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
-    JOIN workflow_submissions s ON s.id=j.submission_id WHERE a.reviewer_id<>s.owner_id AND r.id>? ORDER BY r.id LIMIT 501`).bind(after).all();
+    JOIN workflow_submissions s ON s.id=j.submission_id WHERE (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1) AND r.id>? ORDER BY r.id LIMIT 501`).bind(after).all();
   return {records:results.slice(0,500).flatMap(publicRecord),next_cursor:results.length>500?results[499].id:null};
 }
 export async function publishedRecords(db){return (await publishedRecordPage(db)).records;}

@@ -27,9 +27,9 @@ function sqliteD1() {
     const operation = tail.then(async () => { native.exec('BEGIN'); try { const out = []; for (const s of statements) out.push(await s.run()); native.exec('COMMIT'); return out; } catch (error) { native.exec('ROLLBACK'); throw error; } });
     tail = operation.catch(() => {}); return operation; } };
 }
-function harness(t) {
+function harness(t, authorization = { reviewers: ['reviewer', 'reviewer2'], publishers: ['publisher'] }) {
   const db = sqliteD1(); t.after(() => db.native.close());
-  const service = createWorkflowService({ store: createWorkflowStore(db), staticRecords: [place], taskSeeds: { tasks: [] }, geography: { boundaries }, authorization: { reviewers: ['reviewer', 'reviewer2'], publishers: ['publisher'] } });
+  const service = createWorkflowService({ store: createWorkflowStore(db), staticRecords: [place], taskSeeds: { tasks: [] }, geography: { boundaries }, authorization });
   return { db, service };
 }
 async function call(h, path, body, actor = 'author') {
@@ -49,8 +49,8 @@ function edit(resolved, updates) {
 }
 const submit = async (h, value, actor = 'author') => ok(await call(h, 'submit', { idempotency_key: key(), submission_json: JSON.stringify(value) }, actor), 201).submission;
 const approve = (h, s, actor = 'reviewer') => call(h, 'review', { idempotency_key: key(), submission_id: s.id, expected_revision: s.revision, payload_hash: s.payload_hash, diff_hash: s.diff_hash, checks: Object.fromEntries(CHECKS.map(k => [k, 'pass'])), rationale: 'Synthetic independent review.' }, actor);
-const apply = (h, s) => call(h, 'apply', { idempotency_key: key(), submission_id: s.id, expected_revision: s.revision, approval_hash: s.approval.approval_hash }, 'publisher');
-const verify = (h, job) => call(h, 'verify', { idempotency_key: key(), job_id: job.id, map_list_check: { status: 'pass', evidence: 'Synthetic check of the map point and list entry.' } }, 'publisher');
+const apply = (h, s, actor = 'publisher') => call(h, 'apply', { idempotency_key: key(), submission_id: s.id, expected_revision: s.revision, approval_hash: s.approval.approval_hash }, actor);
+const verify = (h, job, actor = 'publisher') => call(h, 'verify', { idempotency_key: key(), job_id: job.id, map_list_check: { status: 'pass', evidence: 'Synthetic check of the map point and list entry.' } }, actor);
 async function publish(h, value, author = 'author') {
   const s = await submit(h, value, author), approved = ok(await approve(h, s), 200).submission, staged = ok(await apply(h, approved), 201);
   return { s, job: staged.job, verified: await verify(h, staged.job) };
@@ -135,4 +135,28 @@ test('successive edits build on the published version', async t => {
   assert.equal(record.title, 'One');
   assert.equal(record.description, 'Two');
   assert.equal((await target(h)).expected_version, v2.expected_version + 1);
+});
+
+test('an admin may approve and publish their own edit, and the approval records it', async t => {
+  const h = harness(t, { reviewers: ['admin', 'reviewer'], publishers: ['admin'], stewards: [], admins: ['admin'] });
+  const s = await submit(h, edit(await target(h), { title: 'Admin edit' }), 'admin');
+  const approved = ok(await approve(h, s, 'admin'), 200).submission;
+  const binding = JSON.parse(h.db.native.prepare('SELECT binding_json FROM workflow_approvals WHERE submission_id=?').get(s.id).binding_json);
+  assert.equal(binding.admin_self_approval, true);
+  ok(await verify(h, ok(await apply(h, approved, 'admin'), 201).job, 'admin'), 200);
+  assert.equal((await publishedRecords(h.db))[0].title, 'Admin edit');
+  assert.equal(ok(await call(h, 'dashboard', undefined, 'admin'), 200).capabilities.can_self_approve, true);
+});
+
+test('a reviewer who is not an admin still cannot approve their own work', async t => {
+  const h = harness(t, { reviewers: ['admin', 'reviewer'], publishers: ['admin'], stewards: [], admins: ['admin'] });
+  const s = await submit(h, edit(await target(h), { title: 'Reviewer own edit' }), 'reviewer');
+  const self = await approve(h, s, 'reviewer');
+  assert.equal(self.status, 403);
+  assert.equal(self.body.error, 'self_approval_forbidden');
+  assert.equal(ok(await call(h, 'dashboard', undefined, 'reviewer'), 200).capabilities.can_self_approve, false);
+  // An independent approval by someone else (here the admin) is not marked as self-approval.
+  ok(await approve(h, s, 'admin'), 200);
+  const binding = JSON.parse(h.db.native.prepare('SELECT binding_json FROM workflow_approvals WHERE submission_id=?').get(s.id).binding_json);
+  assert.equal(binding.admin_self_approval, undefined);
 });

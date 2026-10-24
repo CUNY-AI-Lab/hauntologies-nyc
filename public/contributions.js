@@ -834,13 +834,14 @@
   }
   const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
   function renderReviewControls(root,s){
-    const canReview=!!caps().can_review&&!!caps().independent_review_available&&!s.is_own&&s.status==='submitted'&&s.validation?.valid===true;
+    const canReview=!!caps().can_review&&!!caps().independent_review_available&&(!s.is_own||!!caps().can_self_approve)&&s.status==='submitted'&&s.validation?.valid===true;
     if(canReview){
       const form=el('form',undefined,'approval-form'),box=el('input'),confirmRow=el('label'),note=el('textarea'),approve=el('button','Approve','primary'),result=el('p',undefined,'small');
       box.type='checkbox';confirmRow.append(box,document.createTextNode(' I checked the sources, location, rights, duplicates and privacy'));
       note.rows=2;note.placeholder='Note (optional)';note.setAttribute('aria-label','Review note');approve.type='submit';approve.disabled=true;result.setAttribute('role','status');
       box.addEventListener('change',()=>approve.disabled=!box.checked);
       form.addEventListener('submit',async event=>{event.preventDefault();if(!box.checked)return;approve.disabled=true;try{await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(reviewKeys.map(key=>[key,'pass'])),rationale:note.value.trim()||'Checked sources, location, rights, duplicates and privacy.'});await loadDashboard();await loadSubmission(s.id);}catch(error){result.textContent=error.message;approve.disabled=!box.checked;}});
+      if(s.is_own)form.prepend(el('p','You are approving your own contribution as an admin. This is recorded.','small'));
       form.append(confirmRow,note,approve,result);root.append(form);
     }
     // Sending back always asks for a message, so the contributor knows what to change.
