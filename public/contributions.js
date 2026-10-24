@@ -84,13 +84,17 @@
     if(typeof request.actor_id!=='string'||!request.actor_id)throw Object.assign(new Error('Original account could not be confirmed'),{status:409});
     if(actor!==request.actor_id)throw Object.assign(new Error('Use the original account to retry this save'),{status:409});
   }
+  const signedOutMarker=actor=>'hauntologies-signed-out:'+actor;
+  const signedOutHere=actor=>{try{return !!localStorage.getItem(signedOutMarker(actor));}catch{return false;}};
   function clearPrivateView(message){
-    const endedKey=privateActor?draftStorageKey:null;
-    if(privateActor){saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
+    // After a sign-out in any tab the account's draft is removed, never saved again.
+    const endedKey=privateActor?draftStorageKey:null,signedOut=privateActor&&signedOutHere(privateActor);
+    if(signedOut)forgetDraft(endedKey);
+    if(privateActor){if(!signedOut)saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
     dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
     byId('workflowConnection').textContent=message;byId('reviewCapabilityNotice').textContent='';
     // Only when a session ended mid-edit; a signed-out page load keeps its own notice.
-    if(endedKey&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
+    if(endedKey&&!signedOut&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
     byId('submissionDetail').replaceChildren();byId('submissionDetail').hidden=true;
     byId('contributionReceipt').replaceChildren();byId('contributionReceipt').hidden=true;
     byId('contributionTargetPick').replaceChildren(new Option('No records',''));byId('useContributionTarget').disabled=true;
@@ -354,7 +358,9 @@
     }catch(error){serviceFailure(error,restoreRevisionDraft);}
   }
   const validDraft=value=>!(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string');
-  const sameDraft=(a,b)=>['object_title','explanation','sources'].every(key=>(a?.[key]||'').trim()===(b?.[key]||'').trim());
+  const draftBody=value=>JSON.stringify([value?.object_title||'',value?.explanation||'',value?.sources||'',value?.attributes||[],value?.point_fields||{},value?.record_id||'',value?.place_mode||'new']);
+  const draftHasContent=value=>!!(value&&(value.object_title||value.explanation||value.sources||value.attributes?.length||value.record_id||value.point_fields?.latitude||value.point_fields?.longitude));
+  const sameDraft=(a,b)=>draftHasContent(a)&&draftBody(a)===draftBody(b);
   function applyDraft(value,label){
     if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
     restoreDraftFields(value);draftNotice(label+(draftTime(value)?' from '+draftTime(value):'')+'.',true);if(draftRevisionBlocked){restoreRevisionDraft();}
@@ -370,7 +376,9 @@
     try{
       const signedOut=draftStorageKey===anonymousDraftKey,own=signedOut?null:readStoredDraft(draftStorageKey),anonymous=readStoredDraft(anonymousDraftKey);
       // Signing in from this tab: the form already holds the signed-out draft, so it stays with the account.
-      if(anonymous&&!signedOut&&validDraft(anonymous)&&sameDraft(anonymous,draftValue())){forgetDraft(anonymousDraftKey);saveDraft();return;}
+      // Only a non-empty form that matches the newer signed-out draft is adopted, written directly
+      // so an empty form can never overwrite the account's own draft.
+      if(anonymous&&!signedOut&&validDraft(anonymous)&&sameDraft(anonymous,draftValue())&&(!own||(anonymous.saved_at||0)>=(own.saved_at||0))){try{localStorage.setItem(draftStorageKey,JSON.stringify(anonymous));}catch{}forgetDraft(anonymousDraftKey);return;}
       if(own&&validDraft(own))applyDraft(own,'Restored your unsent draft');
       if(anonymous&&validDraft(anonymous)&&!sameDraft(anonymous,draftValue())&&(!own||(anonymous.saved_at||0)>(own.saved_at||0)))offerDraft(anonymous);
     }catch{}
@@ -628,7 +636,7 @@
     if(pendingWrite)showReconciliation();
   }
   async function loadDashboard(){const request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest)return null;
-    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();}
+    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();}
     const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
    }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
@@ -653,6 +661,15 @@
     }else{
       root.append(intakeText(envelope.summary),el('p','Review only','small'),validationView(result.validation),diffView(result.diff),rawDisclosure('Original',raw));
     }
+    // A preview the server could not check says why, and offers the step that gets it saved.
+    if(result.local){
+      const why={'sign-in':'Sign in to save this place. Your draft stays on this device while you do.',unavailable:'Saving is unavailable right now. Your draft stays on this device.',pending:'Still loading the place this changes. Try Preview again in a moment.'}[result.reason]||'This preview has not been checked yet.';
+      root.append(el('p',why,'preview-next-step'));
+      if(result.reason==='sign-in')root.append(button('Sign in to contribute',()=>{resumePreviewAfterSignIn=true;window.dispatchEvent(new CustomEvent('account-open-requested'));},'primary'));
+      else root.append(button('Try again',()=>byId('previewContribution').click(),'primary'));
+      root.focus();return;
+    }
+    if(!caps().can_submit)root.append(el('p','This account cannot submit contributions.','preview-next-step'));
     const send=button(revisionOf?'Revise':'Contribute',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
   }
   async function previewForm(event){
@@ -666,12 +683,17 @@
     for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
     if(errors.length){renderErrors(errors);return;}let envelope,raw;
     try{envelope=buildEnvelope();raw=JSON.stringify(envelope,null,2);}catch(error){renderErrors([{field:error.field,message:error.message}]);return;}
-    const local=()=>{const result={local:true,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
+    const local=(reason='pending')=>{const result={local:true,reason,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
     if(openTargetPending||openTargetFailed||draftRevisionBlocked){local();return;}
     const generation=identityGeneration,owner=privateActor;byId('previewContribution').disabled=true;
     try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});const confirmedActor=await sessionActor();if(generation!==identityGeneration||owner!==privateActor||confirmedActor!==owner)return;preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
-    catch(error){if(generation!==identityGeneration||owner!==privateActor)return;local();serviceFailure(error,()=>byId('previewContribution').click());}
-    finally{if(generation===identityGeneration)byId('previewContribution').disabled=false;}
+    catch(error){
+      // A 401 ends the private view, which changes identityGeneration. Signed out from the start,
+      // the preview still says how to save; after an expired session the draft notice says it.
+      if(error.status===401){if(!owner)local('sign-in');return;}
+      if(generation!==identityGeneration||owner!==privateActor)return;local('unavailable');serviceFailure(error,()=>byId('previewContribution').click());}
+    // Preview must never stay disabled after a failed check, whatever happened to the session.
+    finally{byId('previewContribution').disabled=false;}
   }
 
   async function submitPreview(){
@@ -817,10 +839,13 @@
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;
     byId('draftTab').click();switchView('reviewView');await loadSubmission(id);
   });
-  window.addEventListener('contributions-session-ended',event=>{const accountKey=privateActor?draftStorageKey:null;clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute');
+  window.addEventListener('contributions-session-ended',event=>{const accountKey=privateActor?draftStorageKey:null;if(event.detail?.signedOut&&privateActor){try{localStorage.setItem(signedOutMarker(privateActor),String(Date.now()));}catch{}}clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute');
     // Signing out on purpose removes the account's draft; an expired session keeps it for the next sign-in.
     if(event.detail?.signedOut&&accountKey){forgetDraft(accountKey);draftNotice('');}});
-  window.addEventListener('contributions-session-started',()=>loadDashboard());
+  // Signing in from a preview carries straight on to the checked preview.
+  let resumePreviewAfterSignIn=false;
+  window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
+  window.addEventListener('storage',event=>{if(privateActor&&event.key===signedOutMarker(privateActor)&&event.newValue)window.dispatchEvent(new CustomEvent('contributions-session-ended',{detail:{signedOut:true}}));});
   window.addEventListener('focus',async()=>{if(privateActor){const old=privateActor;try{const confirmed=await sessionActor();if(privateActor===old&&confirmed!==old)clearPrivateView('Account changed');}catch{if(privateActor===old)clearPrivateView('Sign in to contribute');}}});
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
   byId('tasksTool').addEventListener('click',()=>{byId('draftTab').click();switchView('taskView');loadSharedTasks();byId('toolsMenu').hidden=true;byId('toolsButton').setAttribute('aria-expanded','false');});
