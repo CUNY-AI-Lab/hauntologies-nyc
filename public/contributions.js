@@ -639,7 +639,9 @@
     const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
    }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
-  function validationView(validation){const root=el('div',undefined,'validation-result');root.append(el('strong',validation?.valid?'Valid':'Check fields'));['errors','warnings'].forEach(kind=>{if(validation?.[kind]?.length){root.append(el('h4',kind==='errors'?'Errors':'Warnings'));const list=el('ul');validation[kind].forEach(e=>list.append(el('li',typeof e==='string'?e:e.message||pretty(e))));root.append(list);}});return root;}
+  // Only problems a person can act on; a valid submission shows nothing, and the server's
+  // standing review notice is not repeated on every screen.
+  function validationView(validation){if(validation?.valid)return document.createDocumentFragment();const root=el('div',undefined,'validation-result');root.append(el('strong','Check these fields'));const list=el('ul');(validation?.errors||[]).forEach(e=>list.append(el('li',typeof e==='string'?e:e.message||pretty(e))));if(!list.children.length)list.append(el('li','This submission could not be checked.'));root.append(list);return root;}
   function diffView(diff){const root=el('details',undefined,'field-diff workflow-details');root.append(el('summary','Changes'));if(!diff||Array.isArray(diff)&&!diff.length){root.append(el('p','No data changes','small'));return root;}
     const changes=Array.isArray(diff)?diff:[diff];changes.forEach(change=>{const row=el('div',undefined,'diff-row');row.append(el('strong',change.field||change.path||change.record_id||'Proposed change'));const pair=el('div',undefined,'diff-pair');[['Before',change.before],['After',change.after]].forEach(([label,value])=>{const cell=el('div');cell.append(el('small',label),el('pre',value===undefined?'Not specified':pretty(value)));pair.append(cell);});row.append(pair);if(change.field===undefined&&change.before===undefined&&change.after===undefined)row.append(rawDisclosure('Details',change));root.append(row);});return root;}
   function editorialChecks(submission){const root=el('div',undefined,'editorial-checks');root.append(el('h4','Checks'));const checks=submission?.approval?.checks||submission?.checks||{};const list=el('dl',undefined,'workflow-metadata');['evidence_check','geography_check','rights_check','duplicate_check'].forEach(k=>list.append(el('dt',k.replace('_check','')),el('dd',checks[k]||submission?.approval?.[k]||'pending')));list.append(el('dt','Privacy review'),el('dd',checks.privacy_check||submission?.approval?.privacy_check||submission?.approval?.privacy_review||'pending'));root.append(list);return root;}
@@ -715,7 +717,39 @@
     }finally{busy=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}
   }
   function showSavedReadback(submission){const root=byId('contributionReceipt');root.replaceChildren(el('h3','Current saved contribution'),metadata([['Submission',submission.id],['Revision',submission.revision],['Status',statusLabel(submission.status)]]),button('Review',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.hidden=false;}
-  function showReceipt(submission,response){const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;root.append(el('h3','Saved'),metadata([['Submission',submission.id],['Revision',response.receipt.result.revision??submission.revision],['Status',statusLabel(submission.status)],['Receipt',response.receipt.id]]));if(submission.id)root.append(button('Review',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.focus();}
+  // Where a submission stands, in the order a contributor experiences it.
+  const progressSteps=['Saved','In review','Approved','On the map'];
+  const progressStage=status=>({draft:0,submitted:1,changes_requested:1,approved:2,merged:3})[status]??1;
+  const whenText=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';};
+  function nextStep(s){
+    if(s.status==='approved')return s.type==='open_proposal'?'Approved. Waiting for a publisher to add it to the map.':'Approved. Waiting to be published.';
+    return({draft:'Draft. Submit it when it is ready.',submitted:'Waiting for a reviewer.',changes_requested:'Sent back. Revise it and submit again.',merged:'On the public map.',withheld:'Withdrawn.'})[s.status]||'';
+  }
+  function submissionProgress(s){
+    const wrap=el('div',undefined,'submission-state'),list=el('ol',undefined,'submission-progress'),stage=progressStage(s.status);list.setAttribute('aria-label','Progress');
+    progressSteps.forEach((label,index)=>{const item=el('li',index===1&&s.status==='changes_requested'?'Needs changes':label);item.dataset.state=index<stage?'done':index===stage?'current':'next';if(index===stage)item.setAttribute('aria-current','step');list.append(item);});
+    wrap.append(list);const next=nextStep(s);if(next)wrap.append(el('p',next,'submission-next'));
+    return wrap;
+  }
+  // Keeps an open receipt or own submission current with the database while it is on screen.
+  let statusWatch=null;
+  function watchSubmission(id,root,status){
+    clearInterval(statusWatch?.timer);if(['merged','withheld'].includes(status))return;
+    const watch={id,status,timer:setInterval(async()=>{
+      if(!root.isConnected||root.hidden||!root.querySelector('.submission-state')){clearInterval(watch.timer);return;}
+      if(document.visibilityState!=='visible')return;
+      try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!s||s.status===watch.status)return;watch.status=s.status;
+        root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','withheld'].includes(s.status))clearInterval(watch.timer);}catch{}
+    },30000)};statusWatch=watch;
+  }
+  function showReceipt(submission,response){
+    const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;const revision=response.receipt.result.revision??submission.revision;
+    root.append(el('h3',revision>1?'Revision sent for review':'Sent for review'));
+    if(submission.title)root.append(el('p',submission.title,'submission-title'));
+    root.append(submissionProgress({...submission,revision}));
+    if(submission.id)root.append(button('View status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'textbutton'),el('p','Reference '+submission.id,'submission-ref'));
+    watchSubmission(submission.id,root,submission.status);root.focus();
+  }
 
   function clearRevision(){revisionOf=null;revisionOriginal=null;byId('revisionContext').hidden=true;byId('cancelRevision').hidden=true;invalidatePreview();}
   function loadRevision(submission){
@@ -732,24 +766,36 @@
     byId('revisionContext').replaceChildren(el('span','Revision '+submission.revision),el('br'),el('span','Submission: '+submission.id));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   }
 
-  function renderQueue(){const items=dashboard?.submissions||[],filter=byId('queueState').value,visible=items.filter(s=>filter==='all'||s.status===filter);byId('queueSummary').textContent=dashboard?`${visible.length} ${visible.length===1?'submission':'submissions'}`:'';const root=byId('contributionQueue');root.replaceChildren();if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'No matches':'No submissions');return;}visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');b.append(el('strong',s.title||s.id),el('span','Submission: '+s.id),el('span','Revision: '+s.revision),el('small','Status: '+statusLabel(s.status)));root.append(b);});}
+  function renderQueue(){const items=dashboard?.submissions||[],visible=items;byId('queueSummary').textContent='';const root=byId('contributionQueue');root.replaceChildren();if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'No matches':'No submissions');return;}visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');const status=el('span',statusLabel(s.status),'queue-status');status.dataset.status=s.status;const when=whenText(s.updated_at||s.created_at);b.append(el('strong',s.title||'Untitled contribution'),status,...(when?[el('small','Updated '+when)]:[]));root.append(b);});}
 
   async function loadSubmission(id){const request=++detailRequest,version=identityGeneration,root=byId('submissionDetail');root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const actor=await sessionActor(),data=await api('/submission?id='+encodeURIComponent(id)),confirmed=await sessionActor();if(request!==detailRequest||version!==identityGeneration||confirmed!==actor)return;if(privateActor&&privateActor!==actor){clearPrivateView('Account changed');return;}selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){if(request===detailRequest&&version===identityGeneration)empty(root,error.message);}}
-  function renderSubmission(s){const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.append(el('h3','Review'),el('strong',s.title||s.id),metadata([['Submission',s.id],['Revision',s.revision],['Status',statusLabel(s.status)]]),disclosure('Details',metadata([['Type',labels[s.type]||s.type],['Credit',s.public_credit?.consent?s.public_credit.label:'None'],['Created',s.created_at],['Updated',s.updated_at],['Payload hash',s.payload_hash],['Diff hash',s.diff_hash]]),validationView(s.validation)),diffView(s.diff),editorialChecks(s));
+  // Review shows each viewer only what they can act on: owners see their contribution and its
+  // progress; reviewers get one checklist; publishers see Apply only when something can be applied.
+  function renderSubmission(s){
+    const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;byId('contributionQueue').hidden=true;
+    root.append(button('All submissions',()=>{root.hidden=true;root.replaceChildren();byId('contributionQueue').hidden=false;renderQueue();},'textbutton submission-back'));
+    root.append(el('h3',s.title||'Untitled contribution','submission-title'),submissionProgress(s),validationView(s.validation));
     if(s.type==='open_proposal'){
       let original;try{original=JSON.parse(s.raw_json);}catch{}
-      if(original?.payload){root.append(intakeText(original.payload.explanation));const location=locationDetails(original.payload);if(location)root.append(location);if(original.payload.sources_text)root.append(rawDisclosure('Sources',original.payload.sources_text));if(original.payload.attributes?.length)root.append(disclosure('Details',metadata(original.payload.attributes.map(a=>[a.name,a.value]))));root.append(metadata([['Evidence','Unverified']]));}
+      const p=original?.payload;
+      if(p){root.append(intakeText(p.explanation));const c=p.geometry?.type==='Point'?p.geometry.coordinates:null;if(Array.isArray(c))root.append(el('p',c[1].toFixed(5)+', '+c[0].toFixed(5),'submission-meta'));if(p.sources_text)root.append(el('p','Sources: '+p.sources_text,'submission-meta'));}
+    }else{
+      if(s.type==='record_update'&&s.proposal?.change_message)root.append(intakeText(s.proposal.change_message));
+      root.append(diffView(s.diff));
     }
     renderPrivateImages(root,s.attachments);
-    if(s.type==='record_update'&&s.proposal?.change_message)root.append(el('h4','Message'),intakeText(s.proposal.change_message));
-    if(!s.application?.applicable)root.append(el('p','Review only','small'));
-    if(s.targets?.length)root.append(rawDisclosure('Targets',s.targets));root.append(rawDisclosure('Original',s.raw_json));
-    const history=el('details',undefined,'workflow-details');history.append(el('summary','History'));const list=el('ol');[...(s.revisions||[]),...(s.events||[])].forEach(event=>list.append(el('li',pretty(event))));if(!list.children.length)list.append(el('li','No events'));history.append(list);root.append(history);
-    if(s.is_own&&caps().can_submit)root.append(button('Revise',()=>loadRevision(s),'outline'));
-    if(s.capabilities?.can_triage||s.capabilities?.can_withhold){const form=el('form',undefined,'triage-form');form.append(el('h4','Triage'));const select=el('select');select.setAttribute('aria-label','Triage action');[...(s.capabilities?.can_triage?[['request_information','Request information'],['ready_for_review','Submit for review']]:[]),...(s.capabilities?.can_withhold?[['withhold','Withhold']]:[])].forEach(([value,label])=>{const o=el('option',label);o.value=value;select.append(o);});const reason=el('textarea');reason.rows=3;reason.required=true;reason.setAttribute('aria-label','Triage reason');reason.placeholder='';const save=el('button','Save','outline');save.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(labeledControl('Action',select),labeledControl('Reason',reason),save,output);form.addEventListener('submit',async event=>{event.preventDefault();save.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:select.value,rationale:reason.value});await loadDashboard();await loadSubmission(s.id);}catch(error){output.textContent=error.message;save.disabled=false;}});root.append(form);}
+    if(s.is_own){
+      watchSubmission(s.id,root,s.status);
+      const actions=el('div',undefined,'submission-actions');
+      if(caps().can_submit&&['draft','submitted','changes_requested'].includes(s.status))actions.append(button(s.status==='changes_requested'?'Revise and resubmit':'Revise',()=>loadRevision(s),'outline'));
+      if(s.capabilities?.can_withhold&&!['withheld','merged'].includes(s.status)){const out=el('span',undefined,'small');out.setAttribute('role','status');
+        const withdraw=button('Withdraw',async()=>{if(!confirm('Withdraw this contribution?'))return;withdraw.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'withhold',rationale:'Withdrawn by the contributor.'});await loadDashboard();await loadSubmission(s.id);}catch(error){out.textContent=error.message;withdraw.disabled=false;}},'textbutton');actions.append(withdraw,out);}
+      if(actions.children.length)root.append(actions);
+    }
     renderReviewControls(root,s);
+    root.append(el('p','Reference '+s.id+(s.revision>1?', revision '+s.revision:''),'submission-ref'));
   }
-  function renderJobs(){const root=byId('applicationJobs'),jobs=dashboard?.jobs||[];root.replaceChildren();if(!jobs.length){empty(root,'No jobs');return;}jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
+  function renderJobs(){const root=byId('applicationJobs'),jobs=dashboard?.jobs||[];root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;if(!jobs.length)return;jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
   function showReconciliation(ready=false){
     if(!pendingWrite||pendingWrite.actor_id!==privateActor)return;
     const root=byId('workflowConnection');root.querySelector('[data-reconciliation]')?.remove();
@@ -776,22 +822,28 @@
     if(pendingWrite)throw new Error('Previous save unresolved; check the queue');
     const actor_id=await sessionActor();if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
   }
+  const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
   function renderReviewControls(root,s){
     const canReview=!!caps().can_review&&!!caps().independent_review_available&&!s.is_own&&s.status==='submitted'&&s.validation?.valid===true;
-    const form=el('form',undefined,'approval-form');form.append(el('h4','Review'));
-    const checkFields={};['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'].forEach(key=>{
-      const label=el('label',key==='privacy_check'?'Privacy review':key.replace('_check','')+' review');const select=el('select');select.setAttribute('aria-label',key);['pending','pass','fail'].forEach(value=>{const option=el('option',statusLabel(value));option.value=value;select.append(option);});select.disabled=!canReview;checkFields[key]=select;label.append(select);form.append(label);
-    });
-    const reasonLabel=el('label','Reason');const reason=el('textarea');reason.rows=3;reason.disabled=!canReview;reason.required=true;reason.setAttribute('aria-label','Independent review reason');reasonLabel.append(reason);form.append(reasonLabel);
-    const approve=el('button','Approve','outline');approve.type='submit';approve.disabled=true;const result=el('p',undefined,'small');result.setAttribute('role','status');form.append(approve,result);
-    const update=()=>approve.disabled=!canReview||Object.values(checkFields).some(input=>input.value!=='pass')||!reason.value.trim();form.addEventListener('input',update);form.addEventListener('change',update);
-    form.addEventListener('submit',async event=>{event.preventDefault();if(approve.disabled)return;approve.disabled=true;try{await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(Object.entries(checkFields).map(([k,v])=>[k,v.value])),rationale:reason.value});await loadDashboard();await loadSubmission(s.id);}catch(error){result.textContent=error.message;update();}});
-    if(!canReview)form.append(el('p',s.is_own?'A different reviewer is required':!caps().can_review||!caps().independent_review_available?'Reviewer permission required':s.status!=='submitted'?'Submit for review first':'Resolve validation errors','small'));
-    root.append(form);
+    if(canReview){
+      const form=el('form',undefined,'approval-form'),box=el('input'),confirmRow=el('label'),note=el('textarea'),approve=el('button','Approve','primary'),result=el('p',undefined,'small');
+      box.type='checkbox';confirmRow.append(box,document.createTextNode(' I checked the sources, location, rights, duplicates and privacy'));
+      note.rows=2;note.placeholder='Note (optional)';note.setAttribute('aria-label','Review note');approve.type='submit';approve.disabled=true;result.setAttribute('role','status');
+      box.addEventListener('change',()=>approve.disabled=!box.checked);
+      form.addEventListener('submit',async event=>{event.preventDefault();if(!box.checked)return;approve.disabled=true;try{await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(reviewKeys.map(key=>[key,'pass'])),rationale:note.value.trim()||'Checked sources, location, rights, duplicates and privacy.'});await loadDashboard();await loadSubmission(s.id);}catch(error){result.textContent=error.message;approve.disabled=!box.checked;}});
+      form.append(confirmRow,note,approve,result);root.append(form);
+    }
+    // Sending back always asks for a message, so the contributor knows what to change.
+    if(!s.is_own&&s.capabilities?.can_triage&&s.status==='submitted'){
+      const back=button('Send back',()=>{back.hidden=true;const message=el('textarea');message.rows=2;message.placeholder='What should the contributor change?';message.setAttribute('aria-label','Message to the contributor');const send=button('Send',async()=>{if(!message.value.trim()){message.focus();return;}send.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'request_information',rationale:message.value.trim()});await loadDashboard();await loadSubmission(s.id);}catch(error){out.textContent=error.message;send.disabled=false;}},'outline'),out=el('p',undefined,'small');out.setAttribute('role','status');back.after(message,send,out);message.focus();},'textbutton');
+      root.append(back);
+    }
     const canApply=!!caps().can_apply&&s.status==='approved'&&s.approval?.independent===true&&s.approval?.revision===s.revision&&s.application?.applicable;
-    const apply=button('Apply',async()=>{
-      apply.disabled=true;const out=el('div',undefined,'small');root.append(out);try{const result=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});out.replaceChildren(metadata([['Job',result.job?.id||'Unknown'],['Status',statusLabel(result.job?.status)||'Recorded']]));await loadDashboard();}catch(error){out.textContent=error.message;apply.disabled=!canApply;}
-    },'outline');apply.disabled=!canApply;root.append(apply);
+    if(canApply){
+      const out=el('div',undefined,'small');
+      const apply=button('Apply',async()=>{apply.disabled=true;try{const result=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});out.textContent='Staged. Verify the job to publish it.';await loadDashboard();}catch(error){out.textContent=error.message;apply.disabled=false;}},'primary');
+      root.append(apply,out);
+    }
     window.dispatchEvent(new CustomEvent('contributions-review-rendered',{detail:{root,submission:s,capabilities:{...caps()}}}));
   }
   function jobControls(card,job){
