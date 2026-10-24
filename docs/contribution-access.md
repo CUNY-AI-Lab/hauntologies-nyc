@@ -40,6 +40,8 @@ New accounts receive no reviewer, publisher or attendee-dashboard grant. Those r
 
 An explicitly selected reviewer can be configured through `CONTRIBUTIONS_REVIEWER_IDS`, a JSON array of exact verified actor IDs. Map accounts use `map_` followed by their canonical lowercase UUIDv4; legacy verified Access IDs remain supported. Before assigning a map reviewer, confirm its verified account, password credential and signed-in actor ID. This grants private review and triage only. Self-approval stays prohibited, and publication and attendee access retain their separate controls.
 
+Publishers are configured separately through `CONTRIBUTIONS_PUBLISHER_IDS`, a JSON array in the same format and with the same 20-ID limit. A publisher can apply, verify and roll back independently approved changes; the reviewer list never grants publishing. The publisher list has no effect without a valid reviewer list, and an invalid publisher list grants no publishers while leaving reviewers unchanged. A publisher may also be a reviewer, but approval still requires a reviewer other than the submission's owner. Only structured entry bundles create map records: freeform proposals from the Contribute form remain review-only (`open_proposal_review_only`) until they are restated as an entry.
+
 ## Production release
 
 Target Worker: `hauntologies-nyc`, Cloudflare account `452c33847cf5cb1e46f391fca32fd1b5`. Existing D1 database: `hauntologies-nyc` / `df7f1e92-e339-4e25-ac30-989dd68d8dfc`. Public origin: `https://hauntologies-nyc.ailab-452.workers.dev`.
