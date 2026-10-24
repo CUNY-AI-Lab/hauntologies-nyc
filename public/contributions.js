@@ -280,7 +280,7 @@
   }
 
   // Intake stores the contributor's words; classification and plotting remain review work.
-  let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
+  let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openTargetStatus=0,openTargetLoad=null,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
   let draftStorageKey='hauntologies-contribution-draft:anonymous';let draftRevisionBlocked=null;
   // Drafts outlive the tab: sign-in and email verification can continue in a new tab, and a
   // session can expire mid-edit. Account drafts stay 14 days, signed-out drafts one day; both are
@@ -338,11 +338,13 @@
     }
   });
   function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
-  function draftValue(){return {version:1,object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
-  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
+  function draftValue(){return {version:1,place_text:byId('contributionPlace')?.value||'',object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
+  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.place_text||value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
-      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets)){forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);draftNotice('');}
+      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets)){forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);draftNotice('');
+        // A saved new place leaves an empty form, so the next one cannot inherit its title or place.
+        if(!revisionOf){resetOpenContext();byId('contributionSummary').value='';if(byId('contributionPlace'))byId('contributionPlace').value='';}}
     }catch{}
   }
   function restoreDraftFields(value){
@@ -351,6 +353,7 @@
     const coordinates=value.geometry?.type==='Point'?value.geometry.coordinates:null,point=Array.isArray(coordinates)&&coordinates.length===2?{latitude:coordinates[1],longitude:coordinates[0]}:null;setPointFields(pointShape(point)?point:null);
     if(value.point_fields&&['latitude','longitude'].every(key=>typeof value.point_fields[key]==='string'&&value.point_fields[key].length<=64)){byId('contributionLatitude').value=value.point_fields.latitude;byId('contributionLongitude').value=value.point_fields.longitude;}
     byId('contributionPlaceMode').value=value.place_mode;openRequestedRecordId=value.record_id;openTargetLabel=value.title;showOpenReference();
+    if(byId('contributionPlace')&&typeof value.place_text==='string'&&value.place_text.length<=300)byId('contributionPlace').value=value.place_text;
   }
   async function restoreRevisionDraft(){
     if(!draftRevisionBlocked)return;const version=identityGeneration,actor=privateActor,expected=draftRevisionBlocked,value=draftValue();
@@ -360,8 +363,8 @@
     }catch(error){serviceFailure(error,restoreRevisionDraft);}
   }
   const validDraft=value=>!(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string');
-  const draftBody=value=>JSON.stringify([value?.object_title||'',value?.explanation||'',value?.sources||'',value?.attributes||[],value?.point_fields||{},value?.record_id||'',value?.place_mode||'new']);
-  const draftHasContent=value=>!!(value&&(value.object_title||value.explanation||value.sources||value.attributes?.length||value.record_id||value.point_fields?.latitude||value.point_fields?.longitude));
+  const draftBody=value=>JSON.stringify([value?.place_text||'',value?.object_title||'',value?.explanation||'',value?.sources||'',value?.attributes||[],value?.point_fields||{},value?.record_id||'',value?.place_mode||'new']);
+  const draftHasContent=value=>!!(value&&(value.place_text||value.object_title||value.explanation||value.sources||value.attributes?.length||value.record_id||value.point_fields?.latitude||value.point_fields?.longitude));
   const sameDraft=(a,b)=>draftHasContent(a)&&draftBody(a)===draftBody(b);
   function applyDraft(value,label){
     if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
@@ -413,12 +416,13 @@
     const id='attribute-'+(++rowCounter);name.id=id+'-name';content.id=id+'-value';const nameLabel=el('label','Name'),valueLabel=el('label','Value');nameLabel.htmlFor=name.id;valueLabel.htmlFor=content.id;nameLabel.append(name);valueLabel.append(content);
     row.append(nameLabel,valueLabel,button('Remove',()=>{row.remove();byId('addContributionAttribute').disabled=false;invalidatePreview();saveDraft();},'textbutton'));root.append(row);byId('addContributionAttribute').disabled=root.children.length>=20;return name;
   }
-  async function chooseOpenReference(id,title=''){
-    const request=++openRequest;openTargets=[];openRequestedRecordId=id;openTargetPending=true;openTargetFailed=false;openTargetLabel=typeof title==='string'?title:'';showOpenReference();invalidatePreview();renderErrors([]);saveDraft();
+  function chooseOpenReference(id,title=''){openTargetLoad=loadOpenReference(id,title);return openTargetLoad;}
+  async function loadOpenReference(id,title){
+    const request=++openRequest;openTargetStatus=0;openTargets=[];openRequestedRecordId=id;openTargetPending=true;openTargetFailed=false;openTargetLabel=typeof title==='string'?title:'';showOpenReference();invalidatePreview();renderErrors([]);saveDraft();
     try{const data=await api('/target?id='+encodeURIComponent(id));if(request!==openRequest)return;const target=data.target;
       if(!target||target.record_id!==id||!Number.isInteger(target.expected_version)||typeof target.expected_hash!=='string')throw new Error('Reference unavailable');
       openTargets=[{record_id:target.record_id,expected_version:target.expected_version,expected_hash:target.expected_hash}];openTargetLabel=target.title||target.record_id;openTargetPending=false;showOpenReference();
-    }catch(error){if(request!==openRequest)return;openTargetPending=false;openTargetFailed=true;showOpenReference();serviceFailure(error,()=>chooseOpenReference(id,openTargetLabel));}
+    }catch(error){if(request!==openRequest)return;openTargetPending=false;openTargetFailed=true;openTargetStatus=error.status||0;showOpenReference();serviceFailure(error,()=>chooseOpenReference(id,openTargetLabel));}
   }
   let stagedImages=[],imageBatch=null,imageBusy=false,imageProcessing=false;
   const attachmentId=value=>typeof value==='string'&&/^watt_[0-9a-f-]{36}$/.test(value);
@@ -541,6 +545,7 @@
   byId('contributionImages').addEventListener('change',stageImages);
   byId('retryContributionImages').addEventListener('click',uploadImages);
   window.addEventListener('beforeunload',event=>{if((stagedImages.some(entry=>!entry.receipt)||[...privateImages.values()].some(saved=>saved.stagedImages.some(entry=>!entry.receipt)))){event.preventDefault();event.returnValue='';}});
+  const placeTyped=()=>(byId('contributionPlace')?.value||'').trim().slice(0,300);
   function buildIntakeEnvelope(){
     const explanation=revisionOriginal&&byId('contributionSummary').value===openExplanationDisplayInitial?openExplanationInitial:byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
@@ -555,6 +560,8 @@
     const sourcesText=sourceText();
     if(!prior||sourcesText!==openSourcesDisplayInitial)payload.sources_text=sourcesText===''?null:sourcesText;
     const attributes=attributeValues();if(attributes.length||Object.hasOwn(payload,'attributes'))payload.attributes=attributes;
+    // A place typed but never picked from the list is kept as words, not dropped.
+    const placeText=placeTyped();if(!prior&&placeText&&!payload.geometry&&!openTargets.length&&!openRequestedRecordId)payload.location_text=placeText;
     const title=byId('contributionObjectTitle').value.trim()||prior?.title||'Contribution';
     return prior?{...prior,title,summary:explanation,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title,summary:explanation,public_credit:{consent:false,label:''},sources:[],attachments:[],targets:structuredClone(openTargets),payload};
   }
@@ -662,7 +669,7 @@
     const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3','Preview'));root.firstChild.id='previewContributionTitle';
     if(envelope.type==='open_proposal'){
       root.append(intakeText(envelope.payload.explanation));if(result.local)root.append(el('p','Local preview','small'));
-      const location=locationDetails(envelope.payload);if(location)root.append(location);
+      const location=locationDetails(envelope.payload);if(location)root.append(location);if(envelope.payload.location_text)root.append(metadata([['Place',envelope.payload.location_text]]));
       if(envelope.payload.attributes?.length)root.append(disclosure('Details',metadata(envelope.payload.attributes.map(a=>[a.name,a.value]))));
       if(openTargetLabel)root.append(el('p',openTargetLabel));
       if(envelope.payload.sources_text)root.append(rawDisclosure('Sources',envelope.payload.sources_text));
@@ -693,10 +700,18 @@
     if(isOpenForm()&&byId('contributionPlaceMode').value==='existing'&&!openRequestedRecordId&&!openTargets.length)errors.push({field:'targets',message:'Choose an existing place'});
     const locationError=pointError();if(locationError)errors.push(locationError);
     for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
-    if(errors.length){renderErrors(errors);return;}let envelope,raw;
+    if(errors.length){renderErrors(errors);return;}
+    // A place chosen while signed out, or before a dropped connection, failed to load. Ask again
+    // rather than stopping at a local preview: signing in afterwards does not reload it.
+    const lookupGeneration=identityGeneration,lookupOwner=privateActor;
+    if(openRequestedRecordId&&openTargetFailed&&!draftRevisionBlocked)await chooseOpenReference(openRequestedRecordId,openTargetLabel);
+    else if(openTargetPending)await openTargetLoad;
+    if(lookupOwner&&(lookupGeneration!==identityGeneration||lookupOwner!==privateActor))return;
+    let envelope,raw;
     try{envelope=buildEnvelope();raw=JSON.stringify(envelope,null,2);}catch(error){renderErrors([{field:error.field,message:error.message}]);return;}
     const local=(reason='pending')=>{const result={local:true,reason,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
-    if(openTargetPending||openTargetFailed||draftRevisionBlocked){local();return;}
+    if(openTargetFailed){local(openTargetStatus===401?'sign-in':'unavailable');return;}
+    if(openTargetPending||draftRevisionBlocked){local();return;}
     const generation=identityGeneration,owner=privateActor;byId('previewContribution').disabled=true;
     try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});const confirmedActor=await sessionActor();if(generation!==identityGeneration||owner!==privateActor||confirmedActor!==owner)return;preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
     catch(error){
@@ -927,7 +942,7 @@
     if(event.detail?.signedOut&&accountKey){forgetDraft(accountKey);draftNotice('');}});
   // Signing in from a preview carries straight on to the checked preview.
   let resumePreviewAfterSignIn=false;
-  window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
+  window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(data&&openRequestedRecordId&&openTargetFailed&&!draftRevisionBlocked)await chooseOpenReference(openRequestedRecordId,openTargetLabel);if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
   // Returning to the tab picks up review decisions made elsewhere.
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&privateActor&&Date.now()-dashboardLoadedAt>30000)loadDashboard();});
   window.addEventListener('storage',event=>{if(privateActor&&event.key===signedOutMarker(privateActor)&&event.newValue)window.dispatchEvent(new CustomEvent('contributions-session-ended',{detail:{signedOut:true}}));});

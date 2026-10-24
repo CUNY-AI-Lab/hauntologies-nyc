@@ -71,7 +71,41 @@ function renderOwnPlaces(){
   ownPlacesLayer.addLayer(marker);
  }
 }
-window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));renderOwnPlaces();});
+window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));renderOwnPlaces();renderPendingPlaces();});
+// Everyone sees places sent for review as their own layer, before a reviewer decides.
+// A contribution to a mapped place sits as a badge beside that place's marker.
+let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;
+const pendingLabel=status=>status==='approved'?'Approved, publishing soon':status==='changes_requested'?'Under review: more information requested':'Under review';
+function pendingPopup(place,where){
+ const root=document.createElement('div');root.className='pending-place-popup';
+ const status=document.createElement('p');status.className='pending-place-status';status.textContent=pendingLabel(place.status);
+ const title=document.createElement('strong');title.textContent=place.title;root.append(status,title);
+ for(const text of [where,place.location_text&&place.location_text!==where?place.location_text:'',place.description]){if(!text)continue;const p=document.createElement('p');p.textContent=text;root.append(p);}
+ const note=document.createElement('p');note.className='small';note.textContent='Shared by a contributor. Not yet checked by a reviewer.';root.append(note);return root;
+}
+function renderPendingPlaces(){
+ if(!map)return;pendingPlacesLayer??=L.layerGroup().addTo(map);pendingPlacesLayer.clearLayers();
+ const own=new Set(ownPlaces.map(p=>p.id)),records=new Map(allRecords().map(r=>[r.id,r]));
+ for(const place of pendingPlaces){
+  if(own.has(place.id))continue;
+  const record=place.record_id?records.get(place.record_id):null,lat=record?Number(record.latitude):place.latitude,lon=record?Number(record.longitude):place.longitude;
+  if(!Number.isFinite(lat)||!Number.isFinite(lon))continue;
+  const label=pendingLabel(place.status);
+  const marker=L.marker([lat,lon],{pane:'researchPoints',zIndexOffset:650,keyboard:true,title:place.title+', '+label,icon:L.divIcon({className:'pending-place'+(record?' attached':''),html:'<span aria-hidden="true">?</span>',iconSize:record?[18,18]:[24,24],iconAnchor:record?[-4,22]:[12,12]})});
+  marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
+  marker.bindTooltip(place.title+' · '+label,{direction:'top',offset:[0,-10]});
+  marker.bindPopup(()=>pendingPopup(place,record?'Adds to '+(record.title||'a mapped place'):''),{maxWidth:280});
+  pendingPlacesLayer.addLayer(marker);
+ }
+}
+async function refreshPendingPlaces(){
+ const request=++pendingRequest;
+ try{const response=await fetch('/api/pending-places',{cache:'no-store'});if(!response.ok)return;const data=await response.json();if(request!==pendingRequest||!Array.isArray(data.places))return;
+  pendingPlaces=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string');renderPendingPlaces();}catch{}
+}
+window.addEventListener('contributions-records-changed',renderPendingPlaces);
+window.addEventListener('contributions-own-places',refreshPendingPlaces);
+window.addEventListener('focus',refreshPendingPlaces);
 // A fresh pin lands with one pulse; redrawing an existing pin does not repeat it.
 window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{
@@ -397,7 +431,7 @@ window.addEventListener('offline',()=>{$('mapStatus').textContent='Offline'});wi
 
 window.addEventListener('edits-place-requested',async event=>{await refreshPublishedPlaces();const record=allRecords().find(item=>item.id===event.detail?.recordId);if(!record)return;resetFilters(false);selectRecord(record);});
 
-refreshPublishedPlaces();
+refreshPublishedPlaces();refreshPendingPlaces();
 
 window.addEventListener('contributions-place-pick-requested',()=>{closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');
