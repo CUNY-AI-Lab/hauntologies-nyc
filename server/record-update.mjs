@@ -28,6 +28,6 @@ export async function recordUpdateProposal(envelope,v,getTarget,geography){
       else{const borough=boroughAt(lat,lon,geography.boundaries);if(!borough)v.issue('payload.changes','outside_nyc','The proposed point is outside NYC.');else if(after.borough!==null&&after.borough!=='unknown'&&after.borough!==borough)v.issue('payload.changes','borough_mismatch','The borough and proposed point disagree.');}
     }
   }
-  v.warn('payload','record_update_review_only','This is a proposed metadata update for independent human review. Original records and all source arrays remain unchanged.');
+  v.warn('payload','record_update_reviewed','This is a proposed metadata update for independent human review. It changes the map only after approval and a verified publish; the original record is kept for rollback.');
   return{type:'record_update',target,change_message:payload.change_message,editable_before:before,editable_after:result.after,field_diff:structuredClone(payload.changes||[]),source_additions:structuredClone(Array.isArray(payload.source_additions)?payload.source_additions:[]),geometry:null,source_refs:[]};
 }

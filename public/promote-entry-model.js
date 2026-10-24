@@ -87,7 +87,7 @@
 
   // An entry ID that is stable, group-prefixed and unlikely to collide; the server rejects a reused one.
   const newEntryId=(date,random)=>'HNY-'+date.replaceAll('-','')+'-'+random.slice(0,6).toUpperCase();
-  const promotable=(submission,capabilities)=>!!capabilities?.can_apply&&submission?.type==='open_proposal'&&submission.status==='approved'&&submission.approval?.independent===true&&submission.approval?.revision===submission.revision;
+  const promotable=(submission,capabilities)=>!!capabilities?.can_apply&&submission?.type==='open_proposal'&&submission.status==='approved'&&(submission.approval?.independent===true||submission.approval?.admin_self_approval===true)&&submission.approval?.revision===submission.revision;
 
   root.PromoteEntryModel=Object.freeze({categories,roles,boroughs,precisions,geoStatuses,geoMethods,rightsStatuses,publicUses,licenses,draft,withRequiredSources,envelope,newEntryId,promotable,source});
 })(typeof window!=='undefined'?window:globalThis);

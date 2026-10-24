@@ -143,10 +143,10 @@
   </section>
   <section id="reviewView" class="workflow-view" hidden aria-labelledby="reviewQueueTitle">
     <h3 id="reviewQueueTitle" class="sr-only" tabindex="-1">Review</h3>
-    <p id="reviewCapabilityNotice" class="notice"></p>
-    <button type="button" id="refreshContributions" class="outline">Refresh</button>
+    <p id="reviewCapabilityNotice" class="notice" hidden></p>
+    <button type="button" id="refreshContributions" class="outline" hidden>Refresh</button>
     <p id="queueSummary" class="count" aria-live="polite"></p>
-    <label for="queueState">Status<select id="queueState"><option value="all">All review states</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="changes_requested">Needs information</option><option value="approved">Approved</option><option value="merged">Merged</option></select></label>
+    <label for="queueState" hidden>Status<select id="queueState"><option value="all">All review states</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="changes_requested">Needs information</option><option value="approved">Approved</option><option value="merged">Merged</option></select></label>
     <div id="contributionQueue" class="submission-queue"></div>
     <article id="submissionDetail" class="submission-detail" tabindex="-1" hidden></article>
     <section class="workflow-jobs" aria-labelledby="jobHeading"><h3 id="jobHeading">Jobs</h3><div id="applicationJobs"></div></section>

@@ -58,6 +58,20 @@ function requestContributionPoint(latlng,replace=false){
  return accepted;
 }
 window.addEventListener('contributions-point-changed',event=>showProposedPoint(event.detail?.point));
+// A contributor sees their own unpublished places, marked by status; nobody else does.
+let ownPlacesLayer=null,ownPlaces=[];
+function renderOwnPlaces(){
+ if(!map)return;ownPlacesLayer??=L.layerGroup().addTo(map);ownPlacesLayer.clearLayers();
+ for(const place of ownPlaces){
+  const label=place.status==='changes_requested'?'Sent back to you':place.status==='approved'?'Approved, not yet on the map':place.status==='draft'?'Draft':'Waiting for review';
+  const marker=L.marker([place.latitude,place.longitude],{pane:'researchPoints',zIndexOffset:700,title:place.title+', '+label,icon:L.divIcon({className:'own-place',html:'<span aria-hidden="true"></span>',iconSize:[26,26],iconAnchor:[13,13]})});
+  const tip=document.createElement('span');tip.append(document.createTextNode(place.title),document.createElement('br'),document.createTextNode(label));marker.bindTooltip(tip,{direction:'top',offset:[0,-12]});
+  marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
+  marker.on('click',()=>window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:place.id}})));
+  ownPlacesLayer.addLayer(marker);
+ }
+}
+window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));renderOwnPlaces();});
 // A fresh pin lands with one pulse; redrawing an existing pin does not repeat it.
 window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{

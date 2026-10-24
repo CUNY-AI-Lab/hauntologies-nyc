@@ -24,7 +24,7 @@ export async function harness(t, {mailFailure = false, eligibilityEnabled = fals
           await env.DB.prepare('INSERT INTO hny_test_mail (email,kind,token,expires_at) VALUES (?,?,?,?)').bind(input.email,input.kind,input.token,input.expiresAt).run();
           return { status:'accepted' };
         }};
-        const handler = {fetch: req => createWorkflowService({store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}, authorization:reviewAuthorization(env.CONTRIBUTIONS_REVIEWER_IDS, env.CONTRIBUTIONS_PUBLISHER_IDS), geography:{boundaries:${await readFile(path.join(root,'public/data/nyc-borough-boundaries.geojson'),'utf8')}}, staticRecords:[{id:'second-avenue-deli',title:'Synthetic existing place',latitude:40.75,longitude:-73.98}]}).handle(req)};
+        const handler = {fetch: req => createWorkflowService({store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}, authorization:reviewAuthorization(env.CONTRIBUTIONS_REVIEWER_IDS, env.CONTRIBUTIONS_PUBLISHER_IDS, env.CONTRIBUTIONS_ADMIN_IDS), geography:{boundaries:${await readFile(path.join(root,'public/data/nyc-borough-boundaries.geojson'),'utf8')}}, staticRecords:[{id:'second-avenue-deli',title:'Synthetic existing place',latitude:40.75,longitude:-73.98}]}).handle(req)};
         return createDemoWorker(handler, handleRegistration).fetch(request,env,ctx);
       }};
     `, resolveDir: root }, bundle: true, write: false, format: 'esm', platform: 'node', conditions: ['workerd', 'node'], target: 'es2022' });

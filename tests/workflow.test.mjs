@@ -640,12 +640,14 @@ test('rollback fails closed if an affected record has a later release, with no p
   await release(h, dateCorrection(first, 1910));
   const latestA = await h.store.getRecord('wf_TEST-001'), latestB = await h.store.getRecord('wf_TEST-002');
   const rollback = await call(h, '/api/contributions/rollback', { idempotency_key: nextKey(h, 'rollback'), job_id: initial.verified.job.id, rationale: 'Synthetic conflict rehearsal; later work must remain.' }, { actor: 'publisher' });
-  assertStatus(rollback, 200);
-  assert.equal(rollback.body.job.status, 'conflict');
-  assert.equal(rollback.body.job.verification.outcome, 'rollback_conflict');
+  // Refused before any write: the job stays verified, so records it still serves stay public.
+  assertStatus(rollback, 409);
+  assert.equal(rollback.body.error, 'release_superseded');
   assert.deepEqual(await h.store.getRecord('wf_TEST-001'), latestA);
   assert.deepEqual(await h.store.getRecord('wf_TEST-002'), latestB);
-  assert(rollback.body.submission.events.some(event => event.kind === 'rollback_conflict'));
+  assert.equal((await h.store.getJob(initial.verified.job.id)).status, 'verified');
+  const { publishedRecords } = await import('../server/published-edits.mjs');
+  assert.deepEqual((await publishedRecords(h.db)).map(record => record.id).sort(), ['wf_TEST-001', 'wf_TEST-002']);
 });
 
 test('a post-activation readback failure produces an audited bounded restore', async t => {
