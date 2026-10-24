@@ -11,6 +11,8 @@ function whereLabel(r,n=AtlasModel.normalize(r)){if(!n.geometry)return 'Unlocate
 // Tooltips are for a hovering mouse. On touch a tap would leave one standing behind the popup or card.
 const hoverTips=matchMedia('(hover: hover)').matches;
 function bindHoverTip(marker,content,options){if(hoverTips)marker.bindTooltip(content,options);marker.on('popupopen',()=>marker.closeTooltip());return marker;}
+// The title card floats over the top of the map, so popups pan to open below its current edge.
+if(window.L?.Popup){const adjustPan=L.Popup.prototype._adjustPan;L.Popup.prototype._adjustPan=function(...args){const card=document.querySelector('.brand')?.getBoundingClientRect(),mapTop=this._map?.getContainer().getBoundingClientRect().top||0;this._basePad??=L.point(this.options.autoPanPaddingTopLeft||this.options.autoPanPadding);this.options.autoPanPaddingTopLeft=[this._basePad.x,Math.max(this._basePad.y,card?Math.round(card.bottom-mapTop)+8:0)];return adjustPan.apply(this,args)}}
 fetch('data/place-vicinity.json',{cache:'force-cache'}).then(r=>r.ok?r.json():{}).then(data=>{vicinity=data&&typeof data==='object'?data:{};if(map)renderRecords();}).catch(()=>{});
 const NYC_BOUNDS=[[40.47737324425922,-74.25874745984156],[40.91766180885905,-73.70000906387347]], STORAGE='hauntologies-nyc-drafts-v1';
 const LAYERS=window.HAUNT_LAYERS||[], layerById=new Map(LAYERS.map(layer=>[layer.id,layer]));

@@ -44,3 +44,8 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 .plot-confirm .small{color:var(--muted)}
 .plot-confirm-actions{display:flex;gap:8px;margin-top:8px}
 .plot-confirm-actions button{min-height:40px;padding:6px 12px}
+
+/* iPhone Safari zooms the whole page when a field under 16px is focused, and stays zoomed. */
+@media (pointer:coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea{font-size:16px!important}
+}
