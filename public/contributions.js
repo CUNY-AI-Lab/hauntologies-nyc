@@ -92,6 +92,7 @@
     if(signedOut)forgetDraft(endedKey);
     if(privateActor){if(!signedOut)saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
     dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
+    clearInterval(statusWatch?.timer);statusWatch=null;byId('contributionQueue').hidden=false;
     window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:[]}}));
     byId('workflowConnection').textContent=message;byId('reviewCapabilityNotice').textContent='';
     // Only when a session ended mid-edit; a signed-out page load keeps its own notice.
@@ -746,14 +747,14 @@
   function watchSubmission(id,root,status){
     clearInterval(statusWatch?.timer);if(['merged','withheld'].includes(status))return;
     const watch={id,status,timer:setInterval(async()=>{
-      if(!root.isConnected||root.hidden||!root.querySelector('.submission-state')){clearInterval(watch.timer);return;}
+      if(!root.isConnected||root.hidden||root.dataset.submissionId!==id||!root.querySelector('.submission-state')){clearInterval(watch.timer);return;}
       if(document.visibilityState!=='visible')return;
       try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!s||s.status===watch.status)return;watch.status=s.status;
         root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','withheld'].includes(s.status))clearInterval(watch.timer);}catch{}
     },30000)};statusWatch=watch;
   }
   function showReceipt(submission,response){
-    const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;const revision=response.receipt.result.revision??submission.revision;
+    const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;root.dataset.submissionId=submission.id;const revision=response.receipt.result.revision??submission.revision;
     root.append(el('h3',revision>1?'Revision sent for review':'Sent for review'));
     if(submission.title)root.append(el('p',submission.title,'submission-title'));
     root.append(submissionProgress({...submission,revision}));
@@ -778,17 +779,19 @@
 
   function renderQueue(){const items=dashboard?.submissions||[],visible=items;byId('queueSummary').textContent='';const root=byId('contributionQueue');root.replaceChildren();if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'No matches':'No submissions');return;}visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');const status=el('span',statusLabel(s.status),'queue-status');status.dataset.status=s.status;const when=whenText(s.updated_at||s.created_at);b.append(el('strong',s.title||'Untitled contribution'),status,...(when?[el('small','Updated '+when)]:[]));root.append(b);});}
 
-  async function loadSubmission(id){const request=++detailRequest,version=identityGeneration,root=byId('submissionDetail');root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const actor=await sessionActor(),data=await api('/submission?id='+encodeURIComponent(id)),confirmed=await sessionActor();if(request!==detailRequest||version!==identityGeneration||confirmed!==actor)return;if(privateActor&&privateActor!==actor){clearPrivateView('Account changed');return;}selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){if(request===detailRequest&&version===identityGeneration)empty(root,error.message);}}
+  async function loadSubmission(id){const request=++detailRequest,version=identityGeneration,root=byId('submissionDetail');root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const actor=await sessionActor(),data=await api('/submission?id='+encodeURIComponent(id)),confirmed=await sessionActor();if(request!==detailRequest||version!==identityGeneration||confirmed!==actor)return;if(privateActor&&privateActor!==actor){clearPrivateView('Account changed');return;}selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){if(request===detailRequest&&version===identityGeneration){empty(root,error.message);byId('contributionQueue').hidden=false;}}}
   // Review shows each viewer only what they can act on: owners see their contribution and its
   // progress; reviewers get one checklist; publishers see Apply only when something can be applied.
   function renderSubmission(s){
-    const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;byId('contributionQueue').hidden=true;
+    const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.dataset.submissionId=s.id;byId('contributionQueue').hidden=true;clearInterval(statusWatch?.timer);statusWatch=null;
     root.append(button('All submissions',()=>{root.hidden=true;root.replaceChildren();byId('contributionQueue').hidden=false;renderQueue();},'textbutton submission-back'));
     root.append(el('h3',s.title||'Untitled contribution','submission-title'),submissionProgress(s),validationView(s.validation));
     if(s.type==='open_proposal'){
       let original;try{original=JSON.parse(s.raw_json);}catch{}
       const p=original?.payload;
-      if(p){root.append(intakeText(p.explanation));const c=p.geometry?.type==='Point'?p.geometry.coordinates:null;if(Array.isArray(c))root.append(el('p',c[1].toFixed(5)+', '+c[0].toFixed(5),'submission-meta'));if(p.sources_text)root.append(el('p','Sources: '+p.sources_text,'submission-meta'));}
+      if(p){root.append(intakeText(p.explanation));const c=p.geometry?.type==='Point'?p.geometry.coordinates:null;if(Array.isArray(c)&&c.length===2&&c.every(Number.isFinite))root.append(el('p',c[1].toFixed(5)+', '+c[0].toFixed(5),'submission-meta'));if(p.sources_text)root.append(el('p','Sources: '+p.sources_text,'submission-meta'));
+        // Reviewers confirm privacy for everything submitted, so they see all of it.
+        if(!s.is_own&&Array.isArray(p.attributes)&&p.attributes.length)root.append(disclosure('Facts',metadata(p.attributes.map(a=>[a.name,a.value]))));}
     }else{
       if(s.type==='record_update'&&s.proposal?.change_message)root.append(intakeText(s.proposal.change_message));
       root.append(diffView(s.diff));
@@ -803,6 +806,7 @@
       if(actions.children.length)root.append(actions);
     }
     renderReviewControls(root,s);
+    if(!s.is_own&&(caps().can_review||caps().can_triage)){if(s.targets?.length)root.append(rawDisclosure('Targets',s.targets));root.append(rawDisclosure('Full submission',s.raw_json));}
     root.append(el('p','Reference '+s.id+(s.revision>1?', revision '+s.revision:''),'submission-ref'));
   }
   function renderJobs(){const root=byId('applicationJobs'),jobs=dashboard?.jobs||[];root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;if(!jobs.length)return;jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
@@ -844,10 +848,16 @@
       if(s.is_own)form.prepend(el('p','You are approving your own contribution as an admin. This is recorded.','small'));
       form.append(confirmRow,note,approve,result);root.append(form);
     }
-    // Sending back always asks for a message, so the contributor knows what to change.
-    if(!s.is_own&&s.capabilities?.can_triage&&s.status==='submitted'){
-      const back=button('Send back',()=>{back.hidden=true;const message=el('textarea');message.rows=2;message.placeholder='What should the contributor change?';message.setAttribute('aria-label','Message to the contributor');const send=button('Send',async()=>{if(!message.value.trim()){message.focus();return;}send.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'request_information',rationale:message.value.trim()});await loadDashboard();await loadSubmission(s.id);}catch(error){out.textContent=error.message;send.disabled=false;}},'outline'),out=el('p',undefined,'small');out.setAttribute('role','status');back.after(message,send,out);message.focus();},'textbutton');
-      root.append(back);
+    // Moderation beyond approval. Each action asks for a message, so the contributor knows why.
+    if(!s.is_own&&(s.capabilities?.can_triage||s.capabilities?.can_withhold)&&!['withheld','merged'].includes(s.status)){
+      const actions=el('div',undefined,'submission-actions'),out=el('p',undefined,'small');out.setAttribute('role','status');
+      const offer=(label,action,prompt)=>{const trigger=button(label,()=>{actions.querySelectorAll('.moderation-message').forEach(n=>n.remove());const box=el('div',undefined,'moderation-message'),message=el('textarea');message.rows=2;message.placeholder=prompt;message.setAttribute('aria-label',prompt);
+        const send=button('Send',async()=>{if(!message.value.trim()){message.focus();return;}send.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action,rationale:message.value.trim()});await loadDashboard();await loadSubmission(s.id);}catch(error){out.textContent=error.message;send.disabled=false;}},'outline');
+        box.append(message,send);actions.after(box);message.focus();},'textbutton');actions.append(trigger);};
+      if(s.capabilities?.can_triage&&['submitted','approved'].includes(s.status))offer('Send back','request_information','What should the contributor change?');
+      if(s.capabilities?.can_triage&&['changes_requested','draft'].includes(s.status))offer('Return to review','ready_for_review','Why is it ready for review?');
+      if(s.capabilities?.can_withhold)offer('Withhold','withhold','Why withhold it?');
+      if(actions.children.length)root.append(actions,out);
     }
     const canApply=!!caps().can_apply&&s.status==='approved'&&s.approval?.independent===true&&s.approval?.revision===s.revision&&s.application?.applicable;
     if(canApply){

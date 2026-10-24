@@ -270,3 +270,5 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .own-place[data-status="approved"] { border-color:#9fd1a6; }
 .own-place[data-status="approved"] span { background:#9fd1a6; }
 .own-place:focus-visible { outline:2px solid #ffd39e; outline-offset:3px; }
+.moderation-message { display:grid; gap:8px; margin:0 0 12px; }
+.moderation-message .outline { justify-self:start; }
