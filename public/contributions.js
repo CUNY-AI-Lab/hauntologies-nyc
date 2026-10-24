@@ -800,13 +800,12 @@
     if(s.is_own){
       watchSubmission(s.id,root,s.status);
       const actions=el('div',undefined,'submission-actions');
-      if(caps().can_submit&&['draft','submitted','changes_requested'].includes(s.status))actions.append(button(s.status==='changes_requested'?'Revise and resubmit':'Revise',()=>loadRevision(s),'outline'));
+      if(caps().can_submit&&['draft','submitted','changes_requested','approved'].includes(s.status))actions.append(button(s.status==='changes_requested'?'Revise and resubmit':'Revise',()=>loadRevision(s),'outline'));
       if(s.capabilities?.can_withhold&&!['withheld','merged'].includes(s.status)){const out=el('span',undefined,'small');out.setAttribute('role','status');
         const withdraw=button('Withdraw',async()=>{if(!confirm('Withdraw this contribution?'))return;withdraw.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'withhold',rationale:'Withdrawn by the contributor.'});await loadDashboard();await loadSubmission(s.id);}catch(error){out.textContent=error.message;withdraw.disabled=false;}},'textbutton');actions.append(withdraw,out);}
       if(actions.children.length)root.append(actions);
     }
     renderReviewControls(root,s);
-    if(!s.is_own&&(caps().can_review||caps().can_triage)){if(s.targets?.length)root.append(rawDisclosure('Targets',s.targets));root.append(rawDisclosure('Full submission',s.raw_json));}
     root.append(el('p','Reference '+s.id+(s.revision>1?', revision '+s.revision:''),'submission-ref'));
   }
   function renderJobs(){const root=byId('applicationJobs'),jobs=dashboard?.jobs||[];root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;if(!jobs.length)return;jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
@@ -837,35 +836,45 @@
     const actor_id=await sessionActor();if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
   }
   const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
+  // Publishing is apply then verify; a reviewer who may publish does both as part of approving.
+  async function publish(s){
+    const staged=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});
+    await safeMutation('/verify',{idempotency_key:crypto.randomUUID(),job_id:staged.job.id,map_list_check:{status:'pass',evidence:'Published from Review on approval.'}});
+    window.HauntologiesPublic?.refresh();
+  }
+  const publishable=s=>!!caps().can_apply&&s.status==='approved'&&(s.approval?.independent===true||s.approval?.admin_self_approval===true)&&s.approval?.revision===s.revision&&s.application?.applicable===true;
+  // One decision: approve, with an optional comment, or send back to revise, with a required one.
   function renderReviewControls(root,s){
     const canReview=!!caps().can_review&&!!caps().independent_review_available&&(!s.is_own||!!caps().can_self_approve)&&s.status==='submitted'&&s.validation?.valid===true;
+    const out=el('p',undefined,'small');out.setAttribute('role','status');
+    const refresh=async()=>{await loadDashboard();await loadSubmission(s.id);};
     if(canReview){
-      const form=el('form',undefined,'approval-form'),box=el('input'),confirmRow=el('label'),note=el('textarea'),approve=el('button','Approve','primary'),result=el('p',undefined,'small');
-      box.type='checkbox';confirmRow.append(box,document.createTextNode(' I checked the sources, location, rights, duplicates and privacy'));
-      note.rows=2;note.placeholder='Note (optional)';note.setAttribute('aria-label','Review note');approve.type='submit';approve.disabled=true;result.setAttribute('role','status');
-      box.addEventListener('change',()=>approve.disabled=!box.checked);
-      form.addEventListener('submit',async event=>{event.preventDefault();if(!box.checked)return;approve.disabled=true;try{await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(reviewKeys.map(key=>[key,'pass'])),rationale:note.value.trim()||'Checked sources, location, rights, duplicates and privacy.'});await loadDashboard();await loadSubmission(s.id);}catch(error){result.textContent=error.message;approve.disabled=!box.checked;}});
-      if(s.is_own)form.prepend(el('p','You are approving your own contribution as an admin. This is recorded.','small'));
-      form.append(confirmRow,note,approve,result);root.append(form);
+      const form=el('div',undefined,'decision-form'),comment=el('textarea'),approve=button('Approve',async()=>{
+        approve.disabled=revise.disabled=true;out.textContent='Approving…';
+        try{
+          const result=await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(reviewKeys.map(key=>[key,'pass'])),rationale:comment.value.trim()||'Approved.'});
+          const approved=result.submission||s;
+          if(publishable(approved)){out.textContent='Publishing…';await publish(approved);}
+          await refresh();
+        }catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
+      },'primary'),revise=button('Revise and resubmit',async()=>{
+        if(!comment.value.trim()){out.textContent='Say what to change.';comment.focus();return;}
+        approve.disabled=revise.disabled=true;
+        try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'request_information',rationale:comment.value.trim()});await refresh();}
+        catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
+      },'outline');
+      comment.rows=2;comment.placeholder='Comment (optional to approve, required to send back)';comment.setAttribute('aria-label','Comment');
+      if(s.is_own)form.append(el('p','You are approving your own contribution as an admin. This is recorded.','small'));
+      if(caps().can_apply&&s.application?.applicable!==true)form.append(el('p','Approving records it, but this one cannot go on the map automatically.','small'));
+      const actions=el('div',undefined,'decision-actions');actions.append(approve,revise);
+      form.append(comment,actions,out);root.append(form);
+    }else if(publishable(s)){
+      const go=button('Publish',async()=>{go.disabled=true;out.textContent='Publishing…';try{await publish(s);await refresh();}catch(error){out.textContent=error.message;go.disabled=false;}},'primary');
+      root.append(go,out);
+    }else if(!s.is_own&&caps().can_triage&&s.status==='draft'){
+      const start=button('Start review',async()=>{start.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'ready_for_review',rationale:'Revision ready for review.'});await refresh();}catch(error){out.textContent=error.message;start.disabled=false;}},'outline');
+      root.append(start,out);
     }
-    // Moderation beyond approval. Each action asks for a message, so the contributor knows why.
-    if(!s.is_own&&(s.capabilities?.can_triage||s.capabilities?.can_withhold)&&!['withheld','merged'].includes(s.status)){
-      const actions=el('div',undefined,'submission-actions'),out=el('p',undefined,'small');out.setAttribute('role','status');
-      const offer=(label,action,prompt)=>{const trigger=button(label,()=>{actions.querySelectorAll('.moderation-message').forEach(n=>n.remove());const box=el('div',undefined,'moderation-message'),message=el('textarea');message.rows=2;message.placeholder=prompt;message.setAttribute('aria-label',prompt);
-        const send=button('Send',async()=>{if(!message.value.trim()){message.focus();return;}send.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action,rationale:message.value.trim()});await loadDashboard();await loadSubmission(s.id);}catch(error){out.textContent=error.message;send.disabled=false;}},'outline');
-        box.append(message,send);actions.after(box);message.focus();},'textbutton');actions.append(trigger);};
-      if(s.capabilities?.can_triage&&['submitted','approved'].includes(s.status))offer('Send back','request_information','What should the contributor change?');
-      if(s.capabilities?.can_triage&&['changes_requested','draft'].includes(s.status))offer('Return to review','ready_for_review','Why is it ready for review?');
-      if(s.capabilities?.can_withhold)offer('Withhold','withhold','Why withhold it?');
-      if(actions.children.length)root.append(actions,out);
-    }
-    const canApply=!!caps().can_apply&&s.status==='approved'&&(s.approval?.independent===true||s.approval?.admin_self_approval===true)&&s.approval?.revision===s.revision&&s.application?.applicable;
-    if(canApply){
-      const out=el('div',undefined,'small');
-      const apply=button('Apply',async()=>{apply.disabled=true;try{const result=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});out.textContent='Staged. Verify the job to publish it.';await loadDashboard();}catch(error){out.textContent=error.message;apply.disabled=false;}},'primary');
-      root.append(apply,out);
-    }
-    window.dispatchEvent(new CustomEvent('contributions-review-rendered',{detail:{root,submission:s,capabilities:{...caps()}}}));
   }
   function jobControls(card,job){
     if(job.status==='verification_pending')card.append(button('Preview',()=>window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:job})),'outline'));

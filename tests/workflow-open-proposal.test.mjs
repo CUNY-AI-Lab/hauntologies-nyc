@@ -187,7 +187,8 @@ test('proposed NYC points and areas retain exact geometry without a required sou
     assert.deepEqual(p.proposal.geometry, geometry);
     assert.equal(p.proposal.geometry_status, 'proposed');
     assert.equal(p.proposal.evidence_status, 'unverified');
-    assert.equal(p.application.applicable, false);
+    // A new point in NYC publishes on approval; a proposed area stays review-only.
+    assert.equal(p.application.applicable, geometry.type === 'Point');
     if (geometry.type === 'Polygon') assert.equal(Object.hasOwn(p.proposal, 'centroid'), false);
   }
 });
@@ -246,7 +247,7 @@ test('no reviewer grants or self-approval are introduced for freeform contributi
   assert.equal(count(h, 'workflow_approvals'), 0);
 });
 
-test('even independent approval with all checks cannot apply a freeform proposal', async t => {
+test('an approved new point is publishable; a contribution to an existing place stays review-only', async t => {
   const h = harness({ authorization: { reviewers: ['reviewer'], publishers: ['publisher'] } }); t.after(() => h.db.close());
   const selected = await context(h);
   for (const targets of [[], [selected]]) {
@@ -257,11 +258,11 @@ test('even independent approval with all checks cannot apply a freeform proposal
     assert.equal(approved.body.submission.status, 'approved');
     assert.equal(approved.body.submission.proposal.evidence_status, 'unverified');
     const r = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, { actor: 'publisher' });
-    status(r, 409); assert.equal(r.body.error, 'open_proposal_review_only');
+    if (targets.length) { status(r, 409); assert.equal(r.body.error, 'open_proposal_review_only'); }
+    else { status(r, 201); assert.equal(r.body.job.status, 'verification_pending'); }
   }
-  assert.equal(count(h, 'workflow_jobs'), 0);
-  assert.equal(count(h, 'approved_records'), 0);
-  assert.equal(count(h, 'workflow_targets'), 0);
+  assert.equal(count(h, 'workflow_jobs'), 1);
+  assert.equal(count(h, 'approved_records'), 0, 'nothing public before verify');
 });
 
 test('a revised approved proposal cannot inherit its earlier approval', async t => {
