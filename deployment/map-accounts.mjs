@@ -190,11 +190,8 @@ export async function handleMapAccount(request, env) {
       body.email = body.email.toLowerCase();
       // Keyed per network and account first, so failed attempts from one network cannot lock
       // the account for everyone; the looser account total takes several networks.
-      // The day cap keeps guesses spread over networks below the old single
-      // 12/15min account cap (1152 a day).
       await rate(env, 'account-ip:' + ip + ':' + body.email, 12, 900);
       await rate(env, 'account:' + body.email, 60, 900);
-      await rate(env, 'account-day:' + body.email, 1000, 86400);
     }
     if (action === 'register' && !await admitted(env, body.email, body.access_code, ip, false)) throw failure('registration_restricted', 403);
     if (['register', 'request-reset'].includes(action)) {
@@ -237,8 +234,15 @@ export async function handleMapAccount(request, env) {
       return privateJson({ status: 'password_reset' }, 200, [`${COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`]);
     }
     if (action === 'sign-in') {
+      // Only failed sign-ins spend the day cap. It stays near the old account
+      // cap's daily maximum (12 × 96 = 1152), so guesses spread over networks gain
+      // nothing, and above what one network can send against one account a day.
+      if (await exhausted(env, 'account-day:' + body.email, 1200, 86400)) throw failure('rate_limited', 429);
       const response = await auth.api.signInEmail({ headers, body: { email: body.email, password: body.password }, asResponse: true });
-      if (!response.ok) return privateJson({ error: 'invalid_credentials' }, 401);
+      if (!response.ok) {
+        await spend(env, 'account-day:' + body.email, 1200, 86400);
+        return privateJson({ error: 'invalid_credentials' }, 401);
+      }
       return privateJson({ status: 'signed_in' }, 200, cookieHeaders(response));
     }
     if (action === 'sign-out') {

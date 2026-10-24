@@ -225,9 +225,13 @@ test('failed sign-ins from one network cannot lock another person out of their a
   // The account total still bounds guessing spread over several networks.
   for(let n=21;n<25;n++) for(let i=0;i<12;i++) await h.call('/api/auth/sign-in',{email,password:replacement},'',from('198.51.100.'+n));
   assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,429);
-  // A day cap keeps distributed guessing below the old single account cap.
+  // Only failed sign-ins spend the day cap; register, reset and successes do not.
   const other='other-target@example.test';await h.register(other);
-  await seedLimit(h.db,'account-day:'+other,86400,1000);
+  await seedLimit(h.db,'account-day:'+other,86400,1199);
+  assert.equal((await h.call('/api/auth/register',{email:other})).status,200);
+  assert.equal((await h.call('/api/auth/request-reset',{email:other})).status,200);
+  for(let i=0;i<2;i++) assert.equal((await h.call('/api/auth/sign-in',{email:other,password})).status,200);
+  assert.equal((await h.call('/api/auth/sign-in',{email:other,password:replacement})).status,401);
   assert.equal((await h.call('/api/auth/sign-in',{email:other,password})).status,429);
 });
 
