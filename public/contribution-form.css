@@ -277,3 +277,12 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .decision-form { display:grid; gap:10px; margin:16px 0; padding-top:14px; border-top:1px solid var(--line); }
 .decision-form textarea { font-size:13px; }
 .decision-actions { display:flex; flex-wrap:wrap; gap:10px; }
+
+/* Places anyone has sent for review: a dashed violet ring with a question mark,
+   distinct from published markers and from the contributor's own amber ring. */
+.pending-place { display:flex; align-items:center; justify-content:center; border:2px dashed #c9a7ff; border-radius:50%; background:#16121dcc; box-shadow:0 0 0 2px #16121daa; color:#e3d2ff; font:700 12px/1 system-ui, sans-serif; cursor:pointer; }
+.pending-place.attached { font-size:10px; }
+.pending-place[data-status="approved"] { border-color:#9fd1a6; color:#cfeccf; }
+.pending-place:focus-visible { outline:2px solid #ffd39e; outline-offset:3px; }
+.pending-place-popup p { margin:4px 0; overflow-wrap:anywhere; }
+.pending-place-popup .pending-place-status { margin:0 0 4px; color:#8a63c9; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
