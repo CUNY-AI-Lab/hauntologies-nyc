@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {harness,password,replacement} from './fixtures/map-accounts-harness.mjs';
 import {MAP_ORIGIN} from '../deployment/map-accounts.mjs';
@@ -137,9 +138,9 @@ test('strict origin/routes and durable mail limits preserve old unused setup lin
   const token=await h.token(email);
   await h.db.prepare('UPDATE hny_auth_verification SET expiresAt=0').run();
   assert.equal((await h.call('/api/auth/verify',{token,password})).status,200);
-  assert.equal((await h.call('/api/auth/register',{email})).status,200);
-  assert.equal((await h.call('/api/auth/register',{email})).status,200);
-  assert.equal((await h.call('/api/auth/register',{email})).status,429);
+  // A finished account is answered without mail and spends no mail budget.
+  for(let i=0;i<4;i++) assert.deepEqual((await h.call('/api/auth/register',{email})).body,{status:'check_email'});
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_test_mail WHERE email=?').bind(email).first()).n,1);
 });
 
 
@@ -178,6 +179,77 @@ test('participants sharing a campus address can register within global and recip
   const h=await harness(t);
   for(let i=0;i<13;i++) assert.equal((await h.call('/api/auth/register',{email:`campus${i}@example.test`},'',{'cf-connecting-ip':'192.0.2.200'})).status,200);
   assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_test_mail').first()).n,13);
+});
+
+// Fills a durable limit bucket for the current window, as the Worker keys it.
+const seedLimit=(db,key,windowSeconds,count)=>{
+  const window=Math.floor(Date.now()/(windowSeconds*1000));
+  return db.prepare('INSERT INTO hny_auth_limits (bucket,window,count,expires_at) VALUES (?,?,?,?) ON CONFLICT(bucket,window) DO UPDATE SET count=excluded.count')
+    .bind(createHash('sha256').update('hny-auth:'+key).digest('hex'),window,count,(window+1)*windowSeconds*1000).run();
+};
+
+test('mail budgets count dispatched messages and keep one network address from taking them all',async t=>{
+  const h=await harness(t), from=ip=>({'cf-connecting-ip':ip});
+  const mails=async email=>(await h.db.prepare('SELECT count(*) n FROM hny_test_mail WHERE email=?').bind(email).first()).n;
+  // A recipient over budget gets the same answer as any other address, without mail.
+  for(let i=0;i<5;i++) assert.deepEqual((await h.call('/api/auth/register',{email:'pending@example.test'})).body,{status:'check_email'});
+  assert.equal(await mails('pending@example.test'),3);
+  const done='done@example.test';await h.register(done);
+  for(let i=0;i<5;i++){
+    assert.deepEqual((await h.call('/api/auth/request-reset',{email:done})).body,{status:'check_email'});
+    assert.deepEqual((await h.call('/api/auth/request-reset',{email:'missing@example.test'})).body,{status:'check_email'});
+  }
+  assert.equal(await mails(done),3);
+  // One shared address gets 80 requests an hour; other networks still receive mail.
+  for(let i=0;i<80;i++) assert.equal((await h.call('/api/auth/register',{email:`room${i}@example.test`},'',from('198.51.100.7'))).status,200);
+  const over=await h.call('/api/auth/register',{email:'room80@example.test'},'',from('198.51.100.7'));
+  assert.equal(over.status,429);assert.equal(over.body.error,'rate_limited');
+  assert.equal((await h.call('/api/auth/register',{email:'elsewhere@example.test'})).status,200);
+  assert.equal(await mails('elsewhere@example.test'),1);
+  await seedLimit(h.db,'mail-ip-day:198.51.100.8',86400,160);
+  assert.equal((await h.call('/api/auth/register',{email:'late@example.test'},'',from('198.51.100.8'))).status,429);
+  // Once the shared hour is spent, every address gets the same answer, mail or not.
+  await seedLimit(h.db,'mail-global',3600,240);
+  for(const [route,email] of [['register','new@example.test'],['register',done],['request-reset','missing@example.test']]){
+    const result=await h.call('/api/auth/'+route,{email});assert.equal(result.status,429);assert.equal(result.body.error,'rate_limited');
+  }
+  assert.equal(await mails('new@example.test'),0);
+});
+
+test('failed sign-ins from one network cannot lock another person out of their account',async t=>{
+  const h=await harness(t), email='target@example.test', from=ip=>({'cf-connecting-ip':ip});await h.register(email);
+  for(let i=0;i<12;i++) assert.equal((await h.call('/api/auth/sign-in',{email,password:replacement},'',from('198.51.100.20'))).status,401);
+  assert.equal((await h.call('/api/auth/sign-in',{email,password:replacement},'',from('198.51.100.20'))).status,429);
+  assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,200);
+  // The account total still bounds guessing spread over several networks.
+  for(let n=21;n<25;n++) for(let i=0;i<12;i++) await h.call('/api/auth/sign-in',{email,password:replacement},'',from('198.51.100.'+n));
+  assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,429);
+});
+
+test('guest-code checks spend durable attempts per account and per network address',async t=>{
+  const code='SYNTHETIC-LOCAL-INVITATION', h=await harness(t,{eligibilityEnabled:true,guestCode:code}), email='visitor@example.test';
+  // Anyone can name any address at register, so those guesses never spend the account budget.
+  for(let i=0;i<11;i++) assert.equal((await h.call('/api/auth/register',{email,access_code:'wrong-'+i})).status,403);
+  assert.equal((await h.call('/api/auth/register',{email,access_code:code})).status,200);
+  const token=await h.token(email);
+  for(let i=0;i<10;i++) assert.equal((await h.call('/api/auth/verify',{token,password,access_code:'wrong-'+i})).status,403);
+  const limited=await h.call('/api/auth/verify',{token,password,access_code:code});
+  assert.equal(limited.status,429);assert.equal(limited.cookie,'');
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_verification').first()).n,1);
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_user').first()).n,0);
+  // A reset that would create a first credential has the same per-account budget.
+  const unfinished='unfinished@example.test';
+  await h.db.prepare('INSERT INTO hny_auth_user(id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,1,?,?)').bind(crypto.randomUUID(),'',unfinished,Date.now(),Date.now()).run();
+  assert.equal((await h.call('/api/auth/request-reset',{email:unfinished})).status,200);
+  const reset=await h.token(unfinished,'reset_password');
+  for(let i=0;i<10;i++) assert.equal((await h.call('/api/auth/reset',{token:reset,password,access_code:'wrong-'+i})).status,403);
+  assert.equal((await h.call('/api/auth/reset',{token:reset,password,access_code:code})).status,429);
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_account').first()).n,0);
+  // One network address gets 60 guest-code checks per 15 minutes; CUNY addresses spend none.
+  const shared={'cf-connecting-ip':'198.51.100.40'};
+  for(let i=0;i<60;i++) assert.equal((await h.call('/api/auth/register',{email:`guess${i}@example.test`,access_code:'wrong'},'',shared)).status,403);
+  assert.equal((await h.call('/api/auth/register',{email:'guess60@example.test',access_code:code},'',shared)).status,429);
+  assert.equal((await h.call('/api/auth/register',{email:'member@gc.cuny.edu'},'',shared)).status,200);
 });
 
 test('anonymous public projections exclude private proposals and owner edit pages require an account',async t=>{

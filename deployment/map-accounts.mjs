@@ -1,4 +1,4 @@
-import { normalizeRegistrationEmail, registrationAllowed } from '../server/registration-eligibility.mjs';
+import { isCunyEmail, normalizeRegistrationEmail, registrationAllowed, registrationRestricted } from '../server/registration-eligibility.mjs';
 import { betterAuth } from 'better-auth';
 import { magicLink } from 'better-auth/plugins/magic-link';
 import { getIP } from '@better-auth/core/utils/ip';
@@ -9,6 +9,11 @@ const cache = new WeakMap();
 const tokenPattern = /^[A-Za-z0-9_-]{24,128}$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const failure = (code, status) => Object.assign(new Error(code), { code, status });
+// Dispatched-mail budgets. Admission separately allows 5 messages per recipient
+// per hour and 500 per day, so these stay below both. The global hour covers a
+// room registering at once; the per-address budgets in handleMapAccount sit well
+// below it, so one network address cannot take every message.
+const MAIL_GLOBAL = 240, MAIL_RECIPIENT = 3;
 const randomToken = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 export const privateJson = (body, status = 200, cookies = []) => {
   const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
@@ -22,6 +27,11 @@ export function mapAccountsReady(env) {
 
 export function accountOptions(env) {
   async function send(kind, email, token) {
+    // Count only messages that are dispatched. A recipient over budget is answered
+    // like any other address, without mail, so the response reveals no account;
+    // earlier setup and reset links remain usable.
+    if (!await spend(env, 'mail:' + email.toLowerCase(), MAIL_RECIPIENT, 3600)) return;
+    await rate(env, 'mail-global', MAIL_GLOBAL, 3600);
     const result = await env.ACCOUNT_MAIL.send({ kind, email, token, requestId: crypto.randomUUID(), expiresAt: kind === 'verify_email' ? null : new Date(Date.now() + 30 * 60 * 1000).toISOString() });
     if (result?.status !== 'accepted') throw failure('mail_unavailable', 503);
   }
@@ -85,11 +95,39 @@ async function digest(value) {
   return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function rate(env, key, limit, windowSeconds) {
-  const window = Math.floor(Date.now() / (windowSeconds * 1000));
-  const bucket = await digest('hny-auth:' + key);
+async function limitBucket(key, windowSeconds) {
+  return [await digest('hny-auth:' + key), Math.floor(Date.now() / (windowSeconds * 1000))];
+}
+
+async function spend(env, key, limit, windowSeconds) {
+  const [bucket, window] = await limitBucket(key, windowSeconds);
   const row = await env.DB.prepare('INSERT INTO hny_auth_limits (bucket, window, count, expires_at) VALUES (?, ?, 1, ?) ON CONFLICT(bucket, window) DO UPDATE SET count = count + 1 RETURNING count').bind(bucket, window, (window + 1) * windowSeconds * 1000).first();
-  if (!row || row.count > limit) throw failure('rate_limited', 429);
+  return Boolean(row && row.count <= limit);
+}
+
+async function rate(env, key, limit, windowSeconds) {
+  if (!await spend(env, key, limit, windowSeconds)) throw failure('rate_limited', 429);
+}
+
+// Reads a budget without spending it, so every address gets the same answer once
+// the shared mail budget is gone, whether or not a message would be dispatched.
+async function exhausted(env, key, limit, windowSeconds) {
+  const [bucket, window] = await limitBucket(key, windowSeconds);
+  const row = await env.DB.prepare('SELECT count FROM hny_auth_limits WHERE bucket = ? AND window = ?').bind(bucket, window).first();
+  return Boolean(row && row.count >= limit);
+}
+
+// Guest codes are shared secrets, so each check that depends on one spends a
+// durable attempt before the comparison: per network address on every route,
+// and per account once a setup link or session proves the address. Register
+// never spends the account budget, because anyone can name any address there.
+// CUNY addresses need no code and spend nothing.
+async function admitted(env, email, code, ip, perAccount) {
+  if (registrationRestricted(env) && !isCunyEmail(email)) {
+    await rate(env, 'code-ip:' + ip, 60, 900);
+    if (perAccount) await rate(env, 'code:' + email.toLowerCase(), 10, 3600);
+  }
+  return registrationAllowed(email, code, env);
 }
 
 async function bodyOf(request, allowed) {
@@ -139,8 +177,9 @@ export async function handleMapAccount(request, env) {
     await rate(env, 'all-mutations', 3000, 3600);
     const ip = getIP(request, { advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'], ipv6Subnet: 64 } } }) || 'unknown';
     // Account and global limits remain effective across addresses and Worker isolates.
-    // Campus participants may share one network address. Recipient and global
-    // limits still bound email volume independently of this shared-IP allowance.
+    // Campus participants may share one network address (an IPv6 /64 counts as
+    // one). Recipient and global limits still bound email volume independently
+    // of this shared-IP allowance.
     await rate(env, 'ip:' + ip, 120, 900);
     if (fields[action].includes('email')) {
       if (action === 'register') {
@@ -149,13 +188,19 @@ export async function handleMapAccount(request, env) {
       }
       if (typeof body.email !== 'string' || body.email.length > 254 || !emailPattern.test(body.email)) throw failure('invalid_email', 400);
       body.email = body.email.toLowerCase();
-      await rate(env, 'account:' + body.email, 12, 900);
+      // Keyed per network and account first, so failed attempts from one network cannot lock
+      // the account for everyone; the looser account total takes several networks.
+      await rate(env, 'account-ip:' + ip + ':' + body.email, 12, 900);
+      await rate(env, 'account:' + body.email, 60, 900);
     }
-    if (action === 'register' && !await registrationAllowed(body.email, body.access_code, env)) throw failure('registration_restricted', 403);
+    if (action === 'register' && !await admitted(env, body.email, body.access_code, ip, false)) throw failure('registration_restricted', 403);
     if (['register', 'request-reset'].includes(action)) {
-      await rate(env, 'mail-global', 60, 3600);
-      await rate(env, 'mail:' + body.email, 3, 3600);
-      await rate(env, 'mail-ip:' + ip, 60, 3600);
+      if (await exhausted(env, 'mail-global', MAIL_GLOBAL, 3600)) throw failure('rate_limited', 429);
+      // Per-address request budgets, spent whether or not mail follows, so they
+      // reveal no account. The day budget keeps one address to under a third of
+      // Admission's 500 daily messages.
+      await rate(env, 'mail-ip:' + ip, 80, 3600);
+      await rate(env, 'mail-ip-day:' + ip, 160, 86400);
     }
     if (fields[action].includes('password') && !validPassword(body.password)) throw failure('password_length', 400);
     if (fields[action].includes('token') && (typeof body.token !== 'string' || !tokenPattern.test(body.token))) throw failure('invalid_token', 400);
@@ -180,7 +225,7 @@ export async function handleMapAccount(request, env) {
       if (!user) throw failure('invalid_token', 400);
       // A reset can create a first credential. Preserve ordinary password resets,
       // while applying admission to accounts whose setup is still unfinished.
-      if (!await credential(env, user.id) && !await registrationAllowed(user.email, body.access_code, env)) throw failure('registration_restricted', 403);
+      if (!await credential(env, user.id) && !await admitted(env, user.email, body.access_code, ip, true)) throw failure('registration_restricted', 403);
       await auth.api.resetPassword({ headers, body: { token: body.token, newPassword: body.password } });
       await clearSetupLinks(env, user.email);
       return privateJson({ status: 'password_reset' }, 200, [`${COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`]);
@@ -204,7 +249,7 @@ export async function handleMapAccount(request, env) {
       const pending = await context.internalAdapter.findVerificationValue('magic-link:' + key);
       let value; try { value = JSON.parse(pending?.value); } catch {}
       if (!pending || value?.type !== 'magic-link' || typeof value.email !== 'string') throw failure('invalid_token', 400);
-      if (!await registrationAllowed(value.email, body.access_code, env)) throw failure('registration_restricted', 403);
+      if (!await admitted(env, value.email, body.access_code, ip, true)) throw failure('registration_restricted', 403);
       const existing = await env.DB.prepare('SELECT id FROM hny_auth_user WHERE email = ? LIMIT 1').bind(value.email.toLowerCase()).first();
       if (existing && await credential(env, existing.id)) {
         await clearSetupLinks(env, value.email);
@@ -223,7 +268,8 @@ export async function handleMapAccount(request, env) {
     const session = await mapSession(verifiedRequest, env, false);
     if (!session) throw failure('sign_in_required', 401);
     if (!session.password_required) return privateJson({ error: 'password_already_set' }, 409);
-    if (!await registrationAllowed(session.email, body.access_code, env)) throw failure('registration_restricted', 403);
+    // Verify already spent an attempt for this account above.
+    if (!await (action === 'verify' ? registrationAllowed(session.email, body.access_code, env) : admitted(env, session.email, body.access_code, ip, true))) throw failure('registration_restricted', 403);
     await auth.api.setPassword({ headers: verifiedRequest.headers, body: { newPassword: body.password } });
     await clearSetupLinks(env, session.email);
     return privateJson({ status: 'signed_in' }, 200, cookies);

@@ -101,9 +101,10 @@ test('rejected guest-code guesses count against durable limits before any RSVP o
   const h=await harness(t,{eligibilityEnabled:true,guestCode});
   for(let i=0;i<30;i++) denied(await h.call('/api/register',{name:'Local attempt',email:'attempt@example.test',access_code:'wrong'},'',{'Idempotency-Key':crypto.randomUUID(),'cf-connecting-ip':'192.0.2.201'}));
   const limited=await h.call('/api/register',{name:'Local attempt',email:'attempt@example.test',access_code:guestCode},'',{'Idempotency-Key':crypto.randomUUID(),'cf-connecting-ip':'192.0.2.201'});assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'900');
-  // The general per-account budget counts guesses; mail quotas remain for actual email requests.
-  for(let i=0;i<12;i++) denied(await h.call('/api/auth/register',{email:'attempt@example.test',access_code:'wrong'}));
-  assert.equal((await h.call('/api/auth/register',{email:'attempt@example.test',access_code:guestCode})).status,429);
+  // The per-address account budget counts guesses; mail quotas remain for actual email requests.
+  const network={'cf-connecting-ip':'192.0.2.202'};
+  for(let i=0;i<12;i++) denied(await h.call('/api/auth/register',{email:'attempt@example.test',access_code:'wrong'},'',network));
+  assert.equal((await h.call('/api/auth/register',{email:'attempt@example.test',access_code:guestCode},'',network)).status,429);
   assert.equal(await total(h,'event_registrations'),0);assert.equal(await total(h,'hny_test_mail'),0);assert.equal(await total(h,'hny_auth_user'),0);
 });
 
