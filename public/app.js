@@ -93,7 +93,8 @@ function renderPendingPlaces(){
   const label=pendingLabel(place.status);
   const marker=L.marker([lat,lon],{pane:'researchPoints',zIndexOffset:650,keyboard:true,title:place.title+', '+label,icon:L.divIcon({className:'pending-place'+(record?' attached':''),html:'<span aria-hidden="true">?</span>',iconSize:record?[18,18]:[24,24],iconAnchor:record?[-4,22]:[12,12]})});
   marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
-  marker.bindTooltip(place.title+' · '+label,{direction:'top',offset:[0,-10]});
+  // Contributor text is untrusted: Leaflet renders a string tooltip as HTML, so pass a text node.
+  const tip=document.createElement('span');tip.textContent=place.title+' · '+label;marker.bindTooltip(tip,{direction:'top',offset:[0,-10]});
   marker.bindPopup(()=>pendingPopup(place,record?'Adds to '+(record.title||'a mapped place'):''),{maxWidth:280});
   pendingPlacesLayer.addLayer(marker);
  }
