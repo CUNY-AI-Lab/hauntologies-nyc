@@ -295,4 +295,11 @@ details[open]:not([data-closing])>summary>.disclosure-hint{visibility:hidden}
 .map-tool-tray::after{left:0;top:-4px;width:100%;height:4px}
 .header-tools .map-tool-tray button{width:100%;min-width:0;padding:6px 10px}
 .map-tool-tray .zoom-tools{align-self:center}
+/* Every row is the column's width, so the zoom pair splits it rather than widening it. */
+.map-tool-tray{width:100%;min-width:0}
+.map-tool-tray .zoom-tools{align-self:stretch}
+.map-tool-tray .zoom-tools .leaflet-control-zoom{width:100%;justify-content:space-between}
+.map-tool-tray .zoom-tools .leaflet-control-zoom a{flex:0 0 calc(50% - 1px);width:auto!important}
+.map-tool-tray .zoom-tools .leaflet-control-zoom a::before{inset:8px 4px}
+.map-tool-tray .zoom-tools .leaflet-control-zoom a::after{right:4px}
 @media(max-width:340px){.map-tool-tray{flex-wrap:nowrap;width:auto;max-width:none;padding-block:0}}
