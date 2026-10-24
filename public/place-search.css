@@ -54,10 +54,11 @@
 .place-search-credit a{color:#c9b18f}
 
 /* Inside a horizontal Tools tray the field and panel drop below the tray
-   into the popout column; in a vertical tray they open beside the toggle. */
-.place-search.in-tray .place-search-form{position:fixed;top:var(--search-top,124px);right:var(--search-right,20px);width:var(--search-width,400px);clip-path:inset(0 0 100% 0)}
-.place-search.in-tray.is-peeking .place-search-form,.place-search.in-tray.is-open .place-search-form{clip-path:inset(-12px)}
-.place-search.in-tray .place-search-panel{position:fixed;top:calc(var(--search-top,124px) + 50px);right:var(--search-right,20px);width:var(--search-width,400px)}
+   into the popout column. On phones they drop below the title card, beside
+   the control column. Otherwise they open beside the toggle. */
+.place-search.drops-below .place-search-form{position:fixed;top:var(--search-top,124px);right:var(--search-right,20px);width:var(--search-width,400px);clip-path:inset(0 0 100% 0)}
+.place-search.drops-below.is-peeking .place-search-form,.place-search.drops-below.is-open .place-search-form{clip-path:inset(-12px)}
+.place-search.drops-below .place-search-panel{position:fixed;top:calc(var(--search-top,124px) + 50px);right:var(--search-right,20px);width:var(--search-width,400px)}
 
 /* Map marks: the found place, a route start, and a collection record. */
 .search-pin{border:2px solid #ffcf94;border-radius:50%;background:#171510b3;box-shadow:0 0 0 3px #171510aa}
@@ -68,7 +69,6 @@
 .search-pin.origin span{background:#080908;border:2px solid #e9caa1;width:10px;height:10px;margin:-5px 0 0 -5px}
 
 @media(max-width:760px){
-  .place-search-panel{right:0;top:50px}
   .place-search-form input{font-size:16px}
 }
 @media(prefers-reduced-motion:reduce){
