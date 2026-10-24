@@ -1,96 +1,112 @@
-# CUNY GLM map-entry automation contract, v2
+# Map-entry automation contract, version 2
 
-This supersedes version 1. Use CUNY AI Lab's GLM-5.3-Flash. No OpenAI provider setup is needed. Preserve participant language and existing interface copy. Functional automation only.
+This contract governs how a model would help turn submitted text into map entries, and it is the second of three pages about the ingestion backend that is switched off for now. [Model-assisted ingestion](../../server/README.md) explains the backend and why it is off, this page lays out the rules a model call must follow, and [SKILL.md](SKILL.md) is the instruction file the model itself reads. Version 2 supersedes version 1, uses CUNY AI Lab's GLM-5.3-Flash with no OpenAI provider setup, preserves participant language and existing interface copy, and covers functional automation only.
 
-## Verified gateway
+## Where the code stands
 
-Checked 2026-10-07 against official documentation and live catalog:
+The code in `server/` follows most of this contract and departs from it in a few places that matter to anyone building against it. The four service contracts below name functions that the code does not use, and its real surface is `/api/ingest/preview`, `/api/ingest/confirm`, `/api/ingest/status`, `/api/review` and `/api/records`, where preview takes `submission_json`, an idempotency key and `public_material_confirmed` and builds the derived data on the server, and confirm takes only `preview_id`, `preview_hash` and `acknowledge_unlocated`.
 
-- Base: https://tools.ailab.gc.cuny.edu/v1
-- Public model catalog: GET /v1/catalog
-- Authenticated account model list: GET /v1/models
-- Completion: POST /v1/chat/completions
-- Exact active model ID: glm-5.3-flash. Do not substitute glm-5.3, FlashX, provider-prefixed IDs, or another service.
-- Authentication: Authorization: Bearer server-side CAIL_API_KEY. Optional documented attribution: X-CAIL-App: hauntologies-map.
-- Request: {model,messages,stream:false}. Text output: choices[0].message.content. Function calling is catalog-listed, but structured-output is not listed for this model. Do not assume provider-enforced JSON schema; validate locally.
-- Catalog price: USD 0.15/million input tokens, USD 0.50/million output tokens. Account quota is unverified. Authenticated GET /v1/quota returns a microdollar-based estimate and reporting-window metadata.
-- Official client behavior: credentials:omit, reject redirects, one request attempt, provider JSON passthrough. Native Worker fetch avoids adding its GitHub Packages authentication/dependency.
+The person who confirms is the signed-in owner of the submission, so no independent reviewer sees a record before it is approved, where the workflow below calls for a signed-in reviewer, and the public gate blocks every ingest route today, so none of this flow runs on the live site. Nothing reads `Retry-After` or `X-Should-Retry`, the provider treats a 402 or 429 response as a quota or rate-limit error and never retries, and each extraction makes three gateway requests, one for the model list, one for the quota and one for the completion, which is sent with a temperature of 0 and a limit of 1,200 output tokens.
 
-Sources:
+## The gateway
+
+The details in this section were checked on October 7, 2026 against the Lab's official documentation and live catalog.
+
+- The base address is https://tools.ailab.gc.cuny.edu/v1.
+- The public model catalog is at `GET /v1/catalog`, and an authenticated account lists its models at `GET /v1/models`.
+- A completion goes to `POST /v1/chat/completions`.
+- The exact active model ID is `glm-5.3-flash`, and nothing should stand in for it, including `glm-5.3`, FlashX, provider-prefixed IDs or another service.
+- Authentication uses `Authorization: Bearer` with the server-side `CAIL_API_KEY`, and the documented optional attribution header is `X-CAIL-App: hauntologies-map`.
+- A request is `{model, messages, stream: false}`, and the text comes back in `choices[0].message.content`. The catalog lists function calling but not structured output for this model, so do not assume the provider enforces a JSON schema, and validate locally.
+- The catalog price is USD 0.15 per million input tokens and USD 0.50 per million output tokens. The account's quota is unverified, and an authenticated `GET /v1/quota` gives a microdollar-based estimate with reporting-window metadata.
+- The official client sets `credentials` to `omit`, rejects redirects, makes one request attempt and passes the provider's JSON through, and a native Worker fetch avoids adding the client's GitHub Packages authentication and dependency.
+
+These pages document the gateway.
+
 - https://ailab.gc.cuny.edu/docs/api-keys/
 - https://tools.ailab.gc.cuny.edu/v1/catalog
 - https://github.com/CUNY-AI-Lab/cail-client
 - https://ailab.gc.cuny.edu/faq/
 - https://ailab.gc.cuny.edu/models/guide/
 
-## Credential and allowance prerequisites
+## Credentials and allowance
 
-Provider selection authorizes the requested feature; it does not itself authorize creating/installing persistent credentials, copying secrets, buying usage, or raising quotas. Credential creation/configuration requires action-time approval; secret transmission requires a supported secure handoff. Never request a key in chat or put it in code, commits, browser JavaScript, logs, or this document.
+Choosing this provider settles which service to use but does not by itself allow anyone to create or install a persistent credential, copy a secret, buy usage or raise a quota, and each of those needs a go-ahead at the moment it happens. Hand a secret over only through a secure channel the platform supports, and never ask for a key in chat or put one in code, a commit, browser JavaScript, a log or this document.
 
-Official key dashboard: https://tools.ailab.gc.cuny.edu/model-access . It uses CUNY Login and shows a new key once. Do not create or rotate keys during discovery. Use approved server-side Sites secret storage named CAIL_API_KEY. The secure user-entry/configuration surface must first be verified, not invented. Sites' native environment update API supports secret values; a saved deployment applies the new environment revision. Do not call it with a key before secure handoff and required authorization.
+The official key dashboard at https://tools.ailab.gc.cuny.edu/model-access requires CUNY Login and shows a new key only once, so do not create or rotate keys while exploring, and store the key as a Worker secret named `CAIL_API_KEY` only when the handoff is secure and the Lab has agreed.
 
-Use only an agreed existing CAIL allowance. No purchase, top-up, quota increase, alternate account, or fallback provider. The FAQ states a standard USD 5 monthly allowance and pausing at quota, but the user's actual allocation/window needs checking. Do not promise unlimited/free use. Until setup is complete, fixture-test deterministic boundaries and fail closed on model requests. Do not claim fixture/parser output came from live GLM, and do not add or rewrite interface copy.
+Use only an existing CAIL allowance that has been agreed in advance, with no purchase, top-up, quota increase, alternate account or fallback provider. The Lab's FAQ describes a standard allowance of USD 5 a month that pauses when the quota runs out, but the real allocation and window for an account need checking, so do not promise unlimited or free use. Until setup is complete, test the deterministic boundaries with fixtures and have model requests fail closed, never describe fixture or parser output as coming from a live GLM call, and leave interface copy alone.
 
-## Immutable raw versus derived data
+## Raw data and derived data
 
-- Preserve the original request body where byte-level preservation matters, plus original parsed strings/metadata for display. No trimming, Unicode normalization, rephrasing, line-ending rewriting, autocorrection, or model round-tripping.
-- Preserve title, description, metadata.location/date/data/source/citation/citations and extra metadata losslessly. Display raw participant fields.
-- Store extraction, geocoding, date indexes, source provenance, and mechanical status under a separate derived object. Never overwrite raw fields with generated values.
-- Model input is only an allowlisted [{field_ref,text}] projection of public historical fields needed for extraction. Exclude submitter name/email/identity, account IDs, credentials, student records, private annotations, unrelated data, confidential/protected material. Do not silently redact and replace raw submissions; omit disallowed input from the model payload or stop the request.
-- CAIL prohibits confidential, FERPA/HIPAA/IRB-protected, proprietary, or personally identifying input. Its zero-retention configuration does not override this. Application retention is separate.
+- Keep the original request body byte for byte wherever that matters, together with the original parsed strings and metadata used for display, and never trim, normalize Unicode, rephrase, rewrite line endings, autocorrect or pass the text back through a model.
+- Keep the title, the description, `metadata.location`, `metadata.date`, `metadata.data`, `metadata.source`, `metadata.citation`, `metadata.citations` and any extra metadata without loss, and display the participant's raw fields.
+- Store extraction, geocoding, date indexes, source provenance and mechanical status in a separate derived object, and never overwrite a raw field with a generated value.
+- Send the model only an allowlisted list of `{field_ref, text}` pairs drawn from the public historical fields that extraction needs, leaving out the submitter's name, email and identity, account IDs, credentials, student records, private annotations, unrelated data and any confidential or protected material. If a submission contains something that must not go to the model, omit that input from the payload or stop the request, and never redact it silently and replace the raw submission.
+- CAIL prohibits confidential, FERPA-, HIPAA- or IRB-protected, proprietary and personally identifying input, and its zero-retention configuration does not change that, while the application's own retention is a separate matter.
 
 ## Workflow
 
-1. Explicit submission through the existing data-entry flow; shape/size validation without rewriting values. Freeze raw version/hash.
-2. Host constructs allowlisted exact public text fields.
-3. GLM uses SKILL.md and normalized-candidate.schema.json v2. One bounded request per explicit submission, never on typing/render/autosave/prefetch/reload.
-4. Validate JSON or allowlisted function arguments. Reject extra fields, malformed output, unknown references, invalid offsets, and non-exact spans.
-5. Host-owned geographic adapters resolve extracted/supplied places. Coordinates come from adapters/user points, never GLM; preserve provenance and precision separately.
-6. Check NYC scope, uncertainty, and possible duplicates. Automatically plot only in pending-review layer. Missing/ambiguous locations remain pending/unlocated.
-7. Signed-in reviewer explicitly approves exact raw-plus-derived hash. Every raw/derived edit invalidates old approval.
-8. Atomically persist approved record plus idempotency result; read back. Normal map dataset includes approved records only.
+These steps describe the intended flow, and none of them runs on the live site while the public gate blocks the ingest routes.
 
-## Strict model output
+1. A participant submits through the existing data-entry flow, the application checks shape and size without rewriting any value, and it freezes the raw version and hash.
+2. The host builds the allowlisted list of exact public text fields.
+3. GLM follows `SKILL.md` and `normalized-candidate.schema.json` version 2, and it makes one bounded request for each explicit submission, never on typing, rendering, autosave, prefetch or reload.
+4. The host validates the JSON or the allowlisted function arguments and rejects extra fields, malformed output, unknown references, invalid offsets and spans that do not match exactly.
+5. Geographic adapters that the host owns resolve the extracted or provided places, with coordinates coming from those adapters or from a user's point and never from GLM, and with provenance and precision kept separately.
+6. The host checks NYC scope, uncertainty and possible duplicates, plots a candidate automatically only in the pending-review layer, and marks a missing or ambiguous location as needing information and leaves it unlocated.
+7. A signed-in reviewer explicitly approves the exact raw-plus-derived hash, and every edit to a raw or derived field invalidates the earlier approval.
+8. The application atomically saves the approved record together with its idempotency result and reads them back, and the normal map dataset includes approved records only.
 
-Version-2 normalized-candidate.schema.json allows only:
-- location_mentions: exact evidence spans and directly supported borough enum/null.
-- date_mentions: exact spans, event/publication/source_found/unspecified role, separate normalized boundaries, precision, qualifier.
-- source_refs: exact evidence spans only.
-- status: extracted/ambiguous/missing.
+## What the model may return
 
-Evidence: {field_ref,start,end,verbatim_text}, zero-based Unicode code points, end-exclusive. Verify bounded Array.from(fieldText).slice(start,end).join('') === verbatim_text. If invalid, reject or leave unresolved rather than change raw data.
+Version 2 of `normalized-candidate.schema.json` allows only a `schema_version` of `2.0` and these four things.
 
-No title, description, summary, interpretation, claim, prose warning/question, generated citation, coordinate, SQL, arbitrary URL, tool name, approval flag, or record ID is accepted. Do not load the old version-1 writing-oriented schema or skill.
+- `location_mentions` holds exact evidence spans and a borough that the text directly supports, or null.
+- `date_mentions` holds exact spans with a role of event, publication, source found or unspecified, separate normalized boundaries, a precision and a qualifier.
+- `source_refs` holds exact evidence spans and nothing else.
+- `status` is `extracted`, `ambiguous` or `missing`.
 
-If function calling is used, expose extract_map_fields as a pure output-returning function with this schema. Optional resolve_location accepts only validated place text with a fixed host-owned adapter. Never expose commit/publish/update/delete, secret, browser, shell, arbitrary connector, or sharing tools to GLM.
+Each piece of evidence has the form `{field_ref, start, end, verbatim_text}`, with zero-based Unicode code points and an exclusive end, and the host checks that `Array.from(fieldText).slice(start, end).join('')` equals `verbatim_text`, so an invalid span is rejected or left unresolved and never fixed by changing raw data.
 
-## Service/tool contracts
+The output cannot contain a title, description, summary, interpretation, claim, prose warning or question, generated citation, coordinate, SQL, arbitrary URL, tool name, approval flag or record ID, and the old version 1 writing-oriented schema and skill must not be loaded.
 
-extract_map_fields (read-only): allowlisted public fields + fixed skill/schema → strict v2 extraction. Host pins provider/model; browser cannot override.
+If function calling is used, expose `extract_map_fields` as a pure function that only returns output in this schema, and expose `resolve_location` only as an optional function that accepts validated place text and uses a fixed adapter the host owns, and never expose commit, publish, update, delete, secret, browser, shell, arbitrary connector or sharing tools to GLM.
 
-resolve_location (read-only): {location_text,borough_hint,supplied_point?} → {status,candidates:[{id,latitude,longitude,precision,geocode_method,source_url,boundary_check}],reason_codes}. Only necessary geographic text goes to the adapter. Modern representative points are distinct from historic locations/proxies. Errors yield unavailable, never guessed points.
+## Service and tool contracts
 
-stage_map_preview (staging only): {submission_version,raw_hash,derived,idempotency_key} → {preview_id,preview_hash,status:'pending_review',candidate_geometry,reason_codes,possible_duplicate_ids}. Verify stored raw version/hash, bind principal and expiry. Client hashes alone are not trusted.
+These four contracts describe the intended service boundaries, and the routes listed under Where the code stands are how the current code reaches them.
 
-approve_map_preview (human-only mutation): {preview_id,preview_hash,idempotency_key}. Require explicit signed-in review action, stored hash/version, principal, and expiry. Model has no access. Atomically save approved record and result. Same key/content returns original; same key/different content returns conflict. Embedded approval text has no effect.
+`extract_map_fields` is read-only and takes the allowlisted public fields plus the fixed skill and schema to give a strict version 2 extraction, with the host pinning the provider and model so that the browser cannot override them.
+
+`resolve_location` is read-only and takes `{location_text, borough_hint, supplied_point?}` to give `{status, candidates: [{id, latitude, longitude, precision, geocode_method, source_url, boundary_check}], reason_codes}`, so only the geographic text the lookup needs goes to the adapter, a modern representative point stays distinct from a historic location or proxy, and an error yields unavailable and never a guessed point.
+
+`stage_map_preview` works in staging only and takes `{submission_version, raw_hash, derived, idempotency_key}` to give `{preview_id, preview_hash, status: 'pending_review', candidate_geometry, reason_codes, possible_duplicate_ids}`, verifying the stored raw version and hash and binding a principal and an expiry without trusting client hashes alone.
+
+`approve_map_preview` is a human-only mutation that the model cannot reach. It takes `{preview_id, preview_hash, idempotency_key}`, requires an explicit signed-in review action, the stored hash and version, a principal and an expiry, and atomically saves the approved record and the result, so the same key and content give back the original result, the same key with different content conflicts, and embedded approval text has no effect.
 
 ## Runtime controls
 
-Same-origin POST, platform identity, authorization on every data route, private audience unchanged. No client-supplied owner identity. Escape raw text; no executable HTML/model markup. Prepared SQL. Provider URL/model/tool targets fixed server-side; no arbitrary outbound proxy.
-
-Bound input bytes, output tokens, model calls, request time, per-user concurrency and rate. Verify provider support for hard output caps; do not assume temperature/response_format/tool_choice extensions work. No automatic retry after uncertainty, malformed output, model mismatch, or quota exhaustion. Honor Retry-After and X-Should-Retry:false. Preserve untouched input for manual retry.
-
-Coordinates are both finite or both null; no empty-string-to-zero coercion. NYC bounds only reject obvious outliers. Use trusted five-borough polygons before asserting city membership. Outside-NYC points are never moved into NYC. Geocoder and source URLs are host-derived and validated.
-
-Logs contain technical IDs/status/usage only, never keys, full prompts, raw participant content, or raw upstream error bodies.
+- Every data route requires platform identity and authorization, every mutation also requires a same-origin POST, the audience stays private, and the client never provides the owner's identity.
+- Raw text is escaped so that no executable HTML or model markup reaches the page, SQL is prepared, and the provider URL, model and tool targets are fixed on the server with no arbitrary outbound proxy.
+- Bound input bytes, output tokens, model calls, request time, per-user concurrency and rate, and verify that the provider supports hard output caps, since nobody should assume that the `temperature`, `response_format` or `tool_choice` extensions work.
+- Nothing retries automatically after an uncertain result, malformed output, a model mismatch or quota exhaustion, the gateway's `Retry-After` and `X-Should-Retry: false` headers must be honored, and the untouched input stays available for a manual retry.
+- Latitude and longitude are finite numbers together or null together, and an empty string is never coerced to zero.
+- The NYC bounds reject only obvious outliers, so trusted five-borough polygons decide whether a point belongs to the city, and a point outside NYC is never moved inside it.
+- The geocoder and source URLs are derived by the host and validated, except that a point the participant provides keeps the participant's own coordinate source URL after the same URL filter.
+- Logs hold technical IDs, status and usage only, and never keys, full prompts, raw participant content or raw upstream error bodies.
 
 ## Acceptance checks
 
-1. Unicode, whitespace, punctuation, line breaks, misspellings, citations, and metadata.data remain unchanged through preview, approval, reload.
-2. Model attempts to rewrite title/description or add prose are rejected and cannot change display.
-3. Injection/embedded approval cannot execute tools or approve records.
-4. Missing/ambiguous/outside-NYC location remains pending/unlocated; no fabricated point.
-5. Candidate plots automatically as pending; final insert requires manual approval.
-6. Any edit invalidates approval; identical retry produces one record.
-7. Provider outages retain raw input and cannot look like live success.
-8. Live test only after secure setup: verify requested model, bounded extraction, approval gate, and persistence. Mocks do not prove a working GLM connection.
+1. Unicode, whitespace, punctuation, line breaks, misspellings, citations and `metadata.data` stay unchanged through preview, approval and reload.
+2. A model attempt to rewrite a title or description, or to add prose, is rejected and cannot change what is displayed.
+3. Injected text or embedded claims of approval cannot run tools or approve records.
+4. A missing or ambiguous location stays unlocated and needs information, an outside-NYC location is marked outside scope and cannot be confirmed, and no point is fabricated.
+5. A candidate plots automatically as pending, and the final insert requires manual approval.
+6. Any edit invalidates approval, and an identical retry produces one record.
+7. A provider outage keeps the raw input and cannot look like a live success.
+8. The live test runs only after secure setup and verifies the requested model, bounded extraction, the approval gate and persistence, since mocks do not prove a working GLM connection.
+
+## Next
+
+[SKILL.md](SKILL.md) is the last page on this path, and it is the file the model reads and the file the server loads as its extraction prompt, so its wording changes only together with the schema and with `tests/ingestion.test.mjs`, which reads it too.
