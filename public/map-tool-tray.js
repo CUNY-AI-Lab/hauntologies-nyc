@@ -1,6 +1,7 @@
 'use strict';
-// Filters, Layers and zoom unfold beside Tools: on hover with a mouse, or on click and tap.
-// The tray stays open while it holds focus or one of its panels is open.
+// Search, Filters, Layers and zoom drop down beneath Tools: on hover with a mouse, or on click and tap.
+// The tray stays open while it holds focus or the search is open, and folds when Filters or Layers
+// opens its panel, which sits where the column would.
 (() => {
   const byId = id => document.getElementById(id);
   const group = byId('mapToolGroup'), button = byId('mapControlsButton'), tray = byId('mapToolTray');
@@ -8,12 +9,15 @@
   const hoverable = matchMedia('(hover: hover) and (pointer: fine)');
   let pinned = false, hovering = false, leaveTimer = 0;
   const panelOpen = () => [...tray.querySelectorAll('[aria-expanded]')].some(item => item.getAttribute('aria-expanded') === 'true');
+  const opensPopout = item => item.matches?.('[aria-controls]') && byId(item.getAttribute('aria-controls'))?.classList.contains('popout');
+  const popoutOpen = () => [...tray.querySelectorAll('[aria-expanded="true"]')].some(opensPopout);
   const isOpen = () => group.hasAttribute('data-open');
 
   function sync() {
     // Keyboard focus holds the tray; focus returned after a mouse dismissal does not.
     const keyboardFocus = tray.contains(document.activeElement) && document.activeElement.matches(':focus-visible');
-    const open = pinned || hovering || panelOpen() || keyboardFocus;
+    if (popoutOpen()) pinned = hovering = false;
+    const open = !popoutOpen() && (pinned || hovering || panelOpen() || keyboardFocus);
     group.toggleAttribute('data-open', open);
     button.setAttribute('aria-expanded', String(open));
   }
@@ -26,12 +30,15 @@
 
   button.addEventListener('click', event => {
     if (pinned) { fold(); return; }
+    // Tools while Filters or Layers is open goes back to the column.
+    if (popoutOpen() && typeof closeTools === 'function') closeTools();
     pinned = true; sync();
     // Keyboard activation moves into the tray; a pointer leaves focus where it is.
     if (event.detail === 0) byId('filtersButton').focus();
   });
   group.addEventListener('pointerenter', event => {
-    if (!hoverable.matches || event.pointerType !== 'mouse') return;
+    // An open panel covers the column, so hover waits for it to close.
+    if (!hoverable.matches || event.pointerType !== 'mouse' || popoutOpen()) return;
     clearTimeout(leaveTimer); hovering = true; sync();
   });
   group.addEventListener('pointerleave', event => {
@@ -49,7 +56,13 @@
     if (pinned && !group.contains(event.target)) { pinned = false; sync(); }
   }, { capture: true });
   // A panel closed from elsewhere can leave nothing holding the tray open.
-  new MutationObserver(() => setTimeout(sync)).observe(tray, { subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });
+  new MutationObserver(records => setTimeout(() => {
+    sync();
+    // A closing panel returns focus to its button, which is folded away: Tools takes it instead.
+    const closed = records.some(record => opensPopout(record.target) && record.target.getAttribute('aria-expanded') === 'false');
+    const active = document.activeElement, lost = !active || active === document.body || tray.contains(active) || active.closest('[hidden]') || !active.getClientRects().length;
+    if (closed && !isOpen() && lost) button.focus({ preventScroll: true });
+  })).observe(tray, { subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });
 
   // The unfold clips the tray; once open, the clip lifts so panels anchored to tray items
   // (place search results) can extend past its edges.

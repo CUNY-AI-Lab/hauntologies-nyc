@@ -289,3 +289,10 @@ details[open]:not(:has(>summary[hidden]))>:not(summary){animation:disclosure-in 
 details[open]:not([data-closing])>summary>.disclosure-hint{visibility:hidden}
 .map-tool-group[data-open] .map-tool-tray[data-settled]{clip-path:none}
 @media(prefers-reduced-motion:reduce){.map-tool-group[data-open] .map-tool-tray{clip-path:none}}
+
+/* Map tools drop down beneath Tools as a column the width of Places and Tools, zoom as one row. */
+.map-tool-tray{top:calc(100% + 2px);right:0;flex-direction:column;align-items:stretch;gap:2px;min-width:100%;min-height:0;padding:0;background:none;border:0;box-shadow:none;clip-path:inset(-24px -24px 100% -24px)}
+.map-tool-tray::after{left:0;top:-4px;width:100%;height:4px}
+.header-tools .map-tool-tray button{width:100%;min-width:0;padding:6px 10px}
+.map-tool-tray .zoom-tools{align-self:center}
+@media(max-width:340px){.map-tool-tray{flex-wrap:nowrap;width:auto;max-width:none;padding-block:0}}
