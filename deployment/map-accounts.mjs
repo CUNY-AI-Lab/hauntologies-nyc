@@ -35,7 +35,9 @@ export function accountOptions(env) {
     // earlier setup and reset links remain usable.
     if (!await spend(env, 'mail:' + email.toLowerCase(), MAIL_RECIPIENT, 3600)) return;
     await rate(env, 'mail-global', MAIL_GLOBAL, 3600);
-    const result = await env.ACCOUNT_MAIL.send({ kind, email, token, requestId: crypto.randomUUID(), expiresAt: kind === 'verify_email' ? null : new Date(Date.now() + 30 * 60 * 1000).toISOString() });
+    // The setup row was stored just before this call, so its 30-day deadline is
+    // shown from now; Admission accepts verification deadlines up to 31 days.
+    const result = await env.ACCOUNT_MAIL.send({ kind, email, token, requestId: crypto.randomUUID(), expiresAt: new Date(Date.now() + (kind === 'verify_email' ? SETUP_LINK_MS : 30 * 60 * 1000)).toISOString() });
     if (result?.status !== 'accepted') throw failure('mail_unavailable', 503);
   }
   return {

@@ -10,7 +10,8 @@ test('unused verification survives its old deadline and reset cleanup while rese
   const h = await harness(t), email = 'later@gc.cuny.edu', existing = 'reset@gc.cuny.edu';
   await h.register(existing);
   assert.equal((await h.call('/api/auth/register', { email })).status, 200);
-  assert.equal((await h.db.prepare('SELECT expires_at FROM hny_test_mail WHERE email=?').bind(email).first()).expires_at, null);
+  const setupExpiry = Date.parse((await h.db.prepare('SELECT expires_at FROM hny_test_mail WHERE email=?').bind(email).first()).expires_at);
+  assert.ok(Math.abs(setupExpiry - (Date.now() + 30 * 24 * 60 * 60 * 1000)) < 60 * 1000);
   const setup = await h.token(email);
   assert.equal((await h.call('/api/auth/request-reset', { email: existing })).status, 200);
   const reset = await h.token(existing, 'reset_password');
