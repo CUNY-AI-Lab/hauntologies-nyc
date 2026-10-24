@@ -332,6 +332,48 @@
     });
   }
 
+  // The nearest addresses around a point, for naming a spot by its cross
+  // streets and neighbourhood rather than by "approximate".
+  const reverseGeosearchUrl = (latitude, longitude) => 'https://geosearch.planninglabs.nyc/v2/reverse?' + new URLSearchParams({
+    'point.lat': latitude.toFixed(6), 'point.lon': longitude.toFixed(6), size: '20'
+  });
+
+  const ABBREVIATED = {STREET: 'St', AVENUE: 'Ave', PLACE: 'Pl', BOULEVARD: 'Blvd', ROAD: 'Rd', PARKWAY: 'Pkwy', DRIVE: 'Dr', TERRACE: 'Ter', LANE: 'Ln', COURT: 'Ct', EXPRESSWAY: 'Expy'};
+  const streetKey = name => name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  function editDistance(a, b) {
+    if (Math.abs(a.length - b.length) > 2) return 3;
+    let row = Array.from({length: b.length + 1}, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const next = [i];
+      for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      row = next;
+    }
+    return row[b.length];
+  }
+  const streetLabel = name => titleCase(name.trim().replace(/\s+/g, ' '))
+    .replace(/(^|\s)(\d+) (Street|Avenue|Road|Place|Drive|Terrace|Lane)\b/g, (_, before, n, type) => before + n + suffix(Number(n)) + ' ' + type)
+    .replace(/\b(Street|Avenue|Place|Boulevard|Road|Parkway|Drive|Terrace|Lane|Court|Expressway)$/, type => ABBREVIATED[type.toUpperCase()]);
+
+  // The two nearest distinct streets (PAD spells one street several ways,
+  // "MAC DOUGAL" and "MACDOUGAL", "BLEEKER" and "BLEECKER") and the area.
+  function describeVicinity(json) {
+    const rows = (json?.features || []).map(f => f?.properties || {}).filter(p => typeof p.street === 'string' && p.street.trim())
+      .sort((a, b) => (Number(a.distance) || 0) - (Number(b.distance) || 0));
+    const clusters = [];
+    for (const p of rows) {
+      const key = streetKey(p.street);
+      let cluster = clusters.find(c => c.key === key || (key.length > 5 && c.key.length > 5 && editDistance(c.key, key) <= 2));
+      if (!cluster) clusters.push(cluster = {key, spellings: new Map()});
+      cluster.spellings.set(p.street, (cluster.spellings.get(p.street) || 0) + 1);
+    }
+    const streets = clusters.slice(0, 2).map(c => streetLabel([...c.spellings].sort((a, b) => b[1] - a[1] || a[0].split(' ').length - b[0].split(' ').length)[0][0]));
+    const first = rows[0] || {};
+    const area = [...new Set([first.neighbourhood, first.borough].filter(Boolean))].join(', ');
+    const near = streets.join(' & ');
+    if (!near && !area) return null;
+    return {streets, near, area, borough: first.borough || null, label: [near, area].filter(Boolean).join(' · ')};
+  }
+
   // ---- Nominatim (streets, buildings, places across Greater NYC in NYS) ---
 
   // `dedupe: false` keeps every segment of a street, which intersections
@@ -494,7 +536,7 @@
   root.PlaceSearchModel = Object.freeze({
     AREA, inArea, parseCoordinates, normalizeQuery, splitIntersection, tokenize, nearMiss,
     distanceMeters, attenuation, buildIndex, searchIndex, alongRoute,
-    geosearchUrl, fromGeosearch, nominatimUrl, fromNominatim, parseOsmReference, lookupUrl, reverseUrl, intersectLines, streetClusters,
+    geosearchUrl, fromGeosearch, reverseGeosearchUrl, describeVicinity, nominatimUrl, fromNominatim, parseOsmReference, lookupUrl, reverseUrl, intersectLines, streetClusters,
     PROFILES, routeUrl, fromRoute, formatDistance, formatDuration
   });
 })(typeof window !== 'undefined' ? window : globalThis);

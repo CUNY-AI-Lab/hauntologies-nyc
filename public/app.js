@@ -3,7 +3,15 @@ const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g
 const safeUrl=window.DraftModel.safeUrl;
 const link=(url,label)=>safeUrl(url)?`<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${esc(label)}</a>`:esc(label);
 const displayLabel=value=>String(value??'').replace(/\s*·\s*/g,', ');
-const locationLabel=record=>record.geoStatus==='approximate'?'Approximate':record.geoLabel;
+// Where a place is, by its nearest cross streets and neighbourhood (data/place-vicinity.json,
+// built by scripts/build-place-vicinity.mjs). A record moved since then falls back to its borough.
+let vicinity={};
+function vicinityOf(r,n=AtlasModel.normalize(r)){const v=vicinity[r.id],c=n.geometry?.coordinates;return v&&c&&v.at===c[1].toFixed(6)+','+c[0].toFixed(6)?v:null;}
+function whereLabel(r,n=AtlasModel.normalize(r)){if(!n.geometry)return 'Unlocated';const v=vicinityOf(r,n);return v?[v.near,v.area].filter(Boolean).join(' · '):String(r.borough||'New York City');}
+// Tooltips are for a hovering mouse. On touch a tap would leave one standing behind the popup or card.
+const hoverTips=matchMedia('(hover: hover)').matches;
+function bindHoverTip(marker,content,options){if(hoverTips)marker.bindTooltip(content,options);marker.on('popupopen',()=>marker.closeTooltip());return marker;}
+fetch('data/place-vicinity.json',{cache:'force-cache'}).then(r=>r.ok?r.json():{}).then(data=>{vicinity=data&&typeof data==='object'?data:{};if(map)renderRecords();}).catch(()=>{});
 const NYC_BOUNDS=[[40.47737324425922,-74.25874745984156],[40.91766180885905,-73.70000906387347]], STORAGE='hauntologies-nyc-drafts-v1';
 const LAYERS=window.HAUNT_LAYERS||[], layerById=new Map(LAYERS.map(layer=>[layer.id,layer]));
 const layerOpacities=new Map();
@@ -65,7 +73,7 @@ function renderOwnPlaces(){
  for(const place of ownPlaces){
   const label=place.status==='changes_requested'?'Sent back to you':place.status==='approved'?'Approved, not yet on the map':place.status==='draft'?'Draft':'Waiting for review';
   const marker=L.marker([place.latitude,place.longitude],{pane:'researchPoints',zIndexOffset:700,title:place.title+', '+label,icon:L.divIcon({className:'own-place',html:'<span aria-hidden="true"></span>',iconSize:[26,26],iconAnchor:[13,13]})});
-  const tip=document.createElement('span');tip.append(document.createTextNode(place.title),document.createElement('br'),document.createTextNode(label));marker.bindTooltip(tip,{direction:'top',offset:[0,-12]});
+  const tip=document.createElement('span');tip.append(document.createTextNode(place.title),document.createElement('br'),document.createTextNode(label));bindHoverTip(marker,tip,{direction:'top',offset:[0,-12]});
   marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
   marker.on('click',()=>window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:place.id}})));
   ownPlacesLayer.addLayer(marker);
@@ -74,30 +82,59 @@ function renderOwnPlaces(){
 window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));renderOwnPlaces();renderPendingPlaces();});
 // Everyone sees places sent for review as their own layer, before a reviewer decides.
 // A contribution to a mapped place sits as a badge beside that place's marker.
-let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;
+let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;const pendingMarkers=new Map();
 const pendingLabel=status=>status==='approved'?'Approved, publishing soon':status==='changes_requested'?'Under review: more information requested':'Under review';
-function pendingPopup(place,where){
+// Where a pending place is: the contributor's own words, the place it adds to, or its cross streets.
+function pendingWhere(place,record){
+ if(record)return 'Adds to '+(record.title||'a mapped place')+' · '+whereLabel(record);
+ return place.location_text||'';
+}
+function pendingPopup(place,record){
  const root=document.createElement('div');root.className='pending-place-popup';
  const status=document.createElement('p');status.className='pending-place-status';status.textContent=pendingLabel(place.status);
  const title=document.createElement('strong');title.textContent=place.title;root.append(status,title);
- for(const text of [where,place.location_text&&place.location_text!==where?place.location_text:'',place.description]){if(!text)continue;const p=document.createElement('p');p.textContent=text;root.append(p);}
+ const where=document.createElement('p');where.className='pending-place-where';where.textContent=pendingWhere(place,record);root.append(where);
+ if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)where.textContent=v.label;}).catch(()=>{});
+ if(place.description){const p=document.createElement('p');p.textContent=place.description;root.append(p);}
  const note=document.createElement('p');note.className='small';note.textContent='Shared by a contributor. Not yet checked by a reviewer.';root.append(note);return root;
 }
+function pendingPoint(place,records){const record=place.record_id?records.get(place.record_id):null,lat=record?Number(record.latitude):place.latitude,lon=record?Number(record.longitude):place.longitude;return Number.isFinite(lat)&&Number.isFinite(lon)?{record,lat,lon}:null;}
 function renderPendingPlaces(){
- if(!map)return;pendingPlacesLayer??=L.layerGroup().addTo(map);pendingPlacesLayer.clearLayers();
+ if(!map)return;pendingPlacesLayer??=L.layerGroup().addTo(map);pendingPlacesLayer.clearLayers();pendingMarkers.clear();
  const own=new Set(ownPlaces.map(p=>p.id)),records=new Map(allRecords().map(r=>[r.id,r]));
  for(const place of pendingPlaces){
   if(own.has(place.id))continue;
-  const record=place.record_id?records.get(place.record_id):null,lat=record?Number(record.latitude):place.latitude,lon=record?Number(record.longitude):place.longitude;
-  if(!Number.isFinite(lat)||!Number.isFinite(lon))continue;
+  const at=pendingPoint(place,records);if(!at)continue;const {record,lat,lon}=at;
   const label=pendingLabel(place.status);
   const marker=L.marker([lat,lon],{pane:'researchPoints',zIndexOffset:650,keyboard:true,title:place.title+', '+label,icon:L.divIcon({className:'pending-place'+(record?' attached':''),html:'<span aria-hidden="true">?</span>',iconSize:record?[18,18]:[24,24],iconAnchor:record?[-4,22]:[12,12]})});
   marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
   // Contributor text is untrusted: Leaflet renders a string tooltip as HTML, so pass a text node.
-  const tip=document.createElement('span');tip.textContent=place.title+' · '+label;marker.bindTooltip(tip,{direction:'top',offset:[0,-10]});
-  marker.bindPopup(()=>pendingPopup(place,record?'Adds to '+(record.title||'a mapped place'):''),{maxWidth:280});
-  pendingPlacesLayer.addLayer(marker);
+  const tip=document.createElement('span');tip.textContent=place.title+' · '+label;bindHoverTip(marker,tip,{direction:'top',offset:[0,-10]});
+  marker.bindPopup(()=>pendingPopup(place,record),{maxWidth:280});
+  pendingPlacesLayer.addLayer(marker);pendingMarkers.set(place.id,marker);
  }
+ renderPendingList(records,own);
+}
+// The title card lists everything under review; choosing one brings it up on the map.
+function bringUpPending(place){
+ const feed=$('pendingPlacesFeed');window.HauntologiesDisclosure?window.HauntologiesDisclosure.set(feed,false):(feed.open=false);
+ const marker=pendingMarkers.get(place.id);
+ if(marker){map.setView(marker.getLatLng(),Math.max(map.getZoom(),17));marker.openPopup();return;}
+ const at=pendingPoint(place,new Map(allRecords().map(r=>[r.id,r])));if(at)map.setView([at.lat,at.lon],Math.max(map.getZoom(),17));
+ // The contributor's own place is drawn by their layer; open it in their contributions.
+ if(ownPlaces.some(p=>p.id===place.id))window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:place.id}}));
+}
+function renderPendingList(records,own){
+ const feed=$('pendingPlacesFeed');if(!feed)return;
+ const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
+ feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);
+ $('pendingPlacesList').replaceChildren(...shown.map(place=>{
+  const row=document.createElement('li'),button=document.createElement('button'),record=place.record_id?records.get(place.record_id):null;button.type='button';
+  const title=document.createElement('strong');title.textContent=place.title;const meta=document.createElement('span');
+  meta.textContent=[own.has(place.id)?'Yours':'',pendingLabel(place.status),pendingWhere(place,record)].filter(Boolean).join(' · ');
+  if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)meta.textContent+=' · '+v.label;}).catch(()=>{});
+  button.append(title,meta);button.addEventListener('click',()=>bringUpPending(place));row.append(button);return row;
+ }));
 }
 async function refreshPendingPlaces(){
  const request=++pendingRequest;
@@ -321,7 +358,6 @@ function markerSvg(r){return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="
 function renderLegend(records){
  const entries=new Map();for(const r of records){const label=layerName(r);if(!entries.has(label))entries.set(label,r)}
  $('mapLegend').innerHTML=[...entries].map(([label,r])=>`<li data-record-category="${esc(r.category||'draft')}"><span class="legend-symbol ${esc(r.category||'draft')}" aria-hidden="true">${markerSvg(r)}</span><span>${esc(label)}</span></li>`).join('');
- if(records.some(r=>AtlasModel.normalize(r).geoStatus==='approximate'))$('mapLegend').insertAdjacentHTML('beforeend','<li><span class="legend-symbol approximate" aria-hidden="true"></span><span>Approximate location</span></li>');
 }
 function syncFilterState(){
  const count=Number(Boolean($('search').value.trim()))+['filterStatus','filterPeriod',...Object.keys(facetControls)].filter(id=>$(id).value!=='all').length;
@@ -346,8 +382,8 @@ function renderRecords(){
   const actions=document.createElement('div');actions.className='place-actions';appendPlaceRecord(actions,r);addContributionAction(actions,r);card.append(actions);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
-   const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+' '+n.geoStatus+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+locationLabel(n),keyboard:true,riseOnHover:true});
-   marker.on('click',()=>selectRecord(r));marker.bindTooltip(esc(r.title)+'<br><small>'+esc(locationLabel(n))+'</small>',{direction:'top',offset:[0,-9]});pointLayer.addLayer(marker);markers.set(r.id,marker);
+   const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+whereLabel(r,n),keyboard:true,riseOnHover:true});
+   marker.on('click',()=>selectRecord(r));bindHoverTip(marker,esc(r.title)+'<br><small>'+esc(whereLabel(r,n))+'</small>',{direction:'top',offset:[0,-9]});pointLayer.addLayer(marker);markers.set(r.id,marker);
    if(n.uncertaintyM>0)L.circle([n.geometry.coordinates[1],n.geometry.coordinates[0]],{radius:n.uncertaintyM,color:'#efad6b',weight:1,fillOpacity:.08,interactive:false}).addTo(uncertaintyLayer);
   }
  });
@@ -388,11 +424,11 @@ function addContributionAction(card,r){
  edit.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}})));card.append(edit);
 }
 function placeFacts(r){
- const p=PlaceSummary.view(r);
+ const p=PlaceSummary.view(r),v=vicinityOf(r),near=v?[v.near,v.area].filter(Boolean).join(', '):'';
  const coordinates=p.latitude===null||p.longitude===null
   ? '<p class="place-coordinate-note">Location unresolved</p>'
-  : `<dl class="place-coordinates"><dt>${p.approximate?'Approx. coordinates':'Coordinates'}</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
- return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${coordinates}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+  : `<dl class="place-coordinates"><dt>Coordinates</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
+ return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
 }
 
 function appendPlaceRecord(card,r){

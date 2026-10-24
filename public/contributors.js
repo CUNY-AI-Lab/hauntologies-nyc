@@ -40,6 +40,7 @@
       "Sam O'Hana Grainger",
       'Zachary Lloyd',
       'Jason Nielsen',
+      'Cen Liu',
       'Matthew K. Gold',
     ]) {
       const item = document.createElement('li');

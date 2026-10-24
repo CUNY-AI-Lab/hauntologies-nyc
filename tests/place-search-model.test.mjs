@@ -178,3 +178,14 @@ test('builds reverse lookups for a pinned point', () => {
   assert.equal(url.searchParams.get('lon'), '-73.953182');
   assert.equal(url.searchParams.get('zoom'), '18');
 });
+
+test('names a spot by its two nearest cross streets and neighbourhood, merging PAD spellings', () => {
+  const at = (street, distance, neighbourhood = 'Greenwich Village') => ({ properties: { street, distance, neighbourhood, borough: 'Manhattan' } });
+  const vicinity = M.describeVicinity({ features: [at('BLEEKER STREET', 0.022), at('BLEECKER STREET', 0.019), at('BLEECKER STREET', 0.02),
+    at('MAC DOUGAL STREET', 0.022), at('MACDOUGAL STREET', 0.023), at('MACDOUGAL STREET', 0.024), at('WEST 3 STREET', 0.05)] });
+  assert.deepEqual(vicinity, { streets: ['Bleecker St', 'Macdougal St'], near: 'Bleecker St & Macdougal St', area: 'Greenwich Village, Manhattan',
+    borough: 'Manhattan', label: 'Bleecker St & Macdougal St · Greenwich Village, Manhattan' });
+  assert.equal(M.describeVicinity({ features: [at('WEST 36 STREET', 0.01, 'Midtown West')] }).label, 'West 36th St · Midtown West, Manhattan');
+  assert.equal(M.describeVicinity({ features: [] }), null);
+  assert.match(M.reverseGeosearchUrl(40.72917, -74.00119), /^https:\/\/geosearch\.planninglabs\.nyc\/v2\/reverse\?point\.lat=40\.729170&point\.lon=-74\.001190/);
+});

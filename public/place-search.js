@@ -562,6 +562,15 @@
     if (root.classList.contains('is-open')) { close(); return; }
     open(); input.focus();
   });
+  const described = new Map();
+  function describe(latitude, longitude) {
+    const key = latitude.toFixed(5) + ',' + longitude.toFixed(5);
+    if (!described.has(key)) {
+      const lookup = getJSON(M.reverseGeosearchUrl(latitude, longitude)).then(M.describeVicinity);
+      described.set(key, lookup); lookup.catch(() => described.delete(key));
+    }
+    return described.get(key);
+  }
   window.PlaceSearch = Object.freeze({
     open: () => { open(); input.focus(); },
     close,
@@ -570,7 +579,9 @@
     records: (query, limit = 6) => { const {center, radius} = view(); return M.searchIndex(collectionIndex(), query, {center, radius, limit}); },
     suggest: async (query, signal) => M.fromGeosearch(await getJSON(M.geosearchUrl(query), signal)),
     resolve: lookupStreets,
-    reverse: async (latitude, longitude) => M.fromNominatim([await nominatim(M.reverseUrl(latitude, longitude))])[0] || null
+    reverse: async (latitude, longitude) => M.fromNominatim([await nominatim(M.reverseUrl(latitude, longitude))])[0] || null,
+    // Cross streets and neighbourhood at a point, from NYC GeoSearch; remembered per spot.
+    describe
   });
   window.addEventListener('resize', () => { if (root.classList.contains('is-open') || root.classList.contains('is-peeking')) layout(); });
   map.on('moveend', () => { if (!panel.hidden && input.value.trim()) render(); });

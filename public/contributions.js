@@ -561,7 +561,9 @@
     if(!prior||sourcesText!==openSourcesDisplayInitial)payload.sources_text=sourcesText===''?null:sourcesText;
     const attributes=attributeValues();if(attributes.length||Object.hasOwn(payload,'attributes'))payload.attributes=attributes;
     // A place typed but never picked from the list is kept as words, not dropped.
-    const placeText=placeTyped();if(!prior&&placeText&&!payload.geometry&&!openTargets.length&&!openRequestedRecordId)payload.location_text=placeText;
+    // A pinned point keeps the name shown on its plate (an address, intersection or cross streets),
+    // so the map and reviewers can say where it is without coordinates.
+    const placeText=payload.geometry?text(byId('contributionPlaceName')?.textContent).trim().slice(0,300):placeTyped();if(!prior&&placeText&&!openTargets.length&&!openRequestedRecordId)payload.location_text=placeText;
     const title=byId('contributionObjectTitle').value.trim()||prior?.title||'Contribution';
     return prior?{...prior,title,summary:explanation,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title,summary:explanation,public_credit:{consent:false,label:''},sources:[],attachments:[],targets:structuredClone(openTargets),payload};
   }
@@ -816,8 +818,6 @@
       watchSubmission(s.id,root,s.status);
       const actions=el('div',undefined,'submission-actions');
       if(caps().can_submit&&['draft','submitted','changes_requested','approved'].includes(s.status))actions.append(button(s.status==='changes_requested'?'Revise and resubmit':'Revise',()=>loadRevision(s),'outline'));
-      if(s.capabilities?.can_withhold&&!['withheld','merged'].includes(s.status)){const out=el('span',undefined,'small');out.setAttribute('role','status');
-        const withdraw=button('Withdraw',async()=>{if(!confirm('Withdraw this contribution?'))return;withdraw.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'withhold',rationale:'Withdrawn by the contributor.'});await loadDashboard();await loadSubmission(s.id);}catch(error){out.textContent=error.message;withdraw.disabled=false;}},'textbutton');actions.append(withdraw,out);}
       if(actions.children.length)root.append(actions);
     }
     renderReviewControls(root,s);

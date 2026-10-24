@@ -22,7 +22,11 @@
   }
   function identity(value) {
     if(session?.actor_id&&session.actor_id!==value?.actor_id)window.dispatchEvent(new CustomEvent('contributions-session-ended'));
-    session = value; trigger.disabled = false; trigger.textContent = value && !value.password_required ? 'Account' : 'Sign in';
+    // A sign-in this tab did not make (another tab, an email link, a restored page) still has to
+    // reach the contribution form, or it keeps asking to sign in beside an "Account" button.
+    const started = value?.actor_id && !value.password_required && (session?.actor_id !== value.actor_id || session?.password_required);
+    session = value;
+    if (started) window.dispatchEvent(new CustomEvent('contributions-session-started')); trigger.disabled = false; trigger.textContent = value && !value.password_required ? 'Account' : 'Sign in';
     trigger.setAttribute('aria-label', trigger.textContent);
     byId('accountRegistrationSection').hidden = !(value && !value.password_required);
     const saved = window.HauntologiesRegistration?.receipt(); registration.textContent = saved ? 'Receipt: ' + saved.receipt_id : 'Event registration is available below.';
@@ -69,7 +73,7 @@
         if (operation === 'register' || operation === 'request-reset') {
           renderForm('sign-in', operation === 'register' ? 'Check your email for a verification link. If you already have an account, sign in or reset your password.' : 'If this address has an account, a reset link will arrive by email.');
         } else if (operation === 'reset') { challenge = null; identity(null); renderForm('sign-in', 'Password updated. Sign in with your new password.'); }
-        else { challenge = null; await reconcile(); window.dispatchEvent(new CustomEvent('contributions-session-started')); }
+        else { challenge = null; await reconcile(); }
       } catch (error) { if (error.code === 'registration_restricted') admission?.reject(); status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.code === 'invalid_token' && operation === 'verify' ? 'This verification link has already been used or is invalid. Request a new link.' : error.message; }
       finally { busy = false; submit.disabled = false; }
     });

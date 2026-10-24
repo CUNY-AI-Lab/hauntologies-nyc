@@ -1,0 +1,46 @@
+/* The map's own controls, a little larger than the buttons inside panels and forms.
+   Loaded last so it settles the size across the layouts in style.css. */
+.header-tools .outline,.contribution-navigation .outline,.recenter-map,.contributors-footer button{min-height:48px;font-size:13px}
+.header-tools button{min-height:48px}
+.header-tools{min-width:84px}
+.contribution-navigation button{min-width:92px}
+.recenter-map{min-width:82px}
+.recenter-map svg{width:18px;height:18px}
+.zoom-tools,.header-tools .zoom-tools{min-height:48px}
+.zoom-tools .leaflet-control-zoom a{width:48px!important;height:48px!important;line-height:48px!important;font-size:26px!important}
+/* The place search and the plot tool share one row beneath Layers. */
+.map-find-row{display:flex;gap:2px;align-items:stretch}
+.map-find-row>.plot-place-toggle,.map-find-row>.place-search{flex:1 1 0;min-width:0}
+.header-tools .map-find-row button{min-width:0;width:100%;padding:6px 4px}
+.plot-place-toggle svg{width:18px;height:18px;flex:none}
+.masthead .header-tools .plot-place-toggle[aria-pressed=true]::before{border-color:#e9caa1;background:#2a251d}
+.map-tool-tray .map-find-row{min-width:96px}
+
+/* Event details, Published edits and Under review sit side by side in the title card. */
+.brand-drops{display:flex;flex-wrap:wrap;gap:0 8px;margin-top:6px}
+.brand-drop{pointer-events:auto;font:12px/1.4 Arial,Helvetica,sans-serif}
+.brand-drops>.brand-drop:not([open]){flex:0 0 auto}
+.brand-drops>.brand-drop[open]{flex:1 0 100%}
+.brand-drop>summary{position:relative;isolation:isolate;display:flex;align-items:center;gap:6px;width:fit-content;min-height:44px;padding:6px 10px;color:var(--ink)}
+.brand-drop>summary::before{content:'';position:absolute;z-index:-1;inset:6px 0;border:1px solid #827563;background:#11110f;pointer-events:none}
+.brand-drop>summary::after{content:'';position:absolute;right:0;top:6px;width:9px;height:9px;background:linear-gradient(45deg,#746652 0 43%,#bba78a 44% 54%,#080908 55%);pointer-events:none}
+.brand-drop>summary:hover::before,.brand-drop[open]:not([data-closing])>summary::before{background:#27231c;border-color:#c1a47d}
+#publishedEditsFeed{margin-top:0}
+.brand-drop .program-credits{margin:8px 0 4px}
+#pendingPlacesList{padding:0;margin:0;list-style:none;max-height:min(300px,45dvh);overflow:auto;overscroll-behavior:contain}
+#pendingPlacesList>li{border-top:1px solid var(--line);padding:4px 0}
+#pendingPlacesList button{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:0;background:none;color:var(--ink)}
+#pendingPlacesList button:hover{background:#27231c}
+#pendingPlacesList button span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+#pendingPlacesStatus{margin-top:8px;color:var(--muted)}
+#pendingPlacesStatus:empty{display:none}
+#pendingPlacesCount{background:#8a63c9;color:#fff}
+
+/* Plotting: a crosshair over the map and the plotted spot awaiting confirmation. */
+body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crosshair}
+.plot-spot{display:flex;align-items:center;justify-content:center;border:2px solid #ffcf94;border-radius:50%;background:#171510cc;box-shadow:0 0 0 3px #171510aa;color:#ffcf94;font:700 14px/1 Arial,Helvetica,sans-serif}
+.plot-confirm p{margin:4px 0;overflow-wrap:anywhere}
+.plot-confirm strong{display:block;font-size:14px}
+.plot-confirm .small{color:var(--muted)}
+.plot-confirm-actions{display:flex;gap:8px;margin-top:8px}
+.plot-confirm-actions button{min-height:40px;padding:6px 12px}
