@@ -38,7 +38,7 @@ export async function publishedRecords(db){return (await publishedRecordPage(db)
 export function publicRecord(row){
     try{const derived=JSON.parse(row.derived_json),entry=derived.canonical_entry;
       // An edited place is published whole, in the map's own record shape.
-      if(derived.edited_record){if(derived.workflow?.review_state!=='merged'||derived.workflow.job_id!==row.preview_hash||typeof row.raw_json!=='string')return [];const edited=JSON.parse(row.raw_json);return [{...edited,id:row.id,review_state:'merged',merged_version:row.preview_hash,edited:true}];}
+      if(derived.edited_record){if(derived.workflow?.review_state!=='merged'||derived.workflow.job_id!==row.preview_hash||typeof row.raw_json!=='string')return [];const edited=JSON.parse(row.raw_json);return [{...edited,id:row.id,review_state:'merged',canonical_reviewed:true,merged_version:row.preview_hash,edited:true}];}
       if(entry?.review_state!=='merged'||derived.workflow?.job_id!==row.preview_hash)return [];
       const value=pick(entry,placeFields),sources=(derived.canonical_sources||[]).map(source=>pick(source,sourceFields));
       return [{...value,id:row.id,status:'approved',review_state:'merged',canonical_reviewed:true,merged_version:row.preview_hash,

@@ -859,7 +859,7 @@
       if(s.capabilities?.can_withhold)offer('Withhold','withhold','Why withhold it?');
       if(actions.children.length)root.append(actions,out);
     }
-    const canApply=!!caps().can_apply&&s.status==='approved'&&s.approval?.independent===true&&s.approval?.revision===s.revision&&s.application?.applicable;
+    const canApply=!!caps().can_apply&&s.status==='approved'&&(s.approval?.independent===true||s.approval?.admin_self_approval===true)&&s.approval?.revision===s.revision&&s.application?.applicable;
     if(canApply){
       const out=el('div',undefined,'small');
       const apply=button('Apply',async()=>{apply.disabled=true;try{const result=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});out.textContent='Staged. Verify the job to publish it.';await loadDashboard();}catch(error){out.textContent=error.message;apply.disabled=false;}},'primary');

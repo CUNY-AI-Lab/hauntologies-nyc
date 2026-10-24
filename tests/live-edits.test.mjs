@@ -208,8 +208,42 @@ test('published edits carry what the card shows and no editor text', async t => 
   ok((await publish(h, edit(await target(h), { description: 'A visible new description.' }))).verified, 200);
   const [record] = await publishedRecords(h.db);
   assert.equal(record.description, 'A visible new description.');
-  assert.equal(record.canonical_reviewed, undefined);
+  assert.equal(record.canonical_reviewed, true, 'reviewed card text shows the edited description');
   const stored = h.db.native.prepare('SELECT owner_id, derived_json FROM approved_records WHERE id=?').get(place.id);
   assert.equal(stored.owner_id, 'inventory');
   assert.equal(JSON.parse(stored.derived_json).edited_record.submission_json, undefined);
+});
+
+test('the map card shows an edited description', async t => {
+  const vm = await import('node:vm');
+  const ctx = vm.createContext({ window: {}, structuredClone, URL });
+  for (const file of ['atlas-model.js', 'place-summary.js']) vm.runInContext(readFileSync(new URL('../public/' + file, import.meta.url), 'utf8'), ctx);
+  const card = record => ctx.window.PlaceSummary.view(record).description;
+  const h = harness(t);
+  const { description, ...bare } = place, untouched = { ...bare, canonical_reviewed: true };
+  ok((await publish(h, edit(await target(h), { description: 'Shown on the card.' }))).verified, 200);
+  assert.equal(card((await publishedRecords(h.db))[0]), 'Shown on the card.');
+  assert.equal(card(untouched), card(bare), 'a place without a description keeps its label');
+});
+
+test('approved work can be sent back or withheld, but not while a release is staged', async t => {
+  const h = harness(t);
+  const triage = (s, action, actor = 'reviewer') => call(h, 'triage', { idempotency_key: key(), submission_id: s.id, expected_revision: s.revision, action, rationale: 'Synthetic triage.' }, actor);
+  const a = ok(await approve(h, await submit(h, edit(await target(h), { title: 'Send me back' }))), 200).submission;
+  assert.equal(ok(await triage(a, 'request_information'), 200).submission.status, 'changes_requested');
+  const b = ok(await approve(h, await submit(h, edit(await target(h), { title: 'Withdraw me' }), 'author2')), 200).submission;
+  assert.equal(ok(await triage(b, 'withhold', 'author2'), 200).submission.status, 'withheld');
+  const c = ok(await approve(h, await submit(h, edit(await target(h), { title: 'Staged' }), 'author3')), 200).submission;
+  ok(await apply(h, c), 201);
+  assert.equal((await triage(c, 'request_information')).status, 409);
+});
+
+test('a self-approval is labelled as one, not as independent', async t => {
+  const h = harness(t, { reviewers: ['admin', 'reviewer'], publishers: ['admin'], stewards: [], admins: ['admin'] });
+  const s = await submit(h, edit(await target(h), { title: 'Labelled' }), 'admin');
+  const approved = ok(await approve(h, s, 'admin'), 200).submission;
+  assert.equal(approved.approval.independent, false);
+  assert.equal(approved.approval.admin_self_approval, true);
+  const kinds = ok(await call(h, 'submission?id=' + s.id, undefined, 'admin'), 200).submission.events.map(e => e.kind);
+  assert.ok(kinds.includes('admin_self_approval') && !kinds.includes('independent_approval'), kinds.join(','));
 });
