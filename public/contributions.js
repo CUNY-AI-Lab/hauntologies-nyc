@@ -85,9 +85,12 @@
     if(actor!==request.actor_id)throw Object.assign(new Error('Use the original account to retry this save'),{status:409});
   }
   function clearPrivateView(message){
+    const endedKey=privateActor?draftStorageKey:null;
     if(privateActor){saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
     dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
     byId('workflowConnection').textContent=message;byId('reviewCapabilityNotice').textContent='';
+    // Only when a session ended mid-edit; a signed-out page load keeps its own notice.
+    if(endedKey&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
     byId('submissionDetail').replaceChildren();byId('submissionDetail').hidden=true;
     byId('contributionReceipt').replaceChildren();byId('contributionReceipt').hidden=true;
     byId('contributionTargetPick').replaceChildren(new Option('No records',''));byId('useContributionTarget').disabled=true;
@@ -273,6 +276,21 @@
   // Intake stores the contributor's words; classification and plotting remain review work.
   let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
   let draftStorageKey='hauntologies-contribution-draft:anonymous';let draftRevisionBlocked=null;
+  // Drafts outlive the tab: sign-in and email verification can continue in a new tab, and a
+  // session can expire mid-edit. They stay on this device for 14 days, are cleared once the
+  // contribution is saved, and can be discarded. Staged images stay in memory only.
+  const anonymousDraftKey='hauntologies-contribution-draft:anonymous',draftLifetime=14*24*60*60*1000;
+  function readStoredDraft(key){
+    for(const store of [localStorage,sessionStorage]){try{const value=JSON.parse(store.getItem(key)||'null');if(value&&(!Number.isFinite(value.saved_at)||Date.now()-value.saved_at<draftLifetime))return value;}catch{}}
+    return null;
+  }
+  function forgetDraft(key){for(const store of [localStorage,sessionStorage]){try{store.removeItem(key);}catch{}}}
+  function draftNotice(text,discard=false){
+    const notice=byId('draftNotice');if(!notice)return;notice.replaceChildren();notice.hidden=!text;if(!text)return;
+    notice.append(document.createTextNode(text));
+    if(discard){const control=button('Discard draft',()=>{forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);resetContributionForm();resetOpenContext();draftNotice('Draft discarded');},'textbutton');notice.append(' ',control);}
+  }
+  const draftTime=value=>Number.isFinite(value?.saved_at)?new Date(value.saved_at).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
   const isOpenForm=()=>!revisionOriginal||revisionOriginal.type==='open_proposal';
   const pointShape=point=>point&&typeof point.latitude==='number'&&typeof point.longitude==='number'&&Number.isFinite(point.latitude)&&Number.isFinite(point.longitude)&&Math.abs(point.latitude)<=90&&Math.abs(point.longitude)<=180;
   const pointForm=()=>isOpenForm()&&!revisionOriginal&&!revisionOf&&!draftRevisionBlocked&&byId('contributionPlaceMode').value==='new'&&!openRequestedRecordId&&!openTargets.length;
@@ -314,10 +332,10 @@
   });
   function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
   function draftValue(){return {version:1,object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
-  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude)sessionStorage.setItem(draftStorageKey,JSON.stringify(value));else sessionStorage.removeItem(draftStorageKey);}catch{}}
+  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
-      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets))sessionStorage.removeItem(draftStorageKey);
+      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets)){forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);draftNotice('');}
     }catch{}
   }
   function restoreDraftFields(value){
@@ -335,9 +353,15 @@
     }catch(error){serviceFailure(error,restoreRevisionDraft);}
   }
   function restoreDraft(){
-    try{const value=JSON.parse(sessionStorage.getItem(draftStorageKey)||'null');if(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string')return;
+    try{
+      // The newest of this account's draft and one written while signed out wins; a signed-out
+      // draft then moves to the account so it is not left behind for the next person.
+      const own=readStoredDraft(draftStorageKey),anonymous=draftStorageKey===anonymousDraftKey?null:readStoredDraft(anonymousDraftKey);
+      const value=anonymous&&(!own||(anonymous.saved_at||0)>(own.saved_at||0))?anonymous:own;
+      if(value&&value===anonymous){try{localStorage.setItem(draftStorageKey,JSON.stringify(value));}catch{}forgetDraft(anonymousDraftKey);}
+      if(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string')return;
       if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
-      restoreDraftFields(value);if(draftRevisionBlocked){restoreRevisionDraft();}
+      restoreDraftFields(value);draftNotice('Restored your unsent draft'+(draftTime(value)?' from '+draftTime(value):'')+'.',true);if(draftRevisionBlocked){restoreRevisionDraft();}
       else if(value.record_id)chooseOpenReference(value.record_id,value.title);
     }catch{}
   }

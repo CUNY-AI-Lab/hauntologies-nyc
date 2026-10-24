@@ -179,3 +179,7 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .staged-image-attribution { margin:10px 0 0; font-size:12px; overflow-wrap:anywhere; }
 .staged-image-attribution a, .staged-image-link { color:#ebc395; text-underline-offset:3px; }
 .staged-image-link { display:inline-block; min-height:44px; padding-block:12px; font-size:12px; }
+
+/* Draft state sits at the head of the record: saved, restored, or kept after a session ended. */
+.draft-notice { margin:0 0 12px; padding:8px 10px; border-left:2px solid var(--orange); background:#171512; font-size:11px; line-height:1.5; color:#d9cfbf; }
+.draft-notice .textbutton { min-height:0; padding:0; font-size:11px; color:#ebc395; text-decoration:underline; text-underline-offset:3px; background:none; border:0; }
