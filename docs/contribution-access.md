@@ -42,6 +42,8 @@ An explicitly selected reviewer can be configured through `CONTRIBUTIONS_REVIEWE
 
 Publishers are configured separately through `CONTRIBUTIONS_PUBLISHER_IDS`, a JSON array in the same format and with the same 20-ID limit. A publisher can apply, verify and roll back independently approved changes; the reviewer list never grants publishing. The publisher list has no effect without a valid reviewer list, and an invalid publisher list grants no publishers while leaving reviewers unchanged. A publisher may also be a reviewer, but approval still requires a reviewer other than the submission's owner. Only structured entry bundles create map records: freeform proposals from the Contribute form remain review-only (`open_proposal_review_only`) until they are restated as an entry.
 
+Edits to existing places are live once published. A metadata edit to a built-in or already published place applies as the whole edited record: an independent reviewer approves it, a publisher applies it (staged, not yet public), and verifying publishes it to `approved_records`, where the map shows it in place of the original by id. Every step is a single D1 batch guarded by the submission revision and the target's version and hash, so two edits prepared against the same version cannot both land: the second is refused (`stale_target`) and its author reloads and proposes again. Rollback restores the built-in place, which can then be edited again. Edits to unpublished hosted records remain review-only.
+
 ## Production release
 
 Target Worker: `hauntologies-nyc`, Cloudflare account `452c33847cf5cb1e46f391fca32fd1b5`. Existing D1 database: `hauntologies-nyc` / `df7f1e92-e339-4e25-ac30-989dd68d8dfc`. Public origin: `https://hauntologies-nyc.ailab-452.workers.dev`.

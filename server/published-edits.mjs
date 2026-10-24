@@ -12,8 +12,8 @@ export async function publishedEdits(db) {
     try {
       const manifest=JSON.parse(row.manifest_json), published=JSON.parse(row.raw_json);
       const targets=(manifest.targets||[]).filter(target=>target.after).map(target=>{
-        const record=JSON.parse(target.after.derived_json);
-        return {record_id:target.record_id,title:record.canonical_entry?.title||'Published place'};
+        const record=JSON.parse(target.after.derived_json),edited=record.edited_record?JSON.parse(target.after.raw_json):null;
+        return {record_id:target.record_id,title:edited?.title||record.canonical_entry?.title||'Published place'};
       });
       if(!targets.length)return [];
       const credit=published.public_credit;
@@ -28,7 +28,7 @@ const placeFields=['entry_id','group_id','category','title','claim_text','place_
 const sourceFields=['source_ref','entry_id','role','title','citation','url','repository','locator','evidence_note','rights_statement','rights_status'];
 const pick=(value,fields)=>Object.fromEntries(fields.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
 export async function publishedRecordPage(db,after=''){
-  const {results=[]}=await db.prepare(`SELECT r.id,r.derived_json,r.preview_hash FROM approved_records r
+  const {results=[]}=await db.prepare(`SELECT r.id,r.raw_json,r.derived_json,r.preview_hash FROM approved_records r
     JOIN workflow_jobs j ON j.id=r.preview_hash AND j.status='verified'
     JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_submissions s ON s.id=j.submission_id WHERE a.reviewer_id<>s.owner_id AND r.id>? ORDER BY r.id LIMIT 501`).bind(after).all();
@@ -37,6 +37,8 @@ export async function publishedRecordPage(db,after=''){
 export async function publishedRecords(db){return (await publishedRecordPage(db)).records;}
 export function publicRecord(row){
     try{const derived=JSON.parse(row.derived_json),entry=derived.canonical_entry;
+      // An edited place is published whole, in the map's own record shape.
+      if(derived.edited_record){if(derived.workflow?.review_state!=='merged'||derived.workflow.job_id!==row.preview_hash||typeof row.raw_json!=='string')return [];const edited=JSON.parse(row.raw_json);return [{...edited,id:row.id,review_state:'merged',canonical_reviewed:true,merged_version:row.preview_hash,edited:true}];}
       if(entry?.review_state!=='merged'||derived.workflow?.job_id!==row.preview_hash)return [];
       const value=pick(entry,placeFields),sources=(derived.canonical_sources||[]).map(source=>pick(source,sourceFields));
       return [{...value,id:row.id,status:'approved',review_state:'merged',canonical_reviewed:true,merged_version:row.preview_hash,

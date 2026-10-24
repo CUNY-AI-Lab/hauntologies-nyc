@@ -239,10 +239,15 @@
     }catch(error){state.target=null;state.unavailable=serviceError(error);if(current===state)serviceStatus(state,error);}
     finally{state.busy=false;if(current===state)lock();}
   }
+  // Says what happens next in plain terms; the identifiers stay available for support.
   function renderReceipt(data){
-    const root=byId('recordEditorReceipt'),saved=data.submission,revision=data.receipt.result.revision,label=saved.status==='submitted'?'Pending review':saved.status==='changes_requested'?'Needs information':saved.status;
-    root.replaceChildren();root.append(node('h3','Saved'),node('p',saved.revision===revision?label:'Current status: '+label),node('p','Submission: '+saved.id),node('p','Revision: '+revision));
-    if(saved.revision!==revision)root.append(node('p','Current revision: '+saved.revision));root.append(node('p','Receipt: '+data.receipt.id));root.hidden=false;
+    const root=byId('recordEditorReceipt'),saved=data.submission,revision=data.receipt.result.revision;
+    const next=saved.status==='changes_requested'?'Sent back. Revise it and submit again.':saved.status==='approved'?'Approved. It replaces the place on the map once a publisher verifies it.':'Waiting for a reviewer. Once approved and published, your edit replaces the place on the map.';
+    const view=node('button','View status');view.type='button';view.className='textbutton';
+    view.addEventListener('click',()=>{dialog?.close?.();window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:saved.id}}));});
+    root.replaceChildren();const reference=node('p','Reference '+saved.id+(revision>1?', revision '+revision:''));reference.className='submission-ref';
+    root.append(node('h3',revision>1?'Revision sent for review':'Sent for review'),node('p',next),view,reference);
+    root.hidden=false;
   }
   async function send(){
     const state=current;if(!state||state.busy||state.saved||(!state.pending&&!state.preview?.serverValid))return;
