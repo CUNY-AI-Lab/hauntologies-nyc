@@ -123,39 +123,48 @@
     }, 250);
   }
 
+  // Streets, buildings, intersections and OSM objects for one query; shared
+  // with the Contribute form through window.PlaceSearch.resolve.
+  async function lookupStreets(query) {
+    const ref = M.parseOsmReference(query);
+    let rows;
+    if (ref) rows = M.fromNominatim(await nominatim(M.lookupUrl(ref)));
+    else {
+      rows = M.fromNominatim(await nominatim(M.nominatimUrl(query)));
+      const split = M.splitIntersection(query), streets = split && (split.explicit || !rows.length) ? split.streets : null;
+      if (streets) {
+        // No intersections in Nominatim: fetch both streets and find where they meet.
+        const segments = (name, bounds) => nominatim(M.nominatimUrl(name, {limit: bounds ? 40 : 20, dedupe: false, bounds})).then(M.fromNominatim);
+        const [a, b] = await Promise.all(streets.map(name => segments(name)));
+        let meet = M.intersectLines(a.map(r => r.geometry), b.map(r => r.geometry));
+        // A long street (Broadway) has more segments than one page holds:
+        // look for it again where the shorter street is.
+        if (!meet && a.length && b.length) {
+          const [long, short] = a.length >= b.length ? [streets[0], b] : [streets[1], a];
+          for (const bounds of M.streetClusters(short)) {
+            meet = M.intersectLines((await segments(long, bounds)).map(r => r.geometry), short.map(r => r.geometry));
+            if (meet) break;
+          }
+        }
+        if (meet) rows = [{id: 'x:' + streets.join('&'), source: 'osm', kind: 'Intersection', title: streets.join(' & '),
+          subtitle: [...new Set([a[0], b[0]].flatMap(r => (r?.subtitle || '').split(', ')))]
+            .filter(part => part && !/\b(street|avenue|road|place|boulevard|drive|lane|st|ave)\b/i.test(part)).join(', '),
+          latitude: meet.latitude, longitude: meet.longitude,
+          bounds: null, geometry: null, first: true}, ...rows];
+      }
+    }
+    return {ref, rows};
+  }
+
   async function runNominatim() {
     const query = input.value.trim();
     if (!query || state.osm.busy) return;
-    const ref = M.parseOsmReference(query);
     state.osm = {query, rows: [], busy: true, note: ''};
     render();
+    let ref = null;
     try {
       let rows;
-      if (ref) rows = M.fromNominatim(await nominatim(M.lookupUrl(ref)));
-      else {
-        rows = M.fromNominatim(await nominatim(M.nominatimUrl(query)));
-        const split = M.splitIntersection(query), streets = split && (split.explicit || !rows.length) ? split.streets : null;
-        if (streets) {
-          // No intersections in Nominatim: fetch both streets and find where they meet.
-          const segments = (name, bounds) => nominatim(M.nominatimUrl(name, {limit: bounds ? 40 : 20, dedupe: false, bounds})).then(M.fromNominatim);
-          const [a, b] = await Promise.all(streets.map(name => segments(name)));
-          let meet = M.intersectLines(a.map(r => r.geometry), b.map(r => r.geometry));
-          // A long street (Broadway) has more segments than one page holds:
-          // look for it again where the shorter street is.
-          if (!meet && a.length && b.length) {
-            const [long, short] = a.length >= b.length ? [streets[0], b] : [streets[1], a];
-            for (const bounds of M.streetClusters(short)) {
-              meet = M.intersectLines((await segments(long, bounds)).map(r => r.geometry), short.map(r => r.geometry));
-              if (meet) break;
-            }
-          }
-          if (meet) rows = [{id: 'x:' + streets.join('&'), source: 'osm', kind: 'Intersection', title: streets.join(' & '),
-            subtitle: [...new Set([a[0], b[0]].flatMap(r => (r?.subtitle || '').split(', ')))]
-              .filter(part => part && !/\b(street|avenue|road|place|boulevard|drive|lane|st|ave)\b/i.test(part)).join(', '),
-            latitude: meet.latitude, longitude: meet.longitude,
-            bounds: null, geometry: null, first: true}, ...rows];
-        }
-      }
+      ({ref, rows} = await lookupStreets(query));
       if (input.value.trim() !== query) return;
       const {center, radius} = view();
       rows.forEach((row, rank) => { row.distance = M.distanceMeters(center, [row.latitude, row.longitude]); row.score = (row.first ? 10 : 1) * M.attenuation(row.distance, radius) / (1 + rank * .25); });
@@ -556,7 +565,12 @@
   window.PlaceSearch = Object.freeze({
     open: () => { open(); input.focus(); },
     close,
-    get isOpen() { return root.classList.contains('is-open'); }
+    get isOpen() { return root.classList.contains('is-open'); },
+    // The search engine without this control's UI, for other place fields.
+    records: (query, limit = 6) => { const {center, radius} = view(); return M.searchIndex(collectionIndex(), query, {center, radius, limit}); },
+    suggest: async (query, signal) => M.fromGeosearch(await getJSON(M.geosearchUrl(query), signal)),
+    resolve: lookupStreets,
+    reverse: async (latitude, longitude) => M.fromNominatim([await nominatim(M.reverseUrl(latitude, longitude))])[0] || null
   });
   window.addEventListener('resize', () => { if (root.classList.contains('is-open') || root.classList.contains('is-peeking')) layout(); });
   map.on('moveend', () => { if (!panel.hidden && input.value.trim()) render(); });

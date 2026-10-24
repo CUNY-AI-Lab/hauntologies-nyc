@@ -170,3 +170,11 @@ test('builds route requests and reads their results', () => {
   assert.equal(M.formatDistance(100), '330 ft');
   assert.equal(M.formatDuration(4200), '1 h 10 min');
 });
+
+test('builds reverse lookups for a pinned point', () => {
+  const url = new URL(M.reverseUrl(40.706274, -73.953182));
+  assert.equal(url.pathname, '/reverse');
+  assert.equal(url.searchParams.get('lat'), '40.706274');
+  assert.equal(url.searchParams.get('lon'), '-73.953182');
+  assert.equal(url.searchParams.get('zoom'), '18');
+});

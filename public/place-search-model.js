@@ -370,6 +370,11 @@
     osm_ids: ref.type + ref.id, format: 'jsonv2', addressdetails: '1', polygon_geojson: '1', polygon_threshold: '0.00002', 'accept-language': 'en'
   });
 
+  // The address or named place at a point, for a pin dropped on the map.
+  const reverseUrl = (latitude, longitude) => 'https://nominatim.openstreetmap.org/reverse?' + new URLSearchParams({
+    lat: latitude.toFixed(6), lon: longitude.toFixed(6), format: 'jsonv2', addressdetails: '1', zoom: '18', 'accept-language': 'en'
+  });
+
   const osmLinks = (type, id) => {
     const letter = {node: 'N', way: 'W', relation: 'R'}[type] || type;
     return {details: `https://nominatim.openstreetmap.org/ui/details.html?osmtype=${letter}&osmid=${id}`,
@@ -489,7 +494,7 @@
   root.PlaceSearchModel = Object.freeze({
     AREA, inArea, parseCoordinates, normalizeQuery, splitIntersection, tokenize, nearMiss,
     distanceMeters, attenuation, buildIndex, searchIndex, alongRoute,
-    geosearchUrl, fromGeosearch, nominatimUrl, fromNominatim, parseOsmReference, lookupUrl, intersectLines, streetClusters,
+    geosearchUrl, fromGeosearch, nominatimUrl, fromNominatim, parseOsmReference, lookupUrl, reverseUrl, intersectLines, streetClusters,
     PROFILES, routeUrl, fromRoute, formatDistance, formatDuration
   });
 })(typeof window !== 'undefined' ? window : globalThis);
