@@ -3,14 +3,24 @@ const MAX_REVIEWERS = 20;
 const EMPTY = Object.freeze([]);
 const DISABLED = Object.freeze({ reviewers: EMPTY, publishers: EMPTY, stewards: EMPTY });
 
-// This is server configuration, never a request field or an identity lookup.
-// Reject the entire list if any entry is invalid; do not partially grant roles.
-export function reviewAuthorization(raw) {
-  if (typeof raw !== 'string') return DISABLED;
+// Each list is server configuration, never a request field or an identity lookup.
+// Reject a whole list if any entry is invalid; do not partially grant roles.
+function actorList(raw) {
+  if (typeof raw !== 'string') return null;
   let ids;
-  try { ids = JSON.parse(raw); } catch { return DISABLED; }
+  try { ids = JSON.parse(raw); } catch { return null; }
   if (!Array.isArray(ids) || ids.length > MAX_REVIEWERS ||
       ids.some(id => typeof id !== 'string' || ![40, 71].includes(id.length) || !ACTOR_ID.test(id)) ||
-      new Set(ids).size !== ids.length) return DISABLED;
-  return Object.freeze({ reviewers: Object.freeze(ids), publishers: EMPTY, stewards: EMPTY });
+      new Set(ids).size !== ids.length) return null;
+  return Object.freeze(ids);
+}
+
+// Publishers apply and verify independently approved changes. They come only from their own
+// list (CONTRIBUTIONS_PUBLISHER_IDS) and have no effect without a valid reviewer list, because
+// nothing can be approved without an independent reviewer. An invalid publisher list grants no
+// publishers and leaves reviewers as configured.
+export function reviewAuthorization(rawReviewers, rawPublishers) {
+  const reviewers = actorList(rawReviewers);
+  if (!reviewers) return DISABLED;
+  return Object.freeze({ reviewers, publishers: (reviewers.length && actorList(rawPublishers)) || EMPTY, stewards: EMPTY });
 }

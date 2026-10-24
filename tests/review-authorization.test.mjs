@@ -69,7 +69,26 @@ test('configuration cannot mutate shared defaults or add publication or steward 
   assert.deepEqual(config.stewards, []);
 });
 
-function harness(t, raw) {
+test('publishers come only from their own list and need a valid reviewer list', () => {
+  const publisher = actor(4), mapPublisher = mapActor(4);
+  const config = reviewAuthorization(JSON.stringify([reviewer]), JSON.stringify([publisher, mapPublisher]));
+  assert.deepEqual(config, { ...empty, reviewers: [reviewer], publishers: [publisher, mapPublisher] });
+  assert.throws(() => config.publishers.push(owner), TypeError);
+  for (const reviewers of [undefined, '[]', JSON.stringify([reviewer, 'invalid'])]) {
+    assert.deepEqual(reviewAuthorization(reviewers, JSON.stringify([publisher])), empty);
+  }
+});
+
+test('an invalid publisher list grants no publishers and keeps reviewers', () => {
+  const many = Array.from({ length: 21 }, (_, i) => actor(i + 10));
+  for (const raw of [undefined, '', '[', JSON.stringify(actor(4)), JSON.stringify([actor(4), 'invalid']),
+    JSON.stringify([actor(4), actor(4)]), JSON.stringify([actor(4).toUpperCase()]), JSON.stringify(many)]) {
+    assert.deepEqual(reviewAuthorization(JSON.stringify([reviewer]), raw), { ...empty, reviewers: [reviewer] });
+  }
+  assert.equal(reviewAuthorization(JSON.stringify([reviewer]), JSON.stringify(many.slice(0, 20))).publishers.length, 20);
+});
+
+function harness(t, raw, rawPublishers) {
   const native = new DatabaseSync(':memory:');
   for (const file of readdirSync(new URL('../drizzle/', import.meta.url)).filter(f => f.endsWith('.sql')).sort()) {
     native.exec(readFileSync(new URL('../drizzle/' + file, import.meta.url), 'utf8'));
@@ -86,7 +105,7 @@ function harness(t, raw) {
     try { const results = []; for (const statement of statements) results.push(await statement.run()); native.exec('COMMIT'); return results; }
     catch (error) { native.exec('ROLLBACK'); throw error; }
   } };
-  return createWorkflowService({ store: createWorkflowStore(db), authorization: reviewAuthorization(raw) });
+  return createWorkflowService({ store: createWorkflowStore(db), authorization: reviewAuthorization(raw, rawPublishers) });
 }
 
 async function call(service, path, body, identity = owner) {
@@ -168,4 +187,22 @@ test('configured map reviewer retains private inspection, independent review and
   const unchanged = await call(service, 'submission?id=' + own.id, undefined, mapReviewer);
   assert.equal(unchanged.body.submission.status, 'submitted');
   assert.equal(unchanged.body.submission.approval, null);
+});
+
+test('a configured publisher reaches apply; freeform proposals stay review-only', async t => {
+  const publisher = mapActor(4);
+  const service = harness(t, JSON.stringify([reviewer]), JSON.stringify([publisher])), submission = await submit(service);
+  const dashboard = await call(service, 'dashboard', undefined, publisher);
+  assert.equal(dashboard.body.capabilities.can_apply, true);
+  assert.equal(dashboard.body.capabilities.can_review, false);
+  const approved = await call(service, 'review', reviewBody(submission), reviewer);
+  checkStatus(approved, 200);
+  const body = { idempotency_key: crypto.randomUUID(), submission_id: submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash };
+  const byReviewer = await call(service, 'apply', body, reviewer);
+  checkStatus(byReviewer, 403);
+  assert.equal(byReviewer.body.error, 'publisher_not_authorized');
+  // Authorized, but an open proposal must first become a structured entry before it can change the map.
+  const byPublisher = await call(service, 'apply', { ...body, idempotency_key: crypto.randomUUID() }, publisher);
+  checkStatus(byPublisher, 409);
+  assert.equal(byPublisher.body.error, 'open_proposal_review_only');
 });
