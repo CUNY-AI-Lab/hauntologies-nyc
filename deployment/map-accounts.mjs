@@ -14,6 +14,9 @@ const failure = (code, status) => Object.assign(new Error(code), { code, status 
 // room registering at once; the per-address budgets in handleMapAccount sit well
 // below it, so one network address cannot take every message.
 const MAIL_GLOBAL = 240, MAIL_RECIPIENT = 3;
+// Setup links work for 30 days from issue, measured from the stored row's
+// createdAt so links issued before this limit keep their full term.
+const SETUP_LINK_MS = 30 * 24 * 60 * 60 * 1000;
 const randomToken = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 export const privateJson = (body, status = 200, cookies = []) => {
   const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
@@ -41,8 +44,9 @@ export function accountOptions(env) {
     user: { modelName: 'hny_auth_user' },
     account: { modelName: 'hny_auth_account', accountLinking: { enabled: false } },
     session: { modelName: 'hny_auth_session', expiresIn: 3600, disableSessionRefresh: true, cookieCache: { enabled: false } },
-    // Setup links remain stored until used. The wrapper cleans expired reset
-    // challenges separately so Better Auth cannot remove an unused setup link.
+    // Setup links remain stored until used or 30 days old. The wrapper cleans
+    // both kinds separately so Better Auth's 30-minute expiresAt cannot remove an
+    // unused setup link.
     verification: { modelName: 'hny_auth_verification', storeIdentifier: 'hashed', disableCleanup: true },
     emailAndPassword: {
       enabled: true, disableSignUp: true, requireEmailVerification: true, minPasswordLength: 12, maxPasswordLength: 128,
@@ -107,6 +111,11 @@ async function spend(env, key, limit, windowSeconds) {
 
 async function rate(env, key, limit, windowSeconds) {
   if (!await spend(env, key, limit, windowSeconds)) throw failure('rate_limited', 429);
+}
+
+async function refund(env, key, windowSeconds) {
+  const [bucket, window] = await limitBucket(key, windowSeconds);
+  await env.DB.prepare('UPDATE hny_auth_limits SET count = count - 1 WHERE bucket = ? AND window = ? AND count > 0').bind(bucket, window).run();
 }
 
 // Reads a budget without spending it, so every address gets the same answer once
@@ -174,6 +183,7 @@ export async function handleMapAccount(request, env) {
     const body = await bodyOf(request, fields[action]);
     await env.DB.prepare('DELETE FROM hny_auth_limits WHERE expires_at < ?').bind(Date.now() - 3600000).run();
     await env.DB.prepare("DELETE FROM hny_auth_verification WHERE (CASE WHEN json_valid(value) THEN json_extract(value, '$.type') END) IS NOT 'magic-link' AND (CASE WHEN typeof(expiresAt) IN ('integer','real') THEN expiresAt/1000 ELSE unixepoch(expiresAt) END) < ?").bind(Math.floor(Date.now()/1000)).run();
+    await env.DB.prepare("DELETE FROM hny_auth_verification WHERE json_valid(value) AND json_extract(value, '$.type') = 'magic-link' AND (CASE WHEN typeof(createdAt) IN ('integer','real') THEN createdAt/1000 ELSE unixepoch(createdAt) END) < ?").bind(Math.floor((Date.now() - SETUP_LINK_MS)/1000)).run();
     await rate(env, 'all-mutations', 3000, 3600);
     const ip = getIP(request, { advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'], ipv6Subnet: 64 } } }) || 'unknown';
     // Account and global limits remain effective across addresses and Worker isolates.
@@ -234,15 +244,14 @@ export async function handleMapAccount(request, env) {
       return privateJson({ status: 'password_reset' }, 200, [`${COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`]);
     }
     if (action === 'sign-in') {
-      // Only failed sign-ins spend the day cap. It stays near the old account
-      // cap's daily maximum (12 × 96 = 1152), so guesses spread over networks gain
-      // nothing, and above what one network can send against one account a day.
-      if (await exhausted(env, 'account-day:' + body.email, 1200, 86400)) throw failure('rate_limited', 429);
+      // Only failed sign-ins keep the day cap's attempt. It stays near the old
+      // account cap's daily maximum (12 × 96 = 1152), so guesses spread over
+      // networks gain nothing, and above what one network can send against one
+      // account a day. The attempt is reserved atomically and refunded on success.
+      await rate(env, 'account-day:' + body.email, 1200, 86400);
       const response = await auth.api.signInEmail({ headers, body: { email: body.email, password: body.password }, asResponse: true });
-      if (!response.ok) {
-        await spend(env, 'account-day:' + body.email, 1200, 86400);
-        return privateJson({ error: 'invalid_credentials' }, 401);
-      }
+      if (!response.ok) return privateJson({ error: 'invalid_credentials' }, 401);
+      await refund(env, 'account-day:' + body.email, 86400);
       return privateJson({ status: 'signed_in' }, 200, cookieHeaders(response));
     }
     if (action === 'sign-out') {
@@ -254,11 +263,14 @@ export async function handleMapAccount(request, env) {
     if (action === 'verify') {
       const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body.token)));
       const key = btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-      // Setup proof has no time limit. Better Auth still owns identifier hashing
-      // and atomic consumption; a deleted proof can never be recreated here.
+      // Setup proof lasts 30 days from issue, checked before any guest-code
+      // attempt is spent; an unreadable issue time fails closed. Better Auth still
+      // owns identifier hashing and atomic consumption; a deleted proof can never
+      // be recreated here.
       const pending = await context.internalAdapter.findVerificationValue('magic-link:' + key);
       let value; try { value = JSON.parse(pending?.value); } catch {}
       if (!pending || value?.type !== 'magic-link' || typeof value.email !== 'string') throw failure('invalid_token', 400);
+      if (!(Date.now() - new Date(pending.createdAt).getTime() < SETUP_LINK_MS)) throw failure('invalid_token', 400);
       if (!await admitted(env, value.email, body.access_code, ip, true)) throw failure('registration_restricted', 403);
       const existing = await env.DB.prepare('SELECT id FROM hny_auth_user WHERE email = ? LIMIT 1').bind(value.email.toLowerCase()).first();
       if (existing && await credential(env, existing.id)) {
