@@ -20,7 +20,7 @@ test('absent configuration and an explicit empty list grant no roles', () => {
 
 test('only JSON arrays of canonical verified actor IDs are accepted', () => {
   const ids = [owner, reviewer];
-  assert.deepEqual(reviewAuthorization(JSON.stringify(ids)), { ...empty, reviewers: ids });
+  assert.deepEqual(reviewAuthorization(JSON.stringify(ids)), { ...empty, reviewers: ids, publishers: ids });
   const invalid = [null, false, 1, ids, {}, '', ' ', '[', 'null', 'false', '42',
     JSON.stringify(owner), JSON.stringify({ reviewers: ids, publishers: ids }),
     JSON.stringify([null]), JSON.stringify([false]), JSON.stringify([42]),
@@ -36,7 +36,7 @@ test('only JSON arrays of canonical verified actor IDs are accepted', () => {
 
 test('map reviewer IDs use exact canonical UUIDv4 identities and preserve whole-list rejection', () => {
   const id = mapActor(1), ids = [reviewer, id];
-  assert.deepEqual(reviewAuthorization(JSON.stringify(ids)), { ...empty, reviewers: ids });
+  assert.deepEqual(reviewAuthorization(JSON.stringify(ids)), { ...empty, reviewers: ids, publishers: ids });
   const invalid = [id.toUpperCase(), id.replace('-4000-', '-1000-'), id.replace('-8000-', '-7000-'),
     id.replace('-4000-', '-0000-'), id.slice(0, -1), id + '0', id + '\n', id + '\r',
     id + '\u2028', id + '\u2029', ' ' + id, id + ' ', id.replace('map_', 'cuny_'),
@@ -59,33 +59,33 @@ test('the reviewer limit is inclusive at 20 and denies all 21 entries', () => {
   assert.deepEqual(reviewAuthorization(JSON.stringify([...ids, actor(21)])), empty);
 });
 
-test('configuration cannot mutate shared defaults or add publication or steward roles', () => {
+test('configuration cannot mutate shared defaults or add steward roles', () => {
   const config = reviewAuthorization(JSON.stringify([reviewer]));
   assert.throws(() => config.reviewers.push(owner), TypeError);
   assert.throws(() => config.publishers.push(owner), TypeError);
   assert.throws(() => { config.stewards = [owner]; }, TypeError);
   assert.deepEqual(reviewAuthorization(undefined), empty);
-  assert.deepEqual(config.publishers, []);
+  assert.deepEqual(config.publishers, [reviewer]);
   assert.deepEqual(config.stewards, []);
 });
 
-test('publishers come only from their own list and need a valid reviewer list', () => {
+test('every reviewer publishes; the publisher list adds more and needs a valid reviewer list', () => {
   const publisher = actor(4), mapPublisher = mapActor(4);
   const config = reviewAuthorization(JSON.stringify([reviewer]), JSON.stringify([publisher, mapPublisher]));
-  assert.deepEqual(config, { ...empty, reviewers: [reviewer], publishers: [publisher, mapPublisher] });
+  assert.deepEqual(config, { ...empty, reviewers: [reviewer], publishers: [reviewer, publisher, mapPublisher] });
   assert.throws(() => config.publishers.push(owner), TypeError);
   for (const reviewers of [undefined, '[]', JSON.stringify([reviewer, 'invalid'])]) {
     assert.deepEqual(reviewAuthorization(reviewers, JSON.stringify([publisher])), empty);
   }
 });
 
-test('an invalid publisher list grants no publishers and keeps reviewers', () => {
+test('an invalid publisher list adds no publishers and keeps reviewers', () => {
   const many = Array.from({ length: 21 }, (_, i) => actor(i + 10));
   for (const raw of [undefined, '', '[', JSON.stringify(actor(4)), JSON.stringify([actor(4), 'invalid']),
     JSON.stringify([actor(4), actor(4)]), JSON.stringify([actor(4).toUpperCase()]), JSON.stringify(many)]) {
-    assert.deepEqual(reviewAuthorization(JSON.stringify([reviewer]), raw), { ...empty, reviewers: [reviewer] });
+    assert.deepEqual(reviewAuthorization(JSON.stringify([reviewer]), raw), { ...empty, reviewers: [reviewer], publishers: [reviewer] });
   }
-  assert.equal(reviewAuthorization(JSON.stringify([reviewer]), JSON.stringify(many.slice(0, 20))).publishers.length, 20);
+  assert.equal(reviewAuthorization(JSON.stringify([reviewer]), JSON.stringify(many.slice(0, 20))).publishers.length, 21);
 });
 
 function harness(t, raw, rawPublishers) {
@@ -126,21 +126,21 @@ async function submit(service, identity = owner) {
 }
 const reviewBody = submission => ({ idempotency_key: crypto.randomUUID(), submission_id: submission.id, expected_revision: submission.revision, payload_hash: submission.payload_hash, diff_hash: submission.diff_hash, checks: Object.fromEntries(CHECKS.map(key => [key, 'pass'])), rationale: 'Independent synthetic review.' });
 
-test('configured reviewer may inspect and independently review, but cannot publish', async t => {
+test('configured reviewer may inspect, independently review and publish', async t => {
   const service = harness(t, JSON.stringify([reviewer])), submission = await submit(service);
   checkStatus(await call(service, 'submission?id=' + submission.id, undefined, stranger), 404);
   checkStatus(await call(service, 'submission?id=' + submission.id, undefined, reviewer), 200);
   const dashboard = await call(service, 'dashboard', undefined, reviewer);
   assert.equal(dashboard.body.capabilities.can_review, true);
   assert.equal(dashboard.body.capabilities.can_triage, true);
-  assert.equal(dashboard.body.capabilities.can_apply, false);
-  assert.equal(dashboard.body.capabilities.can_rollback, false);
+  assert.equal(dashboard.body.capabilities.can_apply, true);
   const approved = await call(service, 'review', reviewBody(submission), reviewer);
   checkStatus(approved, 200);
   assert.equal(approved.body.submission.status, 'approved');
+  // Authorized to publish; a proposal with no map point still cannot change the map.
   const apply = await call(service, 'apply', { idempotency_key: crypto.randomUUID(), submission_id: submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, reviewer);
-  checkStatus(apply, 403);
-  assert.equal(apply.body.error, 'publisher_not_authorized');
+  checkStatus(apply, 409);
+  assert.equal(apply.body.error, 'open_proposal_review_only');
 });
 
 test('explicit reviewer membership never permits self-approval', async t => {
@@ -178,8 +178,8 @@ test('configured map reviewer retains private inspection, independent review and
   checkStatus(approved, 200);
   assert.equal(approved.body.submission.status, 'approved');
   const apply = await call(service, 'apply', { idempotency_key: crypto.randomUUID(), submission_id: submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, mapReviewer);
-  checkStatus(apply, 403);
-  assert.equal(apply.body.error, 'publisher_not_authorized');
+  checkStatus(apply, 409);
+  assert.equal(apply.body.error, 'open_proposal_review_only');
   const own = await submit(service, mapReviewer);
   const self = await call(service, 'review', reviewBody(own), mapReviewer);
   checkStatus(self, 403);
@@ -198,9 +198,7 @@ test('a configured publisher reaches apply; freeform proposals stay review-only'
   const approved = await call(service, 'review', reviewBody(submission), reviewer);
   checkStatus(approved, 200);
   const body = { idempotency_key: crypto.randomUUID(), submission_id: submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash };
-  const byReviewer = await call(service, 'apply', body, reviewer);
-  checkStatus(byReviewer, 403);
-  assert.equal(byReviewer.body.error, 'publisher_not_authorized');
+  checkStatus(await call(service, 'apply', body, stranger), 403);
   // Authorized, but an open proposal must first become a structured entry before it can change the map.
   const byPublisher = await call(service, 'apply', { ...body, idempotency_key: crypto.randomUUID() }, publisher);
   checkStatus(byPublisher, 409);
@@ -210,8 +208,8 @@ test('a configured publisher reaches apply; freeform proposals stay review-only'
 test('admins hold reviewer and publisher roles and are listed separately', () => {
   const admin = mapActor(9);
   const config = reviewAuthorization(JSON.stringify([reviewer]), undefined, JSON.stringify([admin]));
-  assert.deepEqual(config, { reviewers: [reviewer, admin], publishers: [admin], stewards: [], admins: [admin] });
+  assert.deepEqual(config, { reviewers: [reviewer, admin], publishers: [reviewer, admin], stewards: [], admins: [admin] });
   assert.deepEqual(reviewAuthorization(undefined, undefined, JSON.stringify([admin])), { reviewers: [admin], publishers: [admin], stewards: [], admins: [admin] });
-  assert.deepEqual(reviewAuthorization(JSON.stringify([reviewer]), undefined, JSON.stringify([admin, 'invalid'])), { ...empty, reviewers: [reviewer] });
+  assert.deepEqual(reviewAuthorization(JSON.stringify([reviewer]), undefined, JSON.stringify([admin, 'invalid'])), { ...empty, reviewers: [reviewer], publishers: [reviewer] });
   assert.deepEqual(reviewAuthorization(undefined, undefined, undefined), empty);
 });

@@ -7,6 +7,8 @@ import { createWorkflowService } from '../server/workflow-service.mjs';
 import { CHECKS } from '../server/workflow-core.mjs';
 import { pendingPlaces } from '../server/pending-places.mjs';
 import { createDemoWorker } from '../deployment/demo-gate.mjs';
+import { reviewAuthorization } from '../server/review-authorization.mjs';
+import { publishedEdits } from '../server/published-edits.mjs';
 
 // Places sent for review appear publicly as their own layer. Synthetic records and actors only.
 const boundaries = JSON.parse(readFileSync(new URL('../public/data/nyc-borough-boundaries.geojson', import.meta.url)));
@@ -24,9 +26,9 @@ function sqliteD1() {
     const operation = tail.then(async () => { native.exec('BEGIN'); try { const out = []; for (const s of statements) out.push(await s.run()); native.exec('COMMIT'); return out; } catch (error) { native.exec('ROLLBACK'); throw error; } });
     tail = operation.catch(() => {}); return operation; } };
 }
-function harness(t) {
+function harness(t, authorization = { reviewers: ['reviewer'], publishers: ['publisher'] }) {
   const db = sqliteD1(); t.after(() => db.native.close());
-  const service = createWorkflowService({ store: createWorkflowStore(db), staticRecords: [place], taskSeeds: { tasks: [] }, geography: { boundaries }, authorization: { reviewers: ['reviewer'], publishers: ['publisher'] } });
+  const service = createWorkflowService({ store: createWorkflowStore(db), staticRecords: [place], taskSeeds: { tasks: [] }, geography: { boundaries }, authorization });
   return { db, service };
 }
 async function call(h, path, body, actor = 'author') {
@@ -79,6 +81,17 @@ test('withheld and published places leave the pending layer; returned ones stay,
   ok(await call(h, 'verify', { idempotency_key: key(), job_id: staged.job.id, map_list_check: { status: 'pass', evidence: 'Synthetic check of the map point and list entry.' } }, 'publisher'), 200);
   ({ places } = await pendingPlaces(h.db));
   assert.ok(!places.some(p => p.id === live.id), 'published place is drawn by the published layer instead');
+});
+
+test('a configured reviewer alone takes a new place from approval to the map, as Review does on Approve', async t => {
+  const author = 'map_00000000-0000-4000-8000-000000000001', reviewer = 'map_00000000-0000-4000-8000-000000000002';
+  const h = harness(t, reviewAuthorization(JSON.stringify([reviewer]))), s = await submit(h, proposal({ title: 'Lantern on Sullivan' }), author);
+  const approved = ok(await call(h, 'review', { idempotency_key: key(), submission_id: s.id, expected_revision: s.revision, payload_hash: s.payload_hash, diff_hash: s.diff_hash,
+    checks: Object.fromEntries(CHECKS.map(k => [k, 'pass'])), rationale: 'Approved.' }, reviewer), 200).submission;
+  const staged = ok(await call(h, 'apply', { idempotency_key: key(), submission_id: approved.id, expected_revision: approved.revision, approval_hash: approved.approval.approval_hash }, reviewer), 201);
+  ok(await call(h, 'verify', { idempotency_key: key(), job_id: staged.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }, reviewer), 200);
+  assert.ok(!(await pendingPlaces(h.db)).places.some(p => p.id === s.id), 'no longer pending');
+  assert.ok((await publishedEdits(h.db)).some(e => JSON.stringify(e).includes('Lantern on Sullivan')), 'published');
 });
 
 test('the deployed gate serves the pending layer to anyone, read-only', async t => {
