@@ -80,7 +80,7 @@
     byId('accountTitle').textContent = 'Account'; status.textContent = session.email; formHost.replaceChildren(); actions.replaceChildren(); listMessage('Loading…');
     button('Refresh', reconcile); button('Sign out', async () => {
       if (busy) return; busy = true;
-      try { await api('/api/auth/sign-out', {}); identity(null); window.dispatchEvent(new CustomEvent('contributions-session-ended')); renderForm('sign-in', 'Signed out.'); }
+      try { await api('/api/auth/sign-out', {}); window.dispatchEvent(new CustomEvent('contributions-session-ended', { detail: { signedOut: true } })); identity(null); renderForm('sign-in', 'Signed out.'); }
       catch (error) { status.textContent = error.message; } finally { busy = false; }
     });
     const actor = session.actor_id;

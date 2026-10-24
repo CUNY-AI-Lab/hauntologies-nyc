@@ -84,10 +84,17 @@
     if(typeof request.actor_id!=='string'||!request.actor_id)throw Object.assign(new Error('Original account could not be confirmed'),{status:409});
     if(actor!==request.actor_id)throw Object.assign(new Error('Use the original account to retry this save'),{status:409});
   }
+  const signedOutMarker=actor=>'hauntologies-signed-out:'+actor;
+  const signedOutHere=actor=>{try{return !!localStorage.getItem(signedOutMarker(actor));}catch{return false;}};
   function clearPrivateView(message){
-    if(privateActor){saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
+    // After a sign-out in any tab the account's draft is removed, never saved again.
+    const endedKey=privateActor?draftStorageKey:null,signedOut=privateActor&&signedOutHere(privateActor);
+    if(signedOut)forgetDraft(endedKey);
+    if(privateActor){if(!signedOut)saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
     dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
     byId('workflowConnection').textContent=message;byId('reviewCapabilityNotice').textContent='';
+    // Only when a session ended mid-edit; a signed-out page load keeps its own notice.
+    if(endedKey&&!signedOut&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
     byId('submissionDetail').replaceChildren();byId('submissionDetail').hidden=true;
     byId('contributionReceipt').replaceChildren();byId('contributionReceipt').hidden=true;
     byId('contributionTargetPick').replaceChildren(new Option('No records',''));byId('useContributionTarget').disabled=true;
@@ -209,7 +216,8 @@
     if(type==='entry_bundle'&&Object.prototype.hasOwnProperty.call(entry,'geo_status'))simpleDraft.geometry_kind=entry.geo_status==='unresolved'?'unknown':'point';
     if(Object.prototype.hasOwnProperty.call(entry,'dates'))simpleDraft.date_mode=entry.dates===null?'none':'provided';
     if(revisionOriginal&&['area_proposal','record_annotation'].includes(type))simpleDraft.payload_wording=entry[type==='record_annotation'?'text':'description'];
-    const summaryLabel=byId('contributionSummary').closest('label');if(summaryLabel?.firstChild?.nodeType===Node.TEXT_NODE)summaryLabel.firstChild.textContent=revisionOriginal&&['area_proposal','record_annotation'].includes(type)?'Summary':'Description';
+    // The accordion heading names the field; the label repeats it for screen readers only.
+    const summaryWord=revisionOriginal&&['area_proposal','record_annotation'].includes(type)?'Summary':'Description',summaryLabel=byId('contributionSummary').closest('label')?.querySelector('.sr-only'),summaryHeading=byId('freeformDescription')?.querySelector(':scope>summary');if(summaryLabel)summaryLabel.textContent=summaryWord;if(summaryHeading?.firstChild?.nodeType===Node.TEXT_NODE)summaryHeading.firstChild.textContent=summaryWord;
     if(type==='area_proposal'){simpleDraft.geo_basis=entry.geometry_basis||'';if(entry.geometry){simpleDraft.area_input='geojson';simpleDraft.geometry_json=JSON.stringify(entry.geometry,null,2);}}
     if(entry.entry_id)simpleEntryId=entry.entry_id;
     const root=byId('typedPayloadFields');root.replaceChildren(el('legend',simpleFlow()==='clarify'?'Clarify':'Place'));
@@ -272,6 +280,22 @@
   // Intake stores the contributor's words; classification and plotting remain review work.
   let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
   let draftStorageKey='hauntologies-contribution-draft:anonymous';let draftRevisionBlocked=null;
+  // Drafts outlive the tab: sign-in and email verification can continue in a new tab, and a
+  // session can expire mid-edit. Account drafts stay 14 days, signed-out drafts one day; both are
+  // cleared once the contribution is saved, can be discarded, and account drafts end at sign-out.
+  // Staged images stay in memory only.
+  const anonymousDraftKey='hauntologies-contribution-draft:anonymous',draftLifetime=key=>(key===anonymousDraftKey?1:14)*24*60*60*1000;
+  function readStoredDraft(key){
+    for(const store of [localStorage,sessionStorage]){try{const value=JSON.parse(store.getItem(key)||'null');if(value&&(!Number.isFinite(value.saved_at)||Date.now()-value.saved_at<draftLifetime(key)))return value;}catch{}}
+    return null;
+  }
+  function forgetDraft(key){for(const store of [localStorage,sessionStorage]){try{store.removeItem(key);}catch{}}}
+  function draftNotice(text,discard=false){
+    const notice=byId('draftNotice');if(!notice)return;notice.replaceChildren();notice.hidden=!text;if(!text)return;
+    notice.append(document.createTextNode(text));
+    if(discard){const control=button('Discard draft',()=>{forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);resetContributionForm();resetOpenContext();draftNotice('Draft discarded');},'textbutton');notice.append(' ',control);}
+  }
+  const draftTime=value=>Number.isFinite(value?.saved_at)?new Date(value.saved_at).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
   const isOpenForm=()=>!revisionOriginal||revisionOriginal.type==='open_proposal';
   const pointShape=point=>point&&typeof point.latitude==='number'&&typeof point.longitude==='number'&&Number.isFinite(point.latitude)&&Number.isFinite(point.longitude)&&Math.abs(point.latitude)<=90&&Math.abs(point.longitude)<=180;
   const pointForm=()=>isOpenForm()&&!revisionOriginal&&!revisionOf&&!draftRevisionBlocked&&byId('contributionPlaceMode').value==='new'&&!openRequestedRecordId&&!openTargets.length;
@@ -294,6 +318,7 @@
   }
   function showPoint(){const point=pointForm()?readPoint():null;byId('cancelContributionPoint').disabled=!pointFields().latitude&&!pointFields().longitude&&!byId('contributionLatitude').validity.badInput&&!byId('contributionLongitude').validity.badInput;window.dispatchEvent(new CustomEvent('contributions-point-changed',{detail:{point:point?{...point}:null}}));return point;}
   function setPointFields(point){byId('contributionLatitude').value=point?.latitude??'';byId('contributionLongitude').value=point?.longitude??'';}
+  function locationStatus(text,state=''){const status=byId('newLocationStatus');status.textContent=text;if(state)status.dataset.state=state;else delete status.dataset.state;}
   function canRequestPoint(){return pointForm()&&!pendingWrite&&!busy&&!imageBatch&&!imageBusy&&!imageProcessing;}
   window.ContributionPoint=Object.freeze({
     get:()=>{const point=pointForm()?readPoint():null;return point?{...point}:null;},
@@ -303,15 +328,19 @@
       const fields=pointFields(),hasInput=fields.latitude!==''||fields.longitude!==''||byId('contributionLatitude').validity.badInput||byId('contributionLongitude').validity.badInput;
       if(!replace&&hasInput&&!readPoint(false))return false;
       if(replace||!readPoint(false))setPointFields(point);
-      invalidatePreview();saveDraft();byId('draftTab').click();switchView('submissionView',false);byId('freeformLocation').open=true;showPoint();byId('freeformDescription').open=true;byId('contributionSummary').focus();return true;
+      invalidatePreview();saveDraft();byId('draftTab').click();switchView('submissionView',false);byId('freeformLocation').open=true;const placed=showPoint();byId('freeformDescription').open=true;
+      // Confirm the pin where the request was made, with the borough it falls in.
+      if(placed){const borough=window.NycGeometry?.findBorough(placed.latitude,placed.longitude);locationStatus('Pinned at '+placed.latitude.toFixed(5)+', '+placed.longitude.toFixed(5)+(borough?' in '+borough:''),'success');requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('contributions-point-pinned')));}
+      // Focus stays with whoever asked for the point, so the confirmation stays in view.
+      return true;
     }
   });
   function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
   function draftValue(){return {version:1,object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
-  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude)sessionStorage.setItem(draftStorageKey,JSON.stringify(value));else sessionStorage.removeItem(draftStorageKey);}catch{}}
+  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
-      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets))sessionStorage.removeItem(draftStorageKey);
+      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets)){forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);draftNotice('');}
     }catch{}
   }
   function restoreDraftFields(value){
@@ -328,22 +357,41 @@
       draftRevisionBlocked=null;loadRevision(data.submission);restoreDraftFields(value);saveDraft();
     }catch(error){serviceFailure(error,restoreRevisionDraft);}
   }
+  const validDraft=value=>!(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string');
+  const draftBody=value=>JSON.stringify([value?.object_title||'',value?.explanation||'',value?.sources||'',value?.attributes||[],value?.point_fields||{},value?.record_id||'',value?.place_mode||'new']);
+  const draftHasContent=value=>!!(value&&(value.object_title||value.explanation||value.sources||value.attributes?.length||value.record_id||value.point_fields?.latitude||value.point_fields?.longitude));
+  const sameDraft=(a,b)=>draftHasContent(a)&&draftBody(a)===draftBody(b);
+  function applyDraft(value,label){
+    if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
+    restoreDraftFields(value);draftNotice(label+(draftTime(value)?' from '+draftTime(value):'')+'.',true);if(draftRevisionBlocked){restoreRevisionDraft();}
+    else if(value.record_id)chooseOpenReference(value.record_id,value.title);
+  }
+  // A draft written while signed out may belong to someone else on a shared computer, so it is
+  // offered rather than filled in. Restoring it while signed in moves it to that account.
+  function offerDraft(value){
+    const notice=byId('draftNotice');if(!notice)return;notice.replaceChildren(document.createTextNode('An unsent draft'+(draftTime(value)?' from '+draftTime(value):'')+' is on this device. '));notice.hidden=false;
+    notice.append(button('Restore draft',()=>{applyDraft(value,'Restored your unsent draft');if(draftStorageKey!==anonymousDraftKey){saveDraft();forgetDraft(anonymousDraftKey);}},'textbutton'),' ',button('Discard',()=>{forgetDraft(anonymousDraftKey);draftNotice('Draft discarded');},'textbutton'));
+  }
   function restoreDraft(){
-    try{const value=JSON.parse(sessionStorage.getItem(draftStorageKey)||'null');if(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string')return;
-      if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
-      restoreDraftFields(value);if(draftRevisionBlocked){restoreRevisionDraft();}
-      else if(value.record_id)chooseOpenReference(value.record_id,value.title);
+    try{
+      const signedOut=draftStorageKey===anonymousDraftKey,own=signedOut?null:readStoredDraft(draftStorageKey),anonymous=readStoredDraft(anonymousDraftKey);
+      // Signing in from this tab: the form already holds the signed-out draft, so it stays with the account.
+      // Only a non-empty form that matches the newer signed-out draft is adopted, written directly
+      // so an empty form can never overwrite the account's own draft.
+      if(anonymous&&!signedOut&&validDraft(anonymous)&&sameDraft(anonymous,draftValue())&&(!own||(anonymous.saved_at||0)>=(own.saved_at||0))){try{localStorage.setItem(draftStorageKey,JSON.stringify(anonymous));}catch{}forgetDraft(anonymousDraftKey);return;}
+      if(own&&validDraft(own))applyDraft(own,'Restored your unsent draft');
+      if(anonymous&&validDraft(anonymous)&&!sameDraft(anonymous,draftValue())&&(!own||(anonymous.saved_at||0)>(own.saved_at||0)))offerDraft(anonymous);
     }catch{}
   }
   function showOpenReference(){
     const visible=!!(openRequestedRecordId||openTargets.length||openTargetPending||openTargetFailed);
-    byId('freeformRecordContext').hidden=true;
+    byId('freeformRecordContext').hidden=!visible;
     byId('freeformRecordContext').dataset.recordId=openRequestedRecordId||openTargets[0]?.record_id||'';
     byId('freeformRecordLabel').textContent=openTargetLabel||openRequestedRecordId||openTargets[0]?.record_id||'';
     byId('freeformRecordContext').setAttribute('aria-busy',String(openTargetPending));
     if(visible)byId('contributionPlaceMode').value='existing';
     byId('freeformPlacePicker').hidden=byId('contributionPlaceMode').value!=='existing';
-    byId('freeformLocation').hidden=!pointForm();byId('newPlaceLocation').hidden=!pointForm();populatePlaceChoices();showPoint();
+    byId('freeformLocation').hidden=!pointForm();byId('newPlaceLocation').hidden=!pointForm();byId('contributionPlacePlate').hidden=!pointForm();byId('freeformTitle').hidden=byId('contributionPlaceMode').value==='existing';populatePlaceChoices();showPoint();
   }
   function resetOpenContext(){
     ++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;openTaskIds=[];openSourcesInitial='';openSourcesDisplayInitial='';openExplanationInitial='';openExplanationDisplayInitial='';
@@ -372,18 +420,47 @@
   }
   let stagedImages=[],imageBatch=null,imageBusy=false,imageProcessing=false;
   const attachmentId=value=>typeof value==='string'&&/^watt_[0-9a-f-]{36}$/.test(value);
-  const imageFields=[['caption','Caption',2000],['alt','Description',1000],['credit','Credit',1000],['source_url','Source link',2048],['rights','Rights',2000]];
+  const imageFields=[['caption','Caption',2000],['alt','Alt text',1000],['credit','Credit',1000],['source_url','Source link',2048],['rights','Rights',2000]];
   function imageStatus(message,retry=false){
     byId('contributionImageProgress').hidden=!message;byId('contributionImageStatus').textContent=message;
     byId('retryContributionImages').hidden=!retry;byId('retryContributionImages').disabled=imageBusy;
   }
+  // Previews are local object URLs, released once their image leaves the list.
+  const imagePreviews=new Map();
+  const attributionHref=value=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:'';}catch{return '';}};
+  function imageField(entry,index,key,label,max,parent){
+    const input=el(key==='caption'||key==='alt'?'textarea':'input');input.id='image-'+index+'-'+key;input.dataset.imageField=key;input.value=entry.metadata[key]||'';input.maxLength=max;input.disabled=imageBusy||!!entry.pending||!!entry.receipt;
+    if(input.tagName==='TEXTAREA')input.rows=2;else{input.type=key==='source_url'?'url':'text';if(key==='source_url')input.placeholder='https://';}
+    const wrap=el('label',label);wrap.htmlFor=input.id;wrap.append(input);parent.append(wrap);
+    input.addEventListener('input',()=>{entry.metadata[key]=input.value;if(imageBatch&&!entry.pending)imageStatus('Contribution saved. Image not saved',true);});
+  }
+  // Once saved, credit and source read as one attribution line, linked when the source is a web address.
+  function attribution(entry){
+    const line=el('p','Attribution: ','staged-image-attribution'),credit=(entry.metadata.credit||'').trim(),href=attributionHref((entry.metadata.source_url||'').trim());
+    if(href){const link=el('a',credit||new URL(href).hostname);link.href=href;link.target='_blank';link.rel='noopener noreferrer';line.append(link);}
+    else line.append(document.createTextNode(credit||'None given'));
+    return line;
+  }
   function renderStagedImages(){
     const root=byId('stagedContributionImages');root.replaceChildren();
     byId('contributionImages').disabled=imageBusy||imageProcessing||!!imageBatch||stagedImages.length>=3;
+    for(const [entry,url] of imagePreviews)if(!stagedImages.includes(entry)){URL.revokeObjectURL(url);imagePreviews.delete(entry);}
     for(const [index,entry] of stagedImages.entries()){
-      const card=el('div',undefined,'staged-image');card.append(el('p',entry.file.name),el('p',entry.receipt?'Uploaded':'Not uploaded','small'),el('p','Metadata removed','small'));
+      if(!imagePreviews.has(entry))imagePreviews.set(entry,URL.createObjectURL(entry.file));
+      const card=el('div',undefined,'staged-image'),board=el('figure',undefined,'staged-image-board'),photo=el('img');
+      photo.src=imagePreviews.get(entry);photo.alt=entry.metadata.alt||'';photo.width=entry.width;photo.height=entry.height;photo.decoding='async';
+      // The person's own filename; the uploaded derivative is renamed by design.
+      board.append(photo,el('figcaption',(entry.name||entry.file.name)+' · '+entry.width+' × '+entry.height));
+      const state=entry.receipt?'saved':entry.pending?'saving':'ready';
+      const status=el('p',state==='saved'?'Uploaded with your contribution':state==='saving'?'Uploading…':'Not uploaded yet. Images upload when you submit, so nothing leaves this device before then. Camera and location metadata have been removed.','staged-image-status');status.dataset.state=state;
+      if(entry.resized)status.append(document.createTextNode(' Reduced from '+entry.sourceWidth+' × '+entry.sourceHeight+' to fit the 1 MB upload limit.'));
+      card.append(board,status);
       const details=disclosure('Details');
-      for(const [key,label,max] of imageFields){const input=el(key==='caption'||key==='alt'?'textarea':'input');input.id='image-'+index+'-'+key;input.dataset.imageField=key;input.value=entry.metadata[key]||'';input.maxLength=max;input.disabled=imageBusy||!!entry.pending||!!entry.receipt;if(input.tagName==='TEXTAREA')input.rows=2;else input.type=key==='source_url'?'url':'text';const wrap=el('label',label);wrap.htmlFor=input.id;wrap.append(input);details.append(wrap);input.addEventListener('input',()=>{entry.metadata[key]=input.value;if(imageBatch&&!entry.pending)imageStatus('Contribution saved. Image not saved',true);});}
+      for(const [key,label,max] of imageFields)imageField(entry,index,key,label,max,details);
+      // After upload, Details also links the attribution and the stored image.
+      const stored=entry.receipt?.result?.attachment_id;
+      if(entry.receipt)details.append(attribution(entry));
+      if(attachmentId(stored)){const link=el('a','Download uploaded image','staged-image-link');link.href=apiRoot+'/attachment?id='+encodeURIComponent(stored);link.target='_blank';link.rel='noopener';details.append(link);}
       card.append(details);
       if(!entry.receipt&&!entry.pending&&!imageBusy){card.append(button('Remove',()=>{stagedImages=stagedImages.filter(item=>item!==entry);renderStagedImages();if(imageBatch&&!stagedImages.some(item=>!item.receipt)){imageBatch=null;stagedImages=[];renderStagedImages();imageStatus('Contribution saved');}else if(imageBatch)imageStatus('Contribution saved. Image not saved',true);},'textbutton'));}
       root.append(card);
@@ -395,7 +472,7 @@
     if(stagedImages.length+files.length>3){error.textContent='Choose up to 3 images';error.hidden=false;return;}
     const owner=privateActor,generation=identityGeneration,images=stagedImages;
     imageProcessing=true;byId('previewContribution').disabled=true;invalidatePreview();renderStagedImages();
-    try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');images.push({file:prepared.file,width:prepared.width,height:prepared.height,metadata:{rights:'unknown'},pending:null,receipt:null});}}
+    try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');images.push({file:prepared.file,name:file.name,width:prepared.width,height:prepared.height,resized:prepared.resized===true,sourceWidth:prepared.sourceWidth,sourceHeight:prepared.sourceHeight,metadata:{rights:'unknown'},pending:null,receipt:null});}}
     catch(failure){if(generation!==identityGeneration||owner!==privateActor)return;error.textContent=failure.message||'Image could not be prepared';error.hidden=false;}
     finally{imageProcessing=false;byId('previewContribution').disabled=busy;renderStagedImages();}
   }
@@ -514,8 +591,7 @@
     if(isOpenForm()){
       if(path==='summary'||path==='payload.explanation')return byId('contributionSummary');
       if(path==='payload.sources_text')return byId('freeformSources');
-      if(path==='payload.geometry'||path.startsWith('payload.geometry.'))return byId('contributionLatitude');
-      if(path==='targets'||path.startsWith('targets.'))return byId('freeformPlaceSelect');
+      if(path==='payload.geometry'||path.startsWith('payload.geometry.')||path==='targets'||path.startsWith('targets.'))return byId('contributionPlace');
       const attribute=path.match(/^payload\.attributes\.(\d+)(?:\.(name|value))?$/);if(attribute)return byId('contributionAttributes').children[Number(attribute[1])]?.querySelector('[data-attribute="'+(attribute[2]||'name')+'"]');
       return null;
     }
@@ -559,7 +635,7 @@
     if(pendingWrite)showReconciliation();
   }
   async function loadDashboard(){const request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest)return null;
-    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();}
+    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();}
     const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
    }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
@@ -584,6 +660,15 @@
     }else{
       root.append(intakeText(envelope.summary),el('p','Review only','small'),validationView(result.validation),diffView(result.diff),rawDisclosure('Original',raw));
     }
+    // A preview the server could not check says why, and offers the step that gets it saved.
+    if(result.local){
+      const why={'sign-in':'Sign in to save this place. Your draft stays on this device while you do.',unavailable:'Saving is unavailable right now. Your draft stays on this device.',pending:'Still loading the place this changes. Try Preview again in a moment.'}[result.reason]||'This preview has not been checked yet.';
+      root.append(el('p',why,'preview-next-step'));
+      if(result.reason==='sign-in')root.append(button('Sign in to contribute',()=>{resumePreviewAfterSignIn=true;window.dispatchEvent(new CustomEvent('account-open-requested'));},'primary'));
+      else root.append(button('Try again',()=>byId('previewContribution').click(),'primary'));
+      root.focus();return;
+    }
+    if(!caps().can_submit)root.append(el('p','This account cannot submit contributions.','preview-next-step'));
     const send=button(revisionOf?'Revise':'Contribute',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
   }
   async function previewForm(event){
@@ -597,12 +682,17 @@
     for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
     if(errors.length){renderErrors(errors);return;}let envelope,raw;
     try{envelope=buildEnvelope();raw=JSON.stringify(envelope,null,2);}catch(error){renderErrors([{field:error.field,message:error.message}]);return;}
-    const local=()=>{const result={local:true,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
+    const local=(reason='pending')=>{const result={local:true,reason,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
     if(openTargetPending||openTargetFailed||draftRevisionBlocked){local();return;}
     const generation=identityGeneration,owner=privateActor;byId('previewContribution').disabled=true;
     try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});const confirmedActor=await sessionActor();if(generation!==identityGeneration||owner!==privateActor||confirmedActor!==owner)return;preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
-    catch(error){if(generation!==identityGeneration||owner!==privateActor)return;local();serviceFailure(error,()=>byId('previewContribution').click());}
-    finally{if(generation===identityGeneration)byId('previewContribution').disabled=false;}
+    catch(error){
+      // A 401 ends the private view, which changes identityGeneration. Signed out from the start,
+      // the preview still says how to save; after an expired session the draft notice says it.
+      if(error.status===401){if(!owner)local('sign-in');return;}
+      if(generation!==identityGeneration||owner!==privateActor)return;local('unavailable');serviceFailure(error,()=>byId('previewContribution').click());}
+    // Preview must never stay disabled after a failed check, whatever happened to the session.
+    finally{byId('previewContribution').disabled=false;}
   }
 
   async function submitPreview(){
@@ -702,6 +792,7 @@
     const apply=button('Apply',async()=>{
       apply.disabled=true;const out=el('div',undefined,'small');root.append(out);try{const result=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});out.replaceChildren(metadata([['Job',result.job?.id||'Unknown'],['Status',statusLabel(result.job?.status)||'Recorded']]));await loadDashboard();}catch(error){out.textContent=error.message;apply.disabled=!canApply;}
     },'outline');apply.disabled=!canApply;root.append(apply);
+    window.dispatchEvent(new CustomEvent('contributions-review-rendered',{detail:{root,submission:s,capabilities:{...caps()}}}));
   }
   function jobControls(card,job){
     if(job.status==='verification_pending')card.append(button('Preview',()=>window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:job})),'outline'));
@@ -727,29 +818,35 @@
   for(const [value,label]of [['area_proposal','Proposed area'],['record_annotation','Clarification']])if(![...byId('contributionType').options].some(o=>o.value===value)){const option=new Option(label,value);option.hidden=true;byId('contributionType').append(option);}
   byId('contributionFlow')?.addEventListener('change',()=>{rememberSimple();clearRevision();syncFlow();if(simpleFlow()==='other')renderPayload(byId('contributionType').value);});
   byId('clarificationTarget')?.addEventListener('change',()=>chooseClarification(byId('clarificationTarget').value));
-  byId('removeFreeformRecord').addEventListener('click',()=>{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;byId('contributionPlaceMode').value='new';showOpenReference();invalidatePreview();saveDraft();byId('contributionSummary').focus();});
+  byId('removeFreeformRecord').addEventListener('click',()=>{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;byId('contributionPlaceMode').value='new';showOpenReference();invalidatePreview();saveDraft();byId('contributionPlace').focus();});
   byId('existingPlaceSearch').addEventListener('input',populatePlaceChoices);
   byId('chooseExistingPlace').addEventListener('click',()=>window.dispatchEvent(new CustomEvent('contributions-place-pick-requested')));
   byId('addFreeformSource').addEventListener('click',()=>{const root=byId('extraSources');if(root.children.length>=19)return;const row=el('div'),label=el('label','Link or reference'),input=el('textarea');input.rows=2;input.maxLength=30000;label.append(input);row.append(label,button('Remove',()=>{row.remove();invalidatePreview();saveDraft();},'textbutton'));root.append(row);input.focus();});
   byId('newLocationSearch').addEventListener('input',()=>{const query=byId('newLocationSearch').value,records=typeof allRecords==='function'?allRecords():[];byId('newLocationMatches').replaceChildren(...records.filter(record=>Number.isFinite(record.latitude)&&Number.isFinite(record.longitude)&&window.PlaceInput.matches(record,query)).slice(0,20).map(record=>new Option(record.title,record.title+' — '+record.latitude+', '+record.longitude)));});
-  byId('newLocationSearch').addEventListener('change',()=>{const value=byId('newLocationSearch').value,point=window.PlaceInput.point(value)||window.PlaceInput.point(value.split(' — ').at(-1));if(!point){byId('newLocationStatus').textContent='Choose a listed place, enter coordinates, or paste an OpenStreetMap link with coordinates.';return;}if(!window.ContributionPoint.request(point,{replace:true})){byId('newLocationStatus').textContent='Choose a point in New York City.';return;}byId('newLocationStatus').textContent='Location selected';});
+  byId('newLocationSearch').addEventListener('change',()=>{const value=byId('newLocationSearch').value,point=window.PlaceInput.point(value)||window.PlaceInput.point(value.split(' — ').at(-1));if(!point){locationStatus('Choose a listed place, enter coordinates, or paste an OpenStreetMap link with coordinates.');return;}if(!window.ContributionPoint.request(point,{replace:true})){locationStatus('Choose a point in New York City.');return;}});
   byId('contributionPlaceMode').addEventListener('change',()=>{if(byId('contributionPlaceMode').value==='new'){++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;}showOpenReference();invalidatePreview();});
   byId('freeformPlaceSelect').addEventListener('change',()=>{const select=byId('freeformPlaceSelect');if(select.value)chooseOpenReference(select.value,select.selectedOptions[0].textContent);else{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;showOpenReference();invalidatePreview();}});
   byId('addContributionAttribute').addEventListener('click',()=>{addAttribute()?.focus();invalidatePreview();saveDraft();});
   for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('input',()=>{invalidatePreview();saveDraft();showPoint();});
-  byId('chooseContributionPoint').addEventListener('click',()=>{if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
-  byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
+  byId('chooseContributionPoint').addEventListener('click',()=>{if(byId('chooseContributionPoint').getAttribute('aria-pressed')==='true'){window.dispatchEvent(new CustomEvent('contributions-point-pick-cancelled'));return;}if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
+  byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);locationStatus('');invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
   window.addEventListener('contributions-clarify-requested',event=>{
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
     for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
+  window.addEventListener('contributions-refresh-requested',()=>loadDashboard());
   window.addEventListener('contributions-review-requested',async event=>{
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;
     byId('draftTab').click();switchView('reviewView');await loadSubmission(id);
   });
-  window.addEventListener('contributions-session-ended',event=>clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute'));
-  window.addEventListener('contributions-session-started',()=>loadDashboard());
+  window.addEventListener('contributions-session-ended',event=>{const accountKey=privateActor?draftStorageKey:null;if(event.detail?.signedOut&&privateActor){try{localStorage.setItem(signedOutMarker(privateActor),String(Date.now()));}catch{}}clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute');
+    // Signing out on purpose removes the account's draft; an expired session keeps it for the next sign-in.
+    if(event.detail?.signedOut&&accountKey){forgetDraft(accountKey);draftNotice('');}});
+  // Signing in from a preview carries straight on to the checked preview.
+  let resumePreviewAfterSignIn=false;
+  window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
+  window.addEventListener('storage',event=>{if(privateActor&&event.key===signedOutMarker(privateActor)&&event.newValue)window.dispatchEvent(new CustomEvent('contributions-session-ended',{detail:{signedOut:true}}));});
   window.addEventListener('focus',async()=>{if(privateActor){const old=privateActor;try{const confirmed=await sessionActor();if(privateActor===old&&confirmed!==old)clearPrivateView('Account changed');}catch{if(privateActor===old)clearPrivateView('Sign in to contribute');}}});
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
   byId('tasksTool').addEventListener('click',()=>{byId('draftTab').click();switchView('taskView');loadSharedTasks();byId('toolsMenu').hidden=true;byId('toolsButton').setAttribute('aria-expanded','false');});

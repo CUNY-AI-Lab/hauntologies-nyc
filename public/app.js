@@ -22,10 +22,14 @@ function setHostedRecords(records){hostedRecords=records;populateFacets();render
 const hasPoint=r=>Boolean(AtlasModel.normalize(r).geometry);
 const markers=new Map();
 let uncertaintyLayer;
-let proposedPointMarker=null,proposedPanFrame=0,contributionPicking=false;
+let proposedPointMarker=null,proposedPanFrame=0,contributionPicking=false,statusBeforePicking=null;
 function clearProposedPoint(){cancelAnimationFrame(proposedPanFrame);if(proposedPointMarker&&map)map.removeLayer(proposedPointMarker);proposedPointMarker=null;}
 function stopContributionPicking(){
  contributionPicking=false;document.body.classList.remove('contribution-picking');
+ $('chooseContributionPoint')?.setAttribute('aria-pressed','false');
+ // A cancelled pick puts back whatever the location line said before, such as an earlier pin.
+ const status=$('newLocationStatus');if(status?.dataset.state==='picking'){status.textContent=statusBeforePicking?.text||'';if(statusBeforePicking?.state)status.dataset.state=statusBeforePicking.state;else delete status.dataset.state;}
+ statusBeforePicking=null;
  if($('mapStatus').textContent==='Choose a location')updateLayerStatus();
 }
 function showProposedPoint(point){
@@ -49,14 +53,26 @@ function emptyMapTarget(target){
 }
 function requestContributionPoint(latlng,replace=false){
  const accepted=window.ContributionPoint?.request({latitude:latlng.lat,longitude:latlng.lng},{replace});
- if(accepted){stopContributionPicking();toolOpener='map';}
+ if(accepted){stopContributionPicking();toolOpener='map';$('chooseContributionPoint').focus({preventScroll:true});$('newLocationStatus').scrollIntoView({block:'nearest'});}
  else if(window.ContributionPoint)$('mapStatus').textContent='Location unavailable for this contribution';
  return accepted;
 }
 window.addEventListener('contributions-point-changed',event=>showProposedPoint(event.detail?.point));
+// A fresh pin lands with one pulse; redrawing an existing pin does not repeat it.
+window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{
- if(!map)return;closeTools();contributionPicking=true;document.body.classList.add('contribution-picking');$('mapStatus').textContent='Choose a location';$('map').focus();
+ if(!map)return;
+ // Contribute stays on screen while a point is chosen. It stops being modal so the map takes the click;
+ // returning to the Contribute tab after a pin or cancel restores modality.
+ for(const id of ['toolsMenu','layersPanel','filtersPanel'])$(id).hidden=true;
+ for(const id of ['toolsButton','filtersButton','layersButton'])$(id).setAttribute('aria-expanded','false');
+ setSidecarModal(false);contributionPicking=true;document.body.classList.add('contribution-picking');
+ $('chooseContributionPoint').setAttribute('aria-pressed','true');
+ const status=$('newLocationStatus');if(status.dataset.state!=='picking')statusBeforePicking={text:status.textContent,state:status.dataset.state};
+ status.textContent='Select a spot on the map. Press Esc to cancel.';status.dataset.state='picking';
+ $('mapStatus').textContent='Choose a location';$('map').focus();
 });
+window.addEventListener('contributions-point-pick-cancelled',()=>{stopContributionPicking();$('draftTab').click();$('chooseContributionPoint').focus();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contributionPicking){event.preventDefault();stopContributionPicking();$('draftTab').click();$('chooseContributionPoint')?.focus();}});
 const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'Demolition list':['haunting','reported_haunting'].includes(r.category)?'Ghost story':r.category==='archival_gap'?'Archival gap':r.category==='vanished_place'?'Vanished place':r.category==='pending'?'Pending review':r.category==='submitted'?'Submitted record':'Place';
 function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&String(lat).trim()!==''&&String(lon).trim()!==''&&Number(lat)>=40.45&&Number(lat)<=40.98&&Number(lon)>=-74.30&&Number(lon)<=-73.65}
@@ -370,7 +386,9 @@ window.addEventListener('edits-place-requested',async event=>{await refreshPubli
 refreshPublishedPlaces();
 
 window.addEventListener('contributions-place-pick-requested',()=>{closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');$('chooseExistingPlace').focus();}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');
+ // The visible place field replaced the old picker button, which is now hidden.
+ ($('contributionPlace')||$('chooseExistingPlace')).focus();}});
 
 window.addEventListener('contributions-records-changed',event=>{if(!event.detail?.publicRefresh)refreshPublishedPlaces();});
 
