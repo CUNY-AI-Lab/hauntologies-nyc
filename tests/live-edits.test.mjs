@@ -247,3 +247,40 @@ test('a self-approval is labelled as one, not as independent', async t => {
   const kinds = ok(await call(h, 'submission?id=' + s.id, undefined, 'admin'), 200).submission.events.map(e => e.kind);
   assert.ok(kinds.includes('admin_self_approval') && !kinds.includes('independent_approval'), kinds.join(','));
 });
+
+// New places: approving a proposal with a map point publishes it as a map entry.
+const proposal = (payload = {}, extra = {}) => ({ schema_version: '1.0', type: 'open_proposal', task_ids: [], title: 'Thomas Shoe Factory', summary: 'Footsteps on the upper floor.',
+  public_credit: { consent: true, label: 'A. Contributor' }, sources: [], attachments: [], targets: [],
+  payload: { explanation: 'Footsteps on the upper floor.', sources_text: 'Brooklyn Daily Eagle, 1911.', geometry: { type: 'Point', coordinates: [-73.9575, 40.7079] }, ...payload }, ...extra });
+
+test('an admin approves a new place and it is on the map at its point', async t => {
+  const h = harness(t, { reviewers: ['admin'], publishers: ['admin'], stewards: [], admins: ['admin'] });
+  const s = await submit(h, proposal(), 'admin');
+  assert.equal(s.application.applicable, true);
+  const approved = ok(await approve(h, s, 'admin'), 200).submission;
+  ok(await verify(h, ok(await apply(h, approved, 'admin'), 201).job, 'admin'), 200);
+  const [place] = await publishedRecords(h.db);
+  assert.equal(place.title, 'Thomas Shoe Factory');
+  assert.equal(place.description, 'Footsteps on the upper floor.');
+  assert.deepEqual([place.latitude, place.longitude], [40.7079, -73.9575]);
+  assert.equal(place.borough, 'Brooklyn');
+  assert.equal((await publishedEdits(h.db))[0].credit, 'A. Contributor', 'consented credit shows in Published edits');
+  assert.equal(ok(await call(h, 'submission?id=' + s.id, undefined, 'admin'), 200).submission.status, 'merged');
+});
+
+test('new places without a point, or attached to an existing place, are not published by approval', async t => {
+  const h = harness(t);
+  assert.equal((await submit(h, proposal({ geometry: null }))).application.applicable, false);
+  const attached = proposal({}, { targets: [{ record_id: place.id, expected_version: 1, expected_hash: (await target(h)).expected_hash }] });
+  assert.equal((await submit(h, attached, 'author2')).application.applicable, false);
+});
+
+test('a new place approved before approval meant publication cannot be published with that approval', async t => {
+  const h = harness(t);
+  const s = await submit(h, proposal());
+  const approved = ok(await approve(h, s), 200).submission;
+  h.db.native.prepare("UPDATE workflow_approvals SET binding_json=json_remove(binding_json,'$.application_applicable') WHERE submission_id=?").run(s.id);
+  const refused = await apply(h, approved);
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.error, 'approval_predates_application');
+});
