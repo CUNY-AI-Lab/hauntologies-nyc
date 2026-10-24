@@ -209,7 +209,8 @@
     if(type==='entry_bundle'&&Object.prototype.hasOwnProperty.call(entry,'geo_status'))simpleDraft.geometry_kind=entry.geo_status==='unresolved'?'unknown':'point';
     if(Object.prototype.hasOwnProperty.call(entry,'dates'))simpleDraft.date_mode=entry.dates===null?'none':'provided';
     if(revisionOriginal&&['area_proposal','record_annotation'].includes(type))simpleDraft.payload_wording=entry[type==='record_annotation'?'text':'description'];
-    const summaryLabel=byId('contributionSummary').closest('label');if(summaryLabel?.firstChild?.nodeType===Node.TEXT_NODE)summaryLabel.firstChild.textContent=revisionOriginal&&['area_proposal','record_annotation'].includes(type)?'Summary':'Description';
+    // The accordion heading names the field; the label repeats it for screen readers only.
+    const summaryWord=revisionOriginal&&['area_proposal','record_annotation'].includes(type)?'Summary':'Description',summaryLabel=byId('contributionSummary').closest('label')?.querySelector('.sr-only'),summaryHeading=byId('freeformDescription')?.querySelector(':scope>summary');if(summaryLabel)summaryLabel.textContent=summaryWord;if(summaryHeading?.firstChild?.nodeType===Node.TEXT_NODE)summaryHeading.firstChild.textContent=summaryWord;
     if(type==='area_proposal'){simpleDraft.geo_basis=entry.geometry_basis||'';if(entry.geometry){simpleDraft.area_input='geojson';simpleDraft.geometry_json=JSON.stringify(entry.geometry,null,2);}}
     if(entry.entry_id)simpleEntryId=entry.entry_id;
     const root=byId('typedPayloadFields');root.replaceChildren(el('legend',simpleFlow()==='clarify'?'Clarify':'Place'));
@@ -294,6 +295,7 @@
   }
   function showPoint(){const point=pointForm()?readPoint():null;byId('cancelContributionPoint').disabled=!pointFields().latitude&&!pointFields().longitude&&!byId('contributionLatitude').validity.badInput&&!byId('contributionLongitude').validity.badInput;window.dispatchEvent(new CustomEvent('contributions-point-changed',{detail:{point:point?{...point}:null}}));return point;}
   function setPointFields(point){byId('contributionLatitude').value=point?.latitude??'';byId('contributionLongitude').value=point?.longitude??'';}
+  function locationStatus(text,state=''){const status=byId('newLocationStatus');status.textContent=text;if(state)status.dataset.state=state;else delete status.dataset.state;}
   function canRequestPoint(){return pointForm()&&!pendingWrite&&!busy&&!imageBatch&&!imageBusy&&!imageProcessing;}
   window.ContributionPoint=Object.freeze({
     get:()=>{const point=pointForm()?readPoint():null;return point?{...point}:null;},
@@ -303,7 +305,11 @@
       const fields=pointFields(),hasInput=fields.latitude!==''||fields.longitude!==''||byId('contributionLatitude').validity.badInput||byId('contributionLongitude').validity.badInput;
       if(!replace&&hasInput&&!readPoint(false))return false;
       if(replace||!readPoint(false))setPointFields(point);
-      invalidatePreview();saveDraft();byId('draftTab').click();switchView('submissionView',false);byId('freeformLocation').open=true;showPoint();byId('freeformDescription').open=true;byId('contributionSummary').focus();return true;
+      invalidatePreview();saveDraft();byId('draftTab').click();switchView('submissionView',false);byId('freeformLocation').open=true;const placed=showPoint();byId('freeformDescription').open=true;
+      // Confirm the pin where the request was made, with the borough it falls in.
+      if(placed){const borough=window.NycGeometry?.findBorough(placed.latitude,placed.longitude);locationStatus('Pinned at '+placed.latitude.toFixed(5)+', '+placed.longitude.toFixed(5)+(borough?' in '+borough:''),'success');requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('contributions-point-pinned')));}
+      // Focus stays with whoever asked for the point, so the confirmation stays in view.
+      return true;
     }
   });
   function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
@@ -372,18 +378,47 @@
   }
   let stagedImages=[],imageBatch=null,imageBusy=false,imageProcessing=false;
   const attachmentId=value=>typeof value==='string'&&/^watt_[0-9a-f-]{36}$/.test(value);
-  const imageFields=[['caption','Caption',2000],['alt','Description',1000],['credit','Credit',1000],['source_url','Source link',2048],['rights','Rights',2000]];
+  const imageFields=[['caption','Caption',2000],['alt','Alt text',1000],['credit','Credit',1000],['source_url','Source link',2048],['rights','Rights',2000]];
   function imageStatus(message,retry=false){
     byId('contributionImageProgress').hidden=!message;byId('contributionImageStatus').textContent=message;
     byId('retryContributionImages').hidden=!retry;byId('retryContributionImages').disabled=imageBusy;
   }
+  // Previews are local object URLs, released once their image leaves the list.
+  const imagePreviews=new Map();
+  const attributionHref=value=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:'';}catch{return '';}};
+  function imageField(entry,index,key,label,max,parent){
+    const input=el(key==='caption'||key==='alt'?'textarea':'input');input.id='image-'+index+'-'+key;input.dataset.imageField=key;input.value=entry.metadata[key]||'';input.maxLength=max;input.disabled=imageBusy||!!entry.pending||!!entry.receipt;
+    if(input.tagName==='TEXTAREA')input.rows=2;else{input.type=key==='source_url'?'url':'text';if(key==='source_url')input.placeholder='https://';}
+    const wrap=el('label',label);wrap.htmlFor=input.id;wrap.append(input);parent.append(wrap);
+    input.addEventListener('input',()=>{entry.metadata[key]=input.value;if(imageBatch&&!entry.pending)imageStatus('Contribution saved. Image not saved',true);});
+  }
+  // Once saved, credit and source read as one attribution line, linked when the source is a web address.
+  function attribution(entry){
+    const line=el('p','Attribution: ','staged-image-attribution'),credit=(entry.metadata.credit||'').trim(),href=attributionHref((entry.metadata.source_url||'').trim());
+    if(href){const link=el('a',credit||new URL(href).hostname);link.href=href;link.target='_blank';link.rel='noopener noreferrer';line.append(link);}
+    else line.append(document.createTextNode(credit||'None given'));
+    return line;
+  }
   function renderStagedImages(){
     const root=byId('stagedContributionImages');root.replaceChildren();
     byId('contributionImages').disabled=imageBusy||imageProcessing||!!imageBatch||stagedImages.length>=3;
+    for(const [entry,url] of imagePreviews)if(!stagedImages.includes(entry)){URL.revokeObjectURL(url);imagePreviews.delete(entry);}
     for(const [index,entry] of stagedImages.entries()){
-      const card=el('div',undefined,'staged-image');card.append(el('p',entry.file.name),el('p',entry.receipt?'Uploaded':'Not uploaded','small'),el('p','Metadata removed','small'));
+      if(!imagePreviews.has(entry))imagePreviews.set(entry,URL.createObjectURL(entry.file));
+      const card=el('div',undefined,'staged-image'),board=el('figure',undefined,'staged-image-board'),photo=el('img');
+      photo.src=imagePreviews.get(entry);photo.alt=entry.metadata.alt||'';photo.width=entry.width;photo.height=entry.height;photo.decoding='async';
+      // The person's own filename; the uploaded derivative is renamed by design.
+      board.append(photo,el('figcaption',(entry.name||entry.file.name)+' · '+entry.width+' × '+entry.height));
+      const state=entry.receipt?'saved':entry.pending?'saving':'ready';
+      const status=el('p',state==='saved'?'Uploaded with your contribution':state==='saving'?'Uploading…':'Not uploaded yet. Images upload when you submit, so nothing leaves this device before then. Camera and location metadata have been removed.','staged-image-status');status.dataset.state=state;
+      if(entry.resized)status.append(document.createTextNode(' Reduced from '+entry.sourceWidth+' × '+entry.sourceHeight+' to fit the 1 MB upload limit.'));
+      card.append(board,status);
       const details=disclosure('Details');
-      for(const [key,label,max] of imageFields){const input=el(key==='caption'||key==='alt'?'textarea':'input');input.id='image-'+index+'-'+key;input.dataset.imageField=key;input.value=entry.metadata[key]||'';input.maxLength=max;input.disabled=imageBusy||!!entry.pending||!!entry.receipt;if(input.tagName==='TEXTAREA')input.rows=2;else input.type=key==='source_url'?'url':'text';const wrap=el('label',label);wrap.htmlFor=input.id;wrap.append(input);details.append(wrap);input.addEventListener('input',()=>{entry.metadata[key]=input.value;if(imageBatch&&!entry.pending)imageStatus('Contribution saved. Image not saved',true);});}
+      for(const [key,label,max] of imageFields)imageField(entry,index,key,label,max,details);
+      // After upload, Details also links the attribution and the stored image.
+      const stored=entry.receipt?.result?.attachment_id;
+      if(entry.receipt)details.append(attribution(entry));
+      if(attachmentId(stored)){const link=el('a','Download uploaded image','staged-image-link');link.href=apiRoot+'/attachment?id='+encodeURIComponent(stored);link.target='_blank';link.rel='noopener';details.append(link);}
       card.append(details);
       if(!entry.receipt&&!entry.pending&&!imageBusy){card.append(button('Remove',()=>{stagedImages=stagedImages.filter(item=>item!==entry);renderStagedImages();if(imageBatch&&!stagedImages.some(item=>!item.receipt)){imageBatch=null;stagedImages=[];renderStagedImages();imageStatus('Contribution saved');}else if(imageBatch)imageStatus('Contribution saved. Image not saved',true);},'textbutton'));}
       root.append(card);
@@ -395,7 +430,7 @@
     if(stagedImages.length+files.length>3){error.textContent='Choose up to 3 images';error.hidden=false;return;}
     const owner=privateActor,generation=identityGeneration,images=stagedImages;
     imageProcessing=true;byId('previewContribution').disabled=true;invalidatePreview();renderStagedImages();
-    try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');images.push({file:prepared.file,width:prepared.width,height:prepared.height,metadata:{rights:'unknown'},pending:null,receipt:null});}}
+    try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');images.push({file:prepared.file,name:file.name,width:prepared.width,height:prepared.height,resized:prepared.resized===true,sourceWidth:prepared.sourceWidth,sourceHeight:prepared.sourceHeight,metadata:{rights:'unknown'},pending:null,receipt:null});}}
     catch(failure){if(generation!==identityGeneration||owner!==privateActor)return;error.textContent=failure.message||'Image could not be prepared';error.hidden=false;}
     finally{imageProcessing=false;byId('previewContribution').disabled=busy;renderStagedImages();}
   }
@@ -732,13 +767,13 @@
   byId('chooseExistingPlace').addEventListener('click',()=>window.dispatchEvent(new CustomEvent('contributions-place-pick-requested')));
   byId('addFreeformSource').addEventListener('click',()=>{const root=byId('extraSources');if(root.children.length>=19)return;const row=el('div'),label=el('label','Link or reference'),input=el('textarea');input.rows=2;input.maxLength=30000;label.append(input);row.append(label,button('Remove',()=>{row.remove();invalidatePreview();saveDraft();},'textbutton'));root.append(row);input.focus();});
   byId('newLocationSearch').addEventListener('input',()=>{const query=byId('newLocationSearch').value,records=typeof allRecords==='function'?allRecords():[];byId('newLocationMatches').replaceChildren(...records.filter(record=>Number.isFinite(record.latitude)&&Number.isFinite(record.longitude)&&window.PlaceInput.matches(record,query)).slice(0,20).map(record=>new Option(record.title,record.title+' — '+record.latitude+', '+record.longitude)));});
-  byId('newLocationSearch').addEventListener('change',()=>{const value=byId('newLocationSearch').value,point=window.PlaceInput.point(value)||window.PlaceInput.point(value.split(' — ').at(-1));if(!point){byId('newLocationStatus').textContent='Choose a listed place, enter coordinates, or paste an OpenStreetMap link with coordinates.';return;}if(!window.ContributionPoint.request(point,{replace:true})){byId('newLocationStatus').textContent='Choose a point in New York City.';return;}byId('newLocationStatus').textContent='Location selected';});
+  byId('newLocationSearch').addEventListener('change',()=>{const value=byId('newLocationSearch').value,point=window.PlaceInput.point(value)||window.PlaceInput.point(value.split(' — ').at(-1));if(!point){locationStatus('Choose a listed place, enter coordinates, or paste an OpenStreetMap link with coordinates.');return;}if(!window.ContributionPoint.request(point,{replace:true})){locationStatus('Choose a point in New York City.');return;}});
   byId('contributionPlaceMode').addEventListener('change',()=>{if(byId('contributionPlaceMode').value==='new'){++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;}showOpenReference();invalidatePreview();});
   byId('freeformPlaceSelect').addEventListener('change',()=>{const select=byId('freeformPlaceSelect');if(select.value)chooseOpenReference(select.value,select.selectedOptions[0].textContent);else{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;showOpenReference();invalidatePreview();}});
   byId('addContributionAttribute').addEventListener('click',()=>{addAttribute()?.focus();invalidatePreview();saveDraft();});
   for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('input',()=>{invalidatePreview();saveDraft();showPoint();});
-  byId('chooseContributionPoint').addEventListener('click',()=>{if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
-  byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
+  byId('chooseContributionPoint').addEventListener('click',()=>{if(byId('chooseContributionPoint').getAttribute('aria-pressed')==='true'){window.dispatchEvent(new CustomEvent('contributions-point-pick-cancelled'));return;}if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
+  byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);locationStatus('');invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
   window.addEventListener('contributions-clarify-requested',event=>{
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
     for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();

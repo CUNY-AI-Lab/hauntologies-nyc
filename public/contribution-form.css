@@ -72,9 +72,13 @@
 .edit-targets button, .edits-pagination button { min-height:44px; padding:8px 12px; }
 .edits-pagination { justify-content:space-between; margin-top:16px; }
 .return-to-edits { min-height:44px; padding:8px 12px; margin-left:auto; background:var(--paper); }
-#publishedEditsFeed { pointer-events:auto; margin-top:12px; font:13px/1.5 Arial,Helvetica,sans-serif; }
-#publishedEditsFeed > summary { cursor:pointer; min-height:44px; padding:11px 12px; border:1px solid var(--line); width:fit-content; list-style-position:inside; }
-#publishedEditsFeed[open] { max-height:min(360px,50dvh); overflow:auto; overscroll-behavior:contain; }
+/* Published edits opens from the title card in the same button family as the map controls. */
+#publishedEditsFeed { pointer-events:auto; margin-top:10px; font:12px/1.4 Arial,Helvetica,sans-serif; }
+#publishedEditsFeed > summary { position:relative; isolation:isolate; display:flex; align-items:center; width:fit-content; min-height:44px; padding:6px 10px; color:var(--ink); }
+#publishedEditsFeed > summary::before { content:''; position:absolute; z-index:-1; inset:6px 0; border:1px solid #827563; background:#11110f; pointer-events:none; }
+#publishedEditsFeed > summary::after { content:''; position:absolute; right:0; top:6px; width:9px; height:9px; background:linear-gradient(45deg,#746652 0 43%,#bba78a 44% 54%,#080908 55%); pointer-events:none; }
+#publishedEditsFeed > summary:hover::before, #publishedEditsFeed[open]:not([data-closing]) > summary::before { background:#27231c; border-color:#c1a47d; }
+#publishedEditsList { max-height:min(300px,45dvh); overflow:auto; overscroll-behavior:contain; }
 #publishedEditsStatus { margin-top:8px; color:var(--muted); }
 #publishedEditsList > li { border-top:1px solid var(--line); padding:8px 0; }
 #publishedEditsList button { display:block; min-height:44px; text-align:left; width:100%; white-space:normal; padding:8px; }
@@ -139,3 +143,39 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .registration-admission label[hidden] { display:none; }
 .registration-admission input { margin-bottom:0; }
 .registration-admission-notice { margin:0; font-size:13px; line-height:1.45; color:inherit; }
+
+/* Pinning: Pin reads as pressed while the map is waiting, and a placed pin confirms where it landed. */
+#chooseContributionPoint[aria-pressed="true"] { background:#2a251d; border-color:#e9caa1; color:#fff1d8; }
+#newLocationStatus[data-state="picking"] { color:var(--sun); }
+#newLocationStatus[data-state="success"] { position:relative; padding-left:20px; color:var(--ink); }
+#newLocationStatus[data-state="success"]::before { content:''; position:absolute; left:3px; top:.2em; width:5px; height:10px; border:solid #a9d3a0; border-width:0 2px 2px 0; transform:rotate(45deg); }
+.proposed-point.just-pinned::after { content:''; position:absolute; inset:-2px; border:2px solid #ffcf94; border-radius:50%; pointer-events:none; animation:pin-landed 640ms cubic-bezier(.2,.7,.2,1) forwards; }
+@keyframes pin-landed { from { transform:scale(1); opacity:.9; } to { transform:scale(2.4); opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .proposed-point.just-pinned::after { animation:none; opacity:0; } }
+
+/* Contribute reads as one description record: each element is a ruled row naming what it holds. */
+#typedContributionForm { font-size:12px; }
+#typedContributionForm label { font-size:11px; }
+#typedContributionForm :is(input:not([type="checkbox"]):not([type="file"]), textarea, select) { font-size:13px; font-weight:400; }
+#typedContributionForm .workflow-details, #typedContributionForm > .workflow-details, #typedContributionForm .workflow-details[open], #typedContributionForm > .workflow-details[open] { margin:0; padding:0; border:0; border-top:1px solid var(--line); background:none; }
+#typedContributionForm .workflow-details:has(+ :not(.workflow-details)), #typedContributionForm .workflow-details:last-of-type { border-bottom:1px solid var(--line); }
+#typedContributionForm .workflow-details > summary, #typedContributionForm > .workflow-details > summary { display:flex; align-items:baseline; gap:12px; width:auto; min-width:0; min-height:44px; margin:0; padding:13px 30px 13px 0; border:0; background:none; color:var(--ink); font-size:12px; line-height:18px; }
+#typedContributionForm .workflow-details > summary::after { content:none; }
+#typedContributionForm .workflow-details > summary:hover { background:none; color:#fff1d8; }
+#typedContributionForm .workflow-details[open] > summary { margin:0; }
+#typedContributionForm .workflow-details > :not(summary) { margin-inline:0; }
+#typedContributionForm .workflow-details[open] > :last-child { margin-bottom:14px; }
+#newPlaceLocation { margin-bottom:12px; }
+
+/* A staged image is clipped to a board: the preview first, its status and credit beneath. */
+.staged-image { padding-block:14px; }
+.staged-image-board { position:relative; margin:8px 0 10px; padding:16px 10px 10px; background:#1b1915; border:1px solid #5d5447; border-radius:3px; }
+.staged-image-board::before { content:''; position:absolute; top:-7px; left:50%; width:56px; height:14px; margin-left:-28px; border-radius:3px 3px 2px 2px; background:linear-gradient(#d6c4a4,#8f7f66); box-shadow:0 1px 0 #0009; }
+.staged-image-board::after { content:''; position:absolute; top:-3px; left:50%; width:16px; height:5px; margin-left:-8px; border-radius:3px; background:#1b1915; }
+.staged-image-board img { display:block; width:100%; height:auto; max-height:220px; object-fit:contain; padding:6px; background:#ece4d6; box-shadow:0 1px 2px #0008; }
+.staged-image-board figcaption { margin-top:8px; font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+.staged-image-status { margin:0 0 8px; font-size:11px; line-height:1.5; color:var(--muted); }
+.staged-image-status[data-state="saved"] { color:var(--ink); }
+.staged-image-attribution { margin:10px 0 0; font-size:12px; overflow-wrap:anywhere; }
+.staged-image-attribution a, .staged-image-link { color:#ebc395; text-underline-offset:3px; }
+.staged-image-link { display:inline-block; min-height:44px; padding-block:12px; font-size:12px; }
