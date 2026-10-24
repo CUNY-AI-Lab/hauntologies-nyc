@@ -261,3 +261,12 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .approval-form textarea { font-size:13px; }
 #submissionDetail .textbutton + textarea { margin-top:8px; }
 .workflow-jobs[hidden] { display:none; }
+
+/* The contributor's own unpublished places: a dashed ring that reads as "not yet on the map". */
+.own-place { display:flex; align-items:center; justify-content:center; border:2px dashed #ffcf94; border-radius:50%; background:#171510cc; box-shadow:0 0 0 2px #171510aa; cursor:pointer; }
+.own-place span { width:8px; height:8px; border-radius:50%; background:#ffcf94; }
+.own-place[data-status="changes_requested"] { border-color:#e6977a; }
+.own-place[data-status="changes_requested"] span { background:#e6977a; }
+.own-place[data-status="approved"] { border-color:#9fd1a6; }
+.own-place[data-status="approved"] span { background:#9fd1a6; }
+.own-place:focus-visible { outline:2px solid #ffd39e; outline-offset:3px; }

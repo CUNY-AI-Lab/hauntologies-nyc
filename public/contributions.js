@@ -92,6 +92,7 @@
     if(signedOut)forgetDraft(endedKey);
     if(privateActor){if(!signedOut)saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
     dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
+    window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:[]}}));
     byId('workflowConnection').textContent=message;byId('reviewCapabilityNotice').textContent='';
     // Only when a session ended mid-edit; a signed-out page load keeps its own notice.
     if(endedKey&&!signedOut&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
@@ -626,7 +627,16 @@
   function labeledControl(label,input){const node=el('label');node.append(el('span',label),input);return node;}
   function resetContributionForm(){byId('typedContributionForm').reset();['submissionSources','submissionTargets','submissionAttachments','targetSnapshot'].forEach(id=>byId(id).replaceChildren());byId('publicCreditLabel').disabled=true;byId('useContributionTarget').disabled=true;renderErrors([]);}
 
-  function applyDashboard(data){dashboard=data;sharedTasks=data.tasks||sharedTasks;connectionVersion++;
+  // The contributor's own unpublished places, for the map layer only they see.
+  function ownPlaces(submissions){
+    return submissions.filter(s=>s.is_own&&!['withheld','merged'].includes(s.status)).flatMap(s=>{
+      try{const g=JSON.parse(s.raw_json).payload?.geometry;const c=g?.type==='Point'?g.coordinates:null;
+        return Array.isArray(c)&&c.length===2&&c.every(Number.isFinite)?[{id:s.id,title:s.title||'Your contribution',status:s.status,latitude:c[1],longitude:c[0]}]:[];}catch{return [];}
+    });
+  }
+  let dashboardLoadedAt=0;
+  function applyDashboard(data){dashboard=data;sharedTasks=data.tasks||sharedTasks;connectionVersion++;dashboardLoadedAt=Date.now();
+    window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:ownPlaces(data.submissions||[])}}));
     byId('workflowConnection').textContent=caps().can_submit?'':'Read-only';
     byId('reviewCapabilityNotice').textContent=caps().independent_review_available?'':'Independent reviewer required';
     const targetSelect=byId('contributionTargetPick');targetSelect.replaceChildren();const first=el('option',(data.targets||[]).length?'Choose a record':'No records');first.value='';targetSelect.append(first);(data.targets||[]).forEach((target,index)=>{const option=el('option',target.title);option.value=String(index);targetSelect.append(option);});byId('useContributionTarget').disabled=true;
@@ -898,6 +908,8 @@
   // Signing in from a preview carries straight on to the checked preview.
   let resumePreviewAfterSignIn=false;
   window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
+  // Returning to the tab picks up review decisions made elsewhere.
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&privateActor&&Date.now()-dashboardLoadedAt>30000)loadDashboard();});
   window.addEventListener('storage',event=>{if(privateActor&&event.key===signedOutMarker(privateActor)&&event.newValue)window.dispatchEvent(new CustomEvent('contributions-session-ended',{detail:{signedOut:true}}));});
   window.addEventListener('focus',async()=>{if(privateActor){const old=privateActor;try{const confirmed=await sessionActor();if(privateActor===old&&confirmed!==old)clearPrivateView('Account changed');}catch{if(privateActor===old)clearPrivateView('Sign in to contribute');}}});
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
