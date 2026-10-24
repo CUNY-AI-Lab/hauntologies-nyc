@@ -386,7 +386,9 @@ window.addEventListener('edits-place-requested',async event=>{await refreshPubli
 refreshPublishedPlaces();
 
 window.addEventListener('contributions-place-pick-requested',()=>{closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');$('chooseExistingPlace').focus();}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');
+ // The visible place field replaced the old picker button, which is now hidden.
+ ($('contributionPlace')||$('chooseExistingPlace')).focus();}});
 
 window.addEventListener('contributions-records-changed',event=>{if(!event.detail?.publicRefresh)refreshPublishedPlaces();});
 
