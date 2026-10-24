@@ -53,6 +53,13 @@
 .place-search-credit{margin:0;padding:8px 16px 10px;border-top:1px solid #302d26;font-size:10px;line-height:1.5;color:#9a9286}
 .place-search-credit a{color:#c9b18f}
 
+/* Inside the Tools tray: a square icon, with the field and panel in the
+   popout column below the tray. */
+.header-tools .map-tool-tray .place-search-toggle{width:44px;min-width:44px;padding:0}
+.place-search.in-tray .place-search-form{position:fixed;top:var(--search-top,124px);right:var(--search-right,20px);width:var(--search-width,400px);clip-path:inset(0 0 100% 0)}
+.place-search.in-tray.is-peeking .place-search-form,.place-search.in-tray.is-open .place-search-form{clip-path:inset(-12px)}
+.place-search.in-tray .place-search-panel{position:fixed;top:calc(var(--search-top,124px) + 50px);right:var(--search-right,20px);width:var(--search-width,400px)}
+
 /* Map marks: the found place, a route start, and a collection record. */
 .search-pin{border:2px solid #ffcf94;border-radius:50%;background:#171510b3;box-shadow:0 0 0 3px #171510aa}
 .search-pin span{position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#ffcf94}

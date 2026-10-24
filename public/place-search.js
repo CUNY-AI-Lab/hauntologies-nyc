@@ -446,6 +446,18 @@
   const toolPanels = ['toolsMenu', 'layersPanel', 'filtersPanel', 'researchSidecar'];
 
   function layout() {
+    // Inside the Tools tray the toggle sits at the tray's left end, so the
+    // field and panel drop below the tray into the popout column instead.
+    const tray = root.closest('#mapToolTray');
+    root.classList.toggle('in-tray', Boolean(tray));
+    if (tray) {
+      const top = tray.getBoundingClientRect().bottom + 8, inset = narrow() ? 12 : 20;
+      root.style.setProperty('--search-top', top + 'px');
+      root.style.setProperty('--search-right', inset + 'px');
+      root.style.setProperty('--search-width', Math.min(400, innerWidth - 40) + 'px');
+      root.style.setProperty('--search-panel-max', Math.max(160, innerHeight - top - 50 - 96) + 'px');
+      return;
+    }
     const box = toggle.getBoundingClientRect(), masthead = document.querySelector('.masthead').getBoundingClientRect();
     const room = Math.max(160, Math.min(380, box.left - masthead.left - 6));
     // Wide screens keep the panel under the field, clear of the controls;
