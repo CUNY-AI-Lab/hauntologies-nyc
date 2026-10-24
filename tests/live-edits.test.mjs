@@ -160,3 +160,56 @@ test('a reviewer who is not an admin still cannot approve their own work', async
   const binding = JSON.parse(h.db.native.prepare('SELECT binding_json FROM workflow_approvals WHERE submission_id=?').get(s.id).binding_json);
   assert.equal(binding.admin_self_approval, undefined);
 });
+
+// Regressions from the independent review.
+test('an edit approved before edits could be applied is refused at apply', async t => {
+  const h = harness(t), s = await submit(h, edit(await target(h), { title: 'Approved under the old rule' }));
+  const approved = ok(await approve(h, s), 200).submission;
+  h.db.native.prepare("UPDATE workflow_approvals SET binding_json=json_remove(binding_json,'$.application_applicable') WHERE submission_id=?").run(s.id);
+  const refused = await apply(h, approved);
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.error, 'approval_predates_application');
+  assert.deepEqual(await publishedRecords(h.db), []);
+});
+
+test('stacked edits roll back newest first, an older release is refused, and the place stays editable', async t => {
+  const h = harness(t);
+  const first = await publish(h, edit(await target(h), { title: 'Edit one' }));
+  const second = await publish(h, edit(await target(h), { title: 'Edit two' }), 'author2');
+  const rollback = job => call(h, 'rollback', { idempotency_key: key(), job_id: job.id, rationale: 'Synthetic rollback.' }, 'publisher');
+  const early = await rollback(first.job);
+  assert.equal(early.status, 409);
+  assert.equal(early.body.error, 'release_superseded');
+  assert.equal((await publishedRecords(h.db))[0].title, 'Edit two', 'refusal changed nothing');
+  ok(await rollback(second.job), 200);
+  assert.equal((await publishedRecords(h.db))[0].title, 'Edit one');
+  ok(await rollback(first.job), 200);
+  assert.deepEqual(await publishedRecords(h.db), []);
+  assert.equal(count(h, 'approved_records'), 0);
+  ok((await publish(h, edit(await target(h), { title: 'After unwinding' }))).verified, 200);
+  assert.equal((await publishedRecords(h.db))[0].title, 'After unwinding');
+});
+
+test('after a rollback, a changed built-in record can still be edited', async t => {
+  const h = harness(t);
+  const { job } = await publish(h, edit(await target(h), { title: 'Edited' }));
+  ok(await call(h, 'rollback', { idempotency_key: key(), job_id: job.id, rationale: 'Synthetic rollback.' }, 'publisher'), 200);
+  // A later deploy changes the built-in record; the same database carries on.
+  const changed = { ...place, built: 'c. 1892' };
+  const redeployed = { db: h.db, service: createWorkflowService({ store: createWorkflowStore(h.db), staticRecords: [changed], taskSeeds: { tasks: [] }, geography: { boundaries }, authorization: { reviewers: ['reviewer'], publishers: ['publisher'] } }) };
+  const resolved = await target(redeployed);
+  assert.equal(resolved.record.built, 'c. 1892');
+  ok((await publish(redeployed, edit(resolved, { title: 'Edited after redeploy' }))).verified, 200);
+  assert.equal((await publishedRecords(h.db))[0].title, 'Edited after redeploy');
+});
+
+test('published edits carry what the card shows and no editor text', async t => {
+  const h = harness(t);
+  ok((await publish(h, edit(await target(h), { description: 'A visible new description.' }))).verified, 200);
+  const [record] = await publishedRecords(h.db);
+  assert.equal(record.description, 'A visible new description.');
+  assert.equal(record.canonical_reviewed, undefined);
+  const stored = h.db.native.prepare('SELECT owner_id, derived_json FROM approved_records WHERE id=?').get(place.id);
+  assert.equal(stored.owner_id, 'inventory');
+  assert.equal(JSON.parse(stored.derived_json).edited_record.submission_json, undefined);
+});
