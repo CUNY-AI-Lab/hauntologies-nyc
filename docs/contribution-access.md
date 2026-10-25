@@ -8,7 +8,7 @@ The Sign in dialog accepts Email and Password, with Reset password and "Don't ha
 
 Only these `/api/auth/` actions are exposed: `session` (GET), and `register`, `verify`, `set-password`, `sign-in`, `request-reset`, `reset`, `sign-out` (POST). Mutations require the exact production Origin, same-origin fetch context and bounded JSON with allowlisted fields. Library signup, social providers, account linking and administrative endpoints stay inaccessible.
 
-Verification setup links expire 30 days after issue; reset challenges expire after 30 minutes. They have separate purposes, use hashed identifiers and support one successful consumption. Verification tokens contain 256 random bits; reset tokens use the library's generator. Initial credential creation is protected by a unique user/provider index. Reset revokes previous sessions. Responses expose account status, never a bearer session token.
+Verification setup links stay usable until password creation; reset challenges expire after 30 minutes. They have separate purposes, use hashed identifiers and support one successful consumption. Verification tokens contain 256 random bits; reset tokens use the library's generator. Initial credential creation is protected by a unique user/provider index. Reset revokes previous sessions. Responses expose account status, never a bearer session token.
 
 Sessions use a host-only `__Host-hauntologies-session` cookie with Secure, HttpOnly, SameSite=Lax and a seven-day lifetime. The account session check renews it at most daily and returns the renewed cookie; other private checks do not refresh it. Cookie caching is disabled. Each private request checks current database state, verified email and an installed password credential. Account actors use `map_` plus an immutable library-generated UUID. Client identity headers are removed before the gate passes a verified actor to the contribution service.
 
@@ -70,10 +70,8 @@ The local runtime suite covers verification-before-password, replay and expiry, 
 
 References: [Better Auth email/password](https://better-auth.com/docs/authentication/email-password), [database adapters](https://better-auth.com/docs/adapters/other-relational-databases), [OWASP password reset guidance](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
 
-## Email deadline release dependency
+## Verification email lifetime
 
-Map PR #8 changes verification mail from `expiresAt:null` to a 30-day timestamp. It must follow the release of Admission PR #361 because the earlier Admission validator rejects deadlines more than one hour away. Keep the current null request until that dependency is deployed and verified; do not treat a source merge as deployment. The current map UI states the enforced 30-day lifetime, but the earlier Admission email template still promises usability until password creation. Reset expiry remains 30 minutes. No email send, merge or deployment occurs during local preparation.
-
-PR #24 promotes integration to main; it does not prove a deployed version or participant acceptance. PR #10 is an older, conflicting documentation proposal and must be reconciled against current behavior before any future merge. Keep these source, dependency, deployment and acceptance decisions separate.
+Verification mail uses `expiresAt:null`, matching the requested lifetime until password creation. The account service preserves unused setup proofs regardless of age and removes all setup proofs for an address after its password is created. The email and registration interface describe the same behavior. Reset expiry remains 30 minutes. Earlier proposals for a 30-day verification deadline are superseded by this policy.
 
 The contribution form asks for a location before the remaining fields. **Submit** validates and saves in one action; **Check review status** opens the saved contribution. Owners and explicitly listed moderators may permanently delete an unpublished contribution only if it has no release job; ordinary peer review grants no deletion access to others’ work. Deletion removes its private revisions and attachments while retaining the idempotency receipt. Published or staged release history cannot be deleted this way. The Jobs panel is shown only to configured administrators; reviewers continue staging and verification through the submission controls.

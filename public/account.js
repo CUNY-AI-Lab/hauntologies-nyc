@@ -58,7 +58,7 @@
         const hint = node('p', 'Use 12 to 128 characters.'); hint.className = 'small'; form.append(hint);
       }
     }
-    if (mode === 'register') form.append(node('p', 'Verify your email, then choose a password for Hauntologies. Your verification link expires 30 days after it is sent. Event registration is separate.'));
+    if (mode === 'register') form.append(node('p', 'Verify your email, then choose a password for Hauntologies. Your verification link stays usable until you create your password and can be used once. Event registration is separate.'));
     const submit = node('button', mode === 'sign-in' ? 'Sign in' : mode === 'register' ? 'Send verification email' : mode === 'request-reset' ? 'Send reset email' : 'Save password'); submit.type = 'submit'; submit.className = 'primary'; form.append(submit); formHost.append(form);
     form.addEventListener('submit', async event => {
       event.preventDefault(); if (busy) return;

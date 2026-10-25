@@ -62,20 +62,18 @@ test('creating a password invalidates every earlier setup link for that address'
   assert.equal((await h.call('/api/auth/sign-in', { email, password: replacement })).status, 401);
 });
 
-test('setup links expire 30 days after issue and expired rows are removed', async t => {
-  const h = await harness(t), email = 'month@gc.cuny.edu', unreadable = 'unreadable@gc.cuny.edu';
-  await h.call('/api/auth/register', { email }); const stale = await h.token(email);
-  await h.db.prepare('UPDATE hny_auth_verification SET createdAt=?, expiresAt=?').bind(daysAgo(31), oldDate).run();
-  const expired = await h.call('/api/auth/verify', { token: stale, password });
-  assert.equal(expired.status, 400); assert.equal(expired.cookie, '');
+test('unused setup links survive age cleanup until password creation', async t => {
+  const h = await harness(t), email = 'later@gc.cuny.edu';
+  await h.call('/api/auth/register', { email });
+  const token = await h.token(email);
+  await h.db.prepare('UPDATE hny_auth_verification SET createdAt=?, expiresAt=?').bind(oldDate, oldDate).run();
+  // Another account mutation runs cleanup without consuming this invitation.
+  await h.call('/api/auth/request-reset', { email: 'absent@gc.cuny.edu' });
+  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_verification').first()).n, 1);
+  const completed = await h.call('/api/auth/verify', { token, password });
+  assert.equal(completed.status, 200, JSON.stringify(completed.body));
+  assert.ok(completed.cookie);
   assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_verification').first()).n, 0);
-  // An issue time the cleanup cannot read still fails closed at verification.
-  await h.call('/api/auth/register', { email: unreadable }); const odd = await h.token(unreadable);
-  await h.db.prepare('UPDATE hny_auth_verification SET createdAt=?').bind('not-a-date').run();
-  assert.equal((await h.call('/api/auth/verify', { token: odd, password })).status, 400);
-  assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_user').first()).n, 0);
-  // A fresh link for the same address works.
-  await h.call('/api/auth/register', { email }); const fresh = await h.token(email);
-  assert.notEqual(fresh, stale);
-  assert.equal((await h.call('/api/auth/verify', { token: fresh, password })).status, 200);
+  assert.equal((await h.call('/api/auth/verify', { token, password: replacement })).status, 400);
+  assert.equal((await h.call('/api/auth/sign-in', { email, password })).status, 200);
 });
