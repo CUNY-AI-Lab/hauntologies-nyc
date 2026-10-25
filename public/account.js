@@ -7,7 +7,7 @@
   const returnKey='hauntologies-return-edit';
   if(new URLSearchParams(location.search).get('edit')==='1'){try{sessionStorage.setItem(returnKey,'true');}catch{}const url=new URL(location.href);url.searchParams.delete('edit');history.replaceState(null,'',url.pathname+url.search+url.hash);}
   function returnToEdit(){let requested=false;try{requested=sessionStorage.getItem(returnKey)==='true';if(requested)sessionStorage.removeItem(returnKey);}catch{}if(requested){if(dialog.open)dialog.close();byId('toolsButton').click();}}
-  let session = null, mode = 'sign-in', challenge = null, busy = false, opener = null, generation = 0;
+  let session = null, mode = 'sign-in', challenge = null, busy = false, opener = null, generation = 0, checks = 0;
   const node = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
   const labels = { draft: 'Draft', submitted: 'Pending review', changes_requested: 'Changes requested', approved: 'Approved', merged: 'Published', withheld: 'Withheld' };
   const messages = { registration_restricted: 'Please use your CUNY email address. Guests can enter an access code below.', rate_limited: 'Please wait before trying again.', invalid_credentials: 'Check your email and password, then try again.', invalid_email: 'Enter your email address.', password_length: 'Use a password with 12 to 128 characters.', invalid_token: 'This link has expired or has already been used. Request a new link.', password_already_set: 'Your password is already set. Sign in with it or request a reset.', mail_unavailable: 'Email delivery is temporarily unavailable. Please try again later.', account_unavailable: 'Account service is temporarily unavailable. Please try again.', sign_in_required: 'Sign in to continue.' };
@@ -97,15 +97,20 @@
       listMessage(data.total + (data.total === 1 ? ' edit' : ' edits'));
     } catch (error) { if (generation === version) listMessage(error.message); }
   }
+  // `generation` guards the dialog's contents; `checks` guards the button. Closing the dialog or
+  // leaving the page discards a dialog render, but the newest session answer still reaches the
+  // button, so it never stays at "…".
   async function reconcile() {
-    const version = ++generation;
+    const version = ++generation, check = ++checks;
     try {
       const value = await api('/api/auth/session');
-      if (version !== generation) return; identity(value);
+      if (check === checks) identity(value);
+      if (version !== generation) return;
       if (dialog.open) { if (value.password_required) renderForm('set-password'); else await showAccount(version); }
       if(!value.password_required)returnToEdit();
     } catch (error) {
-      if (version !== generation) return; identity(null);
+      if (check === checks) identity(null);
+      if (version !== generation) return;
       if (error.status === 401) window.dispatchEvent(new CustomEvent('contributions-session-ended'));
       if (dialog.open && !challenge) renderForm('sign-in', error.status === 401 ? '' : error.message);
     }
@@ -124,7 +129,7 @@
   dialog.addEventListener('close', () => { generation++; challenge = null; formHost.replaceChildren(); actions.replaceChildren(); list.replaceChildren(); (opener?.isConnected ? opener : trigger).focus({ preventScroll: true }); });
   window.addEventListener('hashchange', readChallenge);
   window.addEventListener('focus', () => { if (!busy && !dialog.open) reconcile(); });
-  window.addEventListener('pageshow', () => { if (!busy && !dialog.open) reconcile(); });
+  window.addEventListener('pageshow', event => { if ((!busy && !dialog.open) || event.persisted) reconcile(); });
   window.addEventListener('pagehide', () => { generation++; challenge = null; formHost.replaceChildren(); list.replaceChildren(); });
   window.addEventListener('registration-confirmed', () => identity(session));
   reconcile().then(readChallenge);

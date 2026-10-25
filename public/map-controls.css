@@ -50,3 +50,6 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 @media (pointer:coarse){
   input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea{font-size:16px!important}
 }
+
+/* Taps on map controls act at once: Safari would otherwise read two quick taps on +/- as a page zoom. */
+.leaflet-control a,.leaflet-control button,.map-tool-tray a,.map-tool-tray button{touch-action:manipulation}

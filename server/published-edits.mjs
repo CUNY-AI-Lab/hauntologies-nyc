@@ -24,6 +24,26 @@ export async function publishedEdits(db) {
   });
 }
 
+// Public credit for the Contributors list: one count per live release whose contributor opted in.
+// Only the consented label leaves the server; uncredited releases are only counted in the total.
+export async function contributorCredits(db) {
+  const {results = []} = await db.prepare(`SELECT r.raw_json FROM workflow_jobs j
+    JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
+    JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
+    JOIN workflow_submissions s ON s.id=j.submission_id
+    WHERE j.status='verified' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)`).all();
+  const counts=new Map();let total=0;
+  for (const row of results) {
+    let credit=null;try{credit=JSON.parse(row.raw_json).public_credit;}catch{continue;}
+    total++;
+    const label=credit?.consent===true&&typeof credit.label==='string'?credit.label.trim().replace(/\s+/g,' '):'';
+    if(!label||label.length>120||label.includes('@'))continue;
+    const key=label.toLocaleLowerCase('en-US'),entry=counts.get(key)||{name:label,count:0};entry.count++;counts.set(key,entry);
+  }
+  const contributors=[...counts.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'en-US'));
+  return {contributors,total};
+}
+
 const placeFields=['entry_id','group_id','category','title','claim_text','place_original','place_normalized','place_type','place_types','related_entry_id','time_original','time_start_year','time_end_year','time_precision','time_basis','geo_status','geo_method','geo_basis','geo_source_ref','latitude','longitude','borough','uncertainty_m','uncertainty_basis','gap_question','gap_scope','gap_limitations','image_url','image_caption'];
 const sourceFields=['source_ref','entry_id','role','title','citation','url','repository','locator','evidence_note','rights_statement','rights_status'];
 const pick=(value,fields)=>Object.fromEntries(fields.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));

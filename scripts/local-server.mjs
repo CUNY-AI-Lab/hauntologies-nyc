@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { createWorkflowStore } from '../server/workflow-store.mjs';
 import { createWorkflowService } from '../server/workflow-service.mjs';
 import { parseStaticRecords } from '../server/static-targets.mjs';
-import { publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
+import { contributorCredits, publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
 import { pendingPlaces } from '../server/pending-places.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,6 +109,7 @@ async function route(req) {
   if (p === '/api/published-edits') return json({ items: await publishedEdits(db) });
   if (p === '/api/published-records') return json(await publishedRecordPage(db, url.searchParams.get('after') || ''));
   if (p === '/api/pending-places') return json(await pendingPlaces(db));
+  if (p === '/api/contributor-credits') return json(await contributorCredits(db));
   if (/^\/api\/contributions\/[a-z][a-z0-9-]*$/.test(p)) return contributions(req, url);
   if (p.startsWith('/api/')) return json({ error: 'sign_in_required' }, 401);
   return file404(p);

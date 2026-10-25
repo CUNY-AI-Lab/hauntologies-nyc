@@ -3,7 +3,7 @@ import { registrationRestricted } from '../server/registration-eligibility.mjs';
 // Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
 import { handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
-import { publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
+import { contributorCredits, publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
 import { pendingPlaces } from '../server/pending-places.mjs';
 const privateJson = (value, status = 200) => Response.json(value, { status, headers: {
   'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer'
@@ -26,6 +26,13 @@ export function createDemoWorker(handler, registration, authenticate = authentic
         try {
           const query=new URL(request.url).searchParams;if([...query.keys()].some(key=>key!=='after')||query.getAll('after').length>1||rawPath==='/api/published-edits'&&query.size||query.has('after')&&!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(query.get('after')))return privateJson({error:'invalid_page'},400);
           const data = rawPath==='/api/published-edits'?{items:await publishedEdits(env.DB)}:await publishedRecordPage(env.DB,query.get('after')||'');
+          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
+        } catch { return privateJson({error:'feed_unavailable'},503); }
+      }
+      if (rawPath === '/api/contributor-credits' && ['GET','HEAD'].includes(request.method)) {
+        if (new URL(request.url).search) return privateJson({error:'invalid_page'},400);
+        try {
+          const data = await contributorCredits(env.DB);
           return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
         } catch { return privateJson({error:'feed_unavailable'},503); }
       }
