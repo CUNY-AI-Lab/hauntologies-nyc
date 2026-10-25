@@ -20,9 +20,8 @@ export function handleRequest(request:Request){
   const e=env as Record<string,any>;
   const geography={boundaries,gazetteer};
   if(new URL(request.url).pathname.startsWith('/api/contributions/')){
-    // Only explicitly configured verified actor IDs may review. Invalid or
-    // absent configuration grants no roles; publication remains disabled.
-    return createWorkflowService({store:e.DB?createWorkflowStore(e.DB):null,taskSeeds,geography,staticRecords,authorization:reviewAuthorization(e.CONTRIBUTIONS_REVIEWER_IDS)}).handle(request);
+    // Explicit role lists control privileged data; open review adds bounded peer review/publication.
+    return createWorkflowService({store:e.DB?createWorkflowStore(e.DB):null,taskSeeds,geography,staticRecords,authorization:reviewAuthorization(e.CONTRIBUTIONS_REVIEWER_IDS,e.CONTRIBUTIONS_PUBLISHER_IDS,e.CONTRIBUTIONS_ADMIN_IDS,e.CONTRIBUTIONS_OPEN_REVIEW)}).handle(request);
   }
   return createIngestionService({store:e.DB?createD1Store(e.DB):null,provider:createCunyProvider({extractionSchema,skillText}),config:{...e,CAIL_ENABLED:'false'},geography}).handle(request);
 }

@@ -4,7 +4,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createWorkflowStore } from '../server/workflow-store.mjs';
 import { createWorkflowService } from '../server/workflow-service.mjs';
-import { buildPreview, hash, LIMITS } from '../server/workflow-core.mjs';
+import { buildPreview, hash, stable, LIMITS } from '../server/workflow-core.mjs';
+import { publishedRecords } from '../server/published-edits.mjs';
 
 // Local, synthetic fixtures only. This suite never contacts a hosted service.
 const boundaries = JSON.parse(readFileSync(new URL('../public/data/nyc-borough-boundaries.geojson', import.meta.url)));
@@ -187,7 +188,8 @@ test('proposed NYC points and areas retain exact geometry without a required sou
     assert.deepEqual(p.proposal.geometry, geometry);
     assert.equal(p.proposal.geometry_status, 'proposed');
     assert.equal(p.proposal.evidence_status, 'unverified');
-    assert.equal(p.application.applicable, false);
+    // A new point in NYC publishes on approval; a proposed area stays review-only.
+    assert.equal(p.application.applicable, geometry.type === 'Point');
     if (geometry.type === 'Polygon') assert.equal(Object.hasOwn(p.proposal, 'centroid'), false);
   }
 });
@@ -246,7 +248,7 @@ test('no reviewer grants or self-approval are introduced for freeform contributi
   assert.equal(count(h, 'workflow_approvals'), 0);
 });
 
-test('even independent approval with all checks cannot apply a freeform proposal', async t => {
+test('an approved new point is publishable; a contribution to an existing place stays review-only', async t => {
   const h = harness({ authorization: { reviewers: ['reviewer'], publishers: ['publisher'] } }); t.after(() => h.db.close());
   const selected = await context(h);
   for (const targets of [[], [selected]]) {
@@ -257,11 +259,11 @@ test('even independent approval with all checks cannot apply a freeform proposal
     assert.equal(approved.body.submission.status, 'approved');
     assert.equal(approved.body.submission.proposal.evidence_status, 'unverified');
     const r = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, { actor: 'publisher' });
-    status(r, 409); assert.equal(r.body.error, 'open_proposal_review_only');
+    if (targets.length) { status(r, 409); assert.equal(r.body.error, 'open_proposal_review_only'); }
+    else { status(r, 201); assert.equal(r.body.job.status, 'verification_pending'); }
   }
-  assert.equal(count(h, 'workflow_jobs'), 0);
-  assert.equal(count(h, 'approved_records'), 0);
-  assert.equal(count(h, 'workflow_targets'), 0);
+  assert.equal(count(h, 'workflow_jobs'), 1);
+  assert.equal(count(h, 'approved_records'), 0, 'nothing public before verify');
 });
 
 test('a revised approved proposal cannot inherit its earlier approval', async t => {
@@ -274,4 +276,86 @@ test('a revised approved proposal cannot inherit its earlier approval', async t 
   const attempt = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 2, approval_hash: approved.body.submission.approval.approval_hash }, { actor: 'publisher' });
   status(attempt, 409); assert.equal(attempt.body.error, 'approval_required');
   assert.equal(count(h, 'workflow_jobs'), 0);
+});
+
+test('an admin place approved before approval could publish reaches the map after revise, Start review and approve', async t => {
+  const admin = 'contributor', h = harness({ authorization: { reviewers: [admin], publishers: [admin], admins: [admin] } }); t.after(() => h.db.close());
+  const created = await submit(h, envelope({ geometry: point() }, { title: 'Thomas Shoe Factory' }));
+  status(await call(h, 'review', review(h, created.submission)), 200);
+  // The approval as an earlier operator recorded it: review-only, so it can never publish.
+  const row = h.db.native.prepare('SELECT id,binding_json FROM workflow_approvals').get(), binding = { ...JSON.parse(row.binding_json), application_applicable: false };
+  h.db.native.prepare('UPDATE workflow_approvals SET binding_json=?,approval_hash=? WHERE id=?').run(JSON.stringify(binding), await hash(stable(binding)), row.id);
+  const stuck = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 1, approval_hash: await hash(stable(binding)) });
+  status(stuck, 409); assert.equal(stuck.body.error, 'approval_predates_application');
+  const revised = await call(h, 'revise', { idempotency_key: key(h, 'revise'), submission_id: created.submission.id, expected_revision: 1, submission_json: created.request.submission_json }); status(revised, 200);
+  assert.equal(revised.body.submission.status, 'draft');
+  const queued = await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: created.submission.id, expected_revision: 2, action: 'ready_for_review', rationale: 'Revision ready for review.' }); status(queued, 200);
+  assert.equal(queued.body.submission.status, 'submitted');
+  const approved = await call(h, 'review', review(h, queued.body.submission)); status(approved, 200);
+  assert.equal(approved.body.submission.application.applicable, true);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 2, approval_hash: approved.body.submission.approval.approval_hash }); status(staged, 201);
+  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }), 200);
+  assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Thomas Shoe Factory']);
+});
+
+test('open review: any map account approves and publishes another person\'s place, never its own', async t => {
+  const { reviewAuthorization } = await import('../server/review-authorization.mjs');
+  const A = 'map_00000000-0000-4000-8000-00000000000a', B = 'map_00000000-0000-4000-8000-00000000000b';
+  const h = harness({ authorization: reviewAuthorization(undefined, undefined, JSON.stringify([A]), 'true') }); t.after(() => h.db.close());
+  const as = actor => ({ actor });
+  const sent = await call(h, 'submit', { idempotency_key: key(h, 'submit'), submission_json: JSON.stringify(envelope({ geometry: point() }, { title: 'Open review place' }), null, 2) }, as(A)); status(sent, 201);
+  const s = sent.body.submission;
+  // Even an admin cannot approve their own work under open review.
+  const caps = (await call(h, 'dashboard', undefined, as(A))).body.capabilities;
+  assert.equal(caps.can_self_approve, false); assert.equal(caps.can_review, true); assert.equal(caps.can_apply, true);
+  const own = await call(h, 'review', review(h, s), as(A)); status(own, 403); assert.equal(own.body.error, 'self_approval_forbidden');
+  // Another account sends it back; the owner's revision goes straight back for review.
+  const raw = JSON.stringify(envelope({ geometry: point() }, { title: 'Open review place' }), null, 2);
+  status(await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 1, action: 'request_information', rationale: 'Add the year.' }, as(B)), 200);
+  const resent = await call(h, 'revise', { idempotency_key: key(h, 'revise'), submission_id: s.id, expected_revision: 1, submission_json: raw }, as(A)); status(resent, 200);
+  assert.equal(resent.body.submission.status, 'submitted');
+  // Others see the version up for review, without the revision history.
+  const seen = await call(h, 'submission?id=' + s.id, undefined, as(B)); status(seen, 200);
+  assert.deepEqual(seen.body.submission.revisions.map(r => r.revision), [2]);
+  const first = await call(h, 'review', review(h, seen.body.submission), as(B)); status(first, 200);
+  // Changing an approved place makes a draft, which stays the owner's until they send it for review.
+  status(await call(h, 'revise', { idempotency_key: key(h, 'revise'), submission_id: s.id, expected_revision: 2, submission_json: raw }, as(A)), 200);
+  status(await call(h, 'submission?id=' + s.id, undefined, as(B)), 404);
+  assert.ok(!(await call(h, 'dashboard', undefined, as(B))).body.submissions.some(x => x.id === s.id));
+  status(await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 3, action: 'ready_for_review', rationale: 'Not mine.' }, as(B)), 404);
+  const queued = await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 3, action: 'ready_for_review', rationale: 'Revision ready for review.' }, as(A)); status(queued, 200);
+  // B approves, and the approval can publish: B applies and verifies.
+  const approved = await call(h, 'review', review(h, queued.body.submission), as(B)); status(approved, 200);
+  assert.equal(approved.body.submission.approval.independent, true); assert.equal(approved.body.submission.application.applicable, true);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: s.id, expected_revision: 3, approval_hash: approved.body.submission.approval.approval_hash }, as(B)); status(staged, 201);
+  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }, as(B)), 200);
+  assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Open review place']);
+  // Accounts that are not map accounts get no review role from open review.
+  const outsider = await call(h, 'review', review(h, queued.body.submission), as('access_' + 'a'.repeat(64))); assert.ok([403, 404, 409].includes(outsider.status));
+});
+
+test('a stale saved preview is displayed fresh before approval and old publication effects are rejected', async t => {
+  const A = 'map_00000000-0000-4000-8000-00000000000a', B = 'map_00000000-0000-4000-8000-00000000000b';
+  const { reviewAuthorization } = await import('../server/review-authorization.mjs');
+  const h = harness({ authorization: reviewAuthorization(undefined, undefined, undefined, 'true') }); t.after(() => h.db.close());
+  const sent = await call(h, 'submit', { idempotency_key: key(h, 'submit'), submission_json: JSON.stringify(envelope({ geometry: point() }, { title: 'Older preview place' }), null, 2) }, { actor: A }); status(sent, 201);
+  const id = sent.body.submission.id, fresh = h.db.native.prepare('SELECT diff_hash,preview_json FROM workflow_revisions WHERE submission_id=?').get(id);
+  // As an older operator saved it: a different diff hash and a review-only application.
+  const old = { ...JSON.parse(fresh.preview_json), diff_hash: 'f'.repeat(64), application: { applicable: false, reason: 'open_proposal_review_only', operations: [] } };
+  h.db.native.prepare('UPDATE workflow_revisions SET diff_hash=?,preview_json=? WHERE submission_id=?').run(old.diff_hash, JSON.stringify(old), id);
+  const shown = (await call(h, 'submission?id=' + id, undefined, { actor: B })).body.submission;
+  assert.equal(shown.diff_hash, fresh.diff_hash);
+  const staleRequest={...review(h,shown),diff_hash:old.diff_hash};
+  status(await call(h,'review',staleRequest,{actor:B}),409);
+  assert.equal(h.db.native.prepare('SELECT COUNT(*) n FROM workflow_approvals WHERE submission_id=?').get(id).n,0);
+  assert.equal(h.db.native.prepare('SELECT preview_json FROM workflow_revisions WHERE submission_id=?').get(id).preview_json,JSON.stringify(old));
+  const approved = await call(h, 'review', review(h, shown), { actor: B }); status(approved, 200);
+  assert.equal(h.db.native.prepare('SELECT diff_hash FROM workflow_revisions WHERE submission_id=?').get(id).diff_hash,old.diff_hash,'historical saved preview stays intact');
+  assert.equal(approved.body.submission.diff_hash, fresh.diff_hash); assert.equal(approved.body.submission.application.applicable, true);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, { actor: B }); status(staged, 201);
+  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }, { actor: B }), 200);
+  assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Older preview place']);
+  // Changed content is still refused.
+  const other = await call(h, 'submit', { idempotency_key: key(h, 'submit'), submission_json: JSON.stringify(envelope({ geometry: point() }, { title: 'Second place' }), null, 2) }, { actor: A });
+  const changed = await call(h, 'review', review(h, { ...other.body.submission, payload_hash: 'e'.repeat(64) }), { actor: B }); status(changed, 409); assert.equal(changed.body.error, 'proposal_changed');
 });

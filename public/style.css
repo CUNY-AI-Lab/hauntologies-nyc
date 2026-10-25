@@ -53,7 +53,7 @@ html,body,.workspace{overflow:clip}
 .outline,.darkbutton,input,select,textarea,.leaflet-bar{border-color:#827563}.header-tools .outline{border-color:#827563}.point-icon{width:44px!important;height:44px!important}.point-icon svg{width:21px;height:21px}.research-cluster{width:44px!important;height:44px!important;line-height:40px}.point-icon:focus-visible,.research-cluster:focus-visible{outline:3px solid #ffd39e!important;outline-offset:3px}
 
 /* Preserve restrained symbols inside the larger keyboard/touch hit area. */
-.point-icon{--pin-bg:#151510;--pin-border:#ead8be;--pin-ink:#f0cf9f;background:transparent!important;border:0!important;padding:5px;box-shadow:none!important;color:var(--pin-ink)}.point-icon::before,.point-icon.approximate::before{content:'';display:block;position:absolute;inset:5px;border:1px solid var(--pin-border);background:var(--pin-bg);transform:none;box-shadow:0 2px 8px #0009}.point-icon svg{position:relative;z-index:1;width:19px;height:19px}.point-icon.demolished{--pin-bg:#14201b;--pin-border:#91ad9d;--pin-ink:#c2ddcc}.point-icon.haunting{--pin-bg:#201827;--pin-border:#b9a3c6;--pin-ink:#e1c7ee}.point-icon.local{--pin-bg:#14212b;--pin-ink:#bdd9ed}.point-icon.pending{--pin-bg:#272113;--pin-ink:#edd29c}.point-icon.submitted{--pin-bg:#132521;--pin-ink:#b4ddd2}.point-icon.approximate::before{border-style:dashed}.point-icon.selected::before,.point-icon.approximate.selected::before{border-color:#ffe0ae;box-shadow:0 0 0 2px #13140e,0 0 0 4px #ffe0ae}.research-cluster{position:absolute;border:0!important;background:transparent!important;box-shadow:none!important;line-height:44px}.research-cluster::before{content:'';position:absolute;inset:4px;border:2px solid #e2ccaa;border-radius:50%;background:#171610;box-shadow:0 0 0 2px #0004}.research-cluster span{position:relative;z-index:1}
+.point-icon{--pin-bg:#151510;--pin-border:#ead8be;--pin-ink:#f0cf9f;background:transparent!important;border:0!important;padding:5px;box-shadow:none!important;color:var(--pin-ink)}.point-icon::before,.point-icon.approximate::before{content:'';display:block;position:absolute;inset:5px;border:1px solid var(--pin-border);background:var(--pin-bg);transform:none;box-shadow:0 2px 8px #0009}.point-icon svg{position:relative;z-index:1;width:19px;height:19px}.point-icon.demolished{--pin-bg:#14201b;--pin-border:#91ad9d;--pin-ink:#c2ddcc}.point-icon.haunting{--pin-bg:#201827;--pin-border:#b9a3c6;--pin-ink:#e1c7ee}.point-icon.local{--pin-bg:#14212b;--pin-ink:#bdd9ed}.point-icon.pending{--pin-bg:#272113;--pin-ink:#edd29c}.point-icon.submitted{--pin-bg:#132521;--pin-ink:#b4ddd2}.point-icon.approximate::before{border-style:dashed}.point-icon.selected::before,.point-icon.approximate.selected::before{border-color:#ffe0ae;box-shadow:0 0 0 2px #13140e,0 0 0 4px #ffe0ae}.research-cluster{position:absolute;border:0!important;background:transparent!important;box-shadow:none!important;line-height:44px}.research-cluster::before{content:'';position:absolute;inset:4px;border:2px solid #e2ccaa;border-radius:50%;background:#171610;box-shadow:0 0 0 2px #0004}.research-cluster span{position:relative;z-index:1;color:inherit;text-decoration:none;-webkit-touch-callout:none}
 .header-tools button{display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap}.header-tools .filter-active-count{margin-left:0;flex-shrink:0}
 .popout input,.popout select,.popout textarea,.popout button,.popout summary,.popout [tabindex]{scroll-margin-block:16px}.popout .panel,.popout .popout-content{scroll-padding-block:16px;scrollbar-gutter:stable}
 
@@ -251,3 +251,48 @@ html,body,.workspace{overflow:clip}
 }
 .proposed-point{border:2px dashed #ffcf94;background:#171510;color:#fff0d9;border-radius:50%;text-align:center;font:22px/26px Arial,Helvetica,sans-serif;box-shadow:0 0 0 3px #171510aa}
 .contribution-picking #map{cursor:crosshair}
+
+/* Disclosures: every collapsible folds the same way (disclosure.js animates the height). */
+:root{--unfold-duration:220ms;--unfold-ease:cubic-bezier(.2,.7,.2,1);--disclosure-mark:#c9a77c}
+summary[data-disclosure]{position:relative;list-style:none;cursor:pointer;padding-inline-end:30px!important}
+summary[data-disclosure]::-webkit-details-marker{display:none}
+summary[data-disclosure]::marker{content:''}
+.disclosure-mark{position:absolute;right:10px;top:50%;width:12px;height:12px;margin-top:-6px;color:var(--disclosure-mark);pointer-events:none;transition:transform var(--unfold-duration) var(--unfold-ease),color 120ms}
+.disclosure-mark::before{content:'';position:absolute;left:3px;top:1px;width:6px;height:6px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+summary[data-disclosure]:hover>.disclosure-mark{color:#f0d3a8}
+details[open]:not([data-closing])>summary>.disclosure-mark{transform:rotate(180deg)}
+details>:not(summary){transition:opacity 140ms ease-out}
+details[data-closing]>:not(summary){opacity:0}
+details[open]:not(:has(>summary[hidden]))>:not(summary){animation:disclosure-in var(--unfold-duration) var(--unfold-ease)}
+@keyframes disclosure-in{from{opacity:0;transform:translateY(-4px)}}
+.task-card>summary[data-disclosure]::after{content:none}
+
+/* Map tools: Filters, Layers and zoom unfold leftward from Tools. */
+.map-tool-group{position:relative;display:flex;flex-direction:column}
+.map-tool-tray{position:absolute;top:0;right:calc(100% + 4px);z-index:2;display:flex;align-items:center;gap:4px;min-height:44px;padding:0 6px;background:#11110f;border:1px solid #5d5447;box-shadow:0 6px 20px #0005;visibility:hidden;clip-path:inset(-24px -24px -24px 100%);transition:clip-path var(--unfold-duration) var(--unfold-ease),visibility 0s linear var(--unfold-duration)}
+.map-tool-tray::after{content:'';position:absolute;left:100%;top:0;width:6px;height:100%}
+.map-tool-group[data-open] .map-tool-tray{visibility:visible;clip-path:inset(-24px);transition:clip-path var(--unfold-duration) var(--unfold-ease),visibility 0s}
+.header-tools .map-tool-tray button{width:auto;min-width:64px;padding:6px 10px}
+.map-tool-tray .zoom-tools{flex:0 0 auto}
+@media(min-width:761px){
+  .popout:not(.filters-popout),.filters-popout{top:124px;max-height:calc(100dvh - 124px - var(--panel-bottom) - 8px)}
+  .research.popout{height:calc(100dvh - 124px - var(--panel-bottom) - 8px)}
+}
+@media(max-width:340px){.map-tool-tray{flex-wrap:wrap;width:max-content;max-width:calc(100vw - 112px);padding-block:2px}}
+@media(prefers-reduced-motion:reduce){
+  .disclosure-mark,.map-tool-tray,.map-tool-group[data-open] .map-tool-tray{transition:none}
+  details[open]>:not(summary){animation:none}
+}
+.header-tools{position:relative;z-index:2}
+.disclosure-hint{margin-left:auto;min-width:0;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:11px;font-weight:400;text-align:right}
+.disclosure-hint[data-required]{color:var(--sun)}
+details[open]:not([data-closing])>summary>.disclosure-hint{visibility:hidden}
+.map-tool-group[data-open] .map-tool-tray[data-settled]{clip-path:none}
+@media(prefers-reduced-motion:reduce){.map-tool-group[data-open] .map-tool-tray{clip-path:none}}
+
+/* Map tools drop down beneath Tools as a column the width of Places and Tools, zoom as one row. */
+.map-tool-tray{top:calc(100% + 2px);right:0;flex-direction:column;align-items:stretch;gap:2px;min-width:100%;min-height:0;padding:0;background:none;border:0;box-shadow:none;clip-path:inset(-24px -24px 100% -24px)}
+.map-tool-tray::after{left:0;top:-4px;width:100%;height:4px}
+.header-tools .map-tool-tray button{width:100%;min-width:0;padding:6px 10px}
+.map-tool-tray .zoom-tools{align-self:center}
+@media(max-width:340px){.map-tool-tray{flex-wrap:nowrap;width:auto;max-width:none;padding-block:0}}

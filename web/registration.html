@@ -8,7 +8,7 @@
   <title>Register | Hauntologies of New York</title>
   <meta name="description" content="Halloween Hackathon registration. October 30, 2026, 3–6:30 pm Eastern, DH Lounge 5307.">
   <link rel="stylesheet" href="/registration-page.css">
-  <script defer src="/registration.js"></script>
+  <script defer src="/registration-policy.js"></script><script defer src="/registration.js"></script>
 </head>
 <body>
   <header class="registration-header"><a href="/" aria-label="Hauntologies of New York map">Hauntologies of New York</a></header>
@@ -29,6 +29,12 @@
     <p id="registrationStatus" role="status" hidden></p>
     <p id="registrationError" role="alert" tabindex="-1" hidden></p>
     <div id="registrationReceipt" role="status" tabindex="-1" hidden></div>
+    <section class="map-account-setup" aria-labelledby="mapAccountSetupTitle">
+      <h2 id="mapAccountSetupTitle">Edit the map</h2>
+      <p>Verify your email and choose a password to contribute.</p>
+      <a href="/?edit=1#account-register">Create a map account</a>
+      <a href="/?edit=1#sign-in">Already have an account? Sign in</a>
+    </section>
     <noscript><p>Enable JavaScript to register</p></noscript>
   </main>
 </body>

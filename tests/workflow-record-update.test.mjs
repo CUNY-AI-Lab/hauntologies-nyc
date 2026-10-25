@@ -46,7 +46,8 @@ test('legacy hosted metadata projects original location, source and date wording
 test('full metadata and specific source corrections preserve original records and exact submission text',async t=>{
  const h=harness(t),resolved=await target(h),original=JSON.stringify(resolved),updates={title:'  Revised café 😀  ',inclusion_reason:'Reported story',description:'  Proposed wording\nwith whitespace.  ',category:'reported_haunting',place_type:'Museum',address:'New proposed address',geo_basis:'A proposed map locator',uncertainty_note:'Still uncertain',date_wording:'Circa 1890',date_start:'1889',date_end:'1891',date_precision:'circa',date_basis:'Explicit range',built:'c. 1890',demolished:null,source_url:'https://example.org/new',source_title:'Proposed source title',source_citation:'Proposed citation',source_date:'1888',source_locator:'Page 4',source_type:'Archive',rights_notes:'Citation only',image_url:'https://example.org/proposed.jpg',image_source_url:'https://example.org/image-record',image_credit:'Artist',image_license:'CC BY 4.0',image_license_url:'https://creativecommons.org/licenses/by/4.0/',image_caption:'Caption',image_alt:'Image description','sources.1.url':'https://example.org/two-corrected','sources.1.citation':'Exact revised citation','sources.1.locator':'Box 2','aliases.1':'Earlier alternate name'};
  const value=envelope(resolved,updates),created=await submit(h,value),p=created.submission;
- assert.equal(p.type,'record_update');assert.equal(p.status,'submitted');assert.equal(p.raw_json,created.request.submission_json);assert.equal(p.application.applicable,false);assert.equal(p.application.reason,'record_update_review_only');assert.deepEqual(p.application.operations,[]);
+ assert.equal(p.type,'record_update');assert.equal(p.status,'submitted');assert.equal(p.raw_json,created.request.submission_json);// A valid edit to a built-in place applies as the whole edited record; the original fixture is untouched.
+ assert.equal(p.application.applicable,true);assert.equal(p.application.operations.length,1);assert.equal(p.application.operations[0].operation,'update_record');assert.deepEqual(Model.snapshot(p.application.operations[0].record),p.proposal.editable_after);
  assert.deepEqual(p.proposal.field_diff,value.payload.changes);assert.equal(p.proposal.change_message,value.payload.change_message);assert.deepEqual(p.proposal.target.record,synthetic);
  assert.equal(p.diff.length,value.payload.changes.length);for(const diff of p.diff){const change=value.payload.changes.find(x=>x.field===diff.field);assert.deepEqual(diff.before,change.before);assert.deepEqual(diff.after,change.after)}
  assert.equal(JSON.stringify(resolved),original);assert.deepEqual((await target(h)).record,synthetic);assert.equal(count(h,'approved_records'),0);assert.equal(count(h,'workflow_jobs'),0);
@@ -105,7 +106,8 @@ test('authentication, same-origin protections, independent review and no automat
  const created=await submit(h,value),s=created.submission;
  status(await call(h,'review',reviewBody(s)),403);status(await call(h,'review',reviewBody(s),{actor:'stranger'}),403);
  const reviewed=await call(h,'review',reviewBody(s),{actor:'reviewer'});status(reviewed,200);assert.equal(reviewed.body.submission.status,'approved');
- const apply=await call(h,'apply',{idempotency_key:key(),submission_id:s.id,expected_revision:s.revision,approval_hash:reviewed.body.submission.approval.approval_hash},{actor:'publisher'});status(apply,409);assert.equal(apply.body.error,'record_update_review_only');assert.equal(count(h,'workflow_jobs'),0);assert.equal(count(h,'approved_records'),0);
+ const apply=await call(h,'apply',{idempotency_key:key(),submission_id:s.id,expected_revision:s.revision,approval_hash:reviewed.body.submission.approval.approval_hash},{actor:'publisher'});// Applying stages a job; nothing is public until a publisher verifies it.
+ status(apply,201);assert.equal(apply.body.job.status,'verification_pending');assert.equal(count(h,'workflow_jobs'),1);assert.equal(count(h,'approved_records'),0);
  const noGrants=harness(t,{authorization:{reviewers:[],publishers:[]}}),other=await submit(noGrants,envelope(await target(noGrants)));status(await call(noGrants,'review',reviewBody(other.submission),{actor:'reviewer'}),403);
 });
 
@@ -180,7 +182,7 @@ test('citation-only source proposals save exact originals and additions with rev
  assert.deepEqual(s.proposal.editable_before,s.proposal.editable_after);assert.deepEqual(s.proposal.field_diff,[]);
  assert.deepEqual(s.diff,additions.map((source,index)=>({record_id:synthetic.id,operation:'propose_source_addition',field:'source_additions.'+index,before:null,after:source})));
  assert.equal(Object.hasOwn(s.proposal.source_additions[1],'url'),false);assert.equal(s.proposal.source_additions[0].url,null);assert.equal(s.proposal.source_additions[0].note,'');
- assert.deepEqual(s.application,{applicable:false,reason:'record_update_review_only',operations:[]});assert.deepEqual(s.proposal.target.record,synthetic);assert.equal(JSON.stringify(resolved),original);assert.deepEqual((await target(h)).record,synthetic);
+ assert.equal(s.application.applicable,true);assert.equal(s.application.operations[0].record.sources.length,synthetic.sources.length+additions.length);assert.deepEqual(s.proposal.target.record,synthetic);assert.equal(JSON.stringify(resolved),original);assert.deepEqual((await target(h)).record,synthetic);
  const replay=await call(h,'submit',created.request);status(replay,200);assert.equal(replay.body.receipt.id,created.receipt.id);assert.equal(count(h,'workflow_revisions'),1);
  status(await call(h,'submit',{...created.request,submission_json:created.request.submission_json+'\n'}),409);
  assert.equal(count(h,'approved_records'),0);assert.equal(count(h,'workflow_jobs'),0);
@@ -205,11 +207,11 @@ test('ten new references and a retained-source correction coexist without replac
  const persisted=await h.store.getRecord(hosted.id);assert.equal(persisted.raw_json,hosted.raw_json);assert.equal(persisted.derived_json,hosted.derived_json);assert.equal(count(h,'workflow_jobs'),0);
 });
 
-test('source addition approval is independent, revision-bound and never applicable; revised retries preserve history',async t=>{
+test('source addition approval is independent and revision-bound; revised retries preserve history',async t=>{
  const h=harness(t,{authorization:{reviewers:['author','reviewer'],publishers:['publisher']}}),resolved=await target(h),created=await submit(h,withSources(resolved,[{citation:'First exact citation',url:null}])),s=created.submission;
  status(await call(h,'review',reviewBody(s)),403);
  const reviewed=await call(h,'review',reviewBody(s),{actor:'reviewer'});status(reviewed,200);
- const apply=await call(h,'apply',{idempotency_key:key(),submission_id:s.id,expected_revision:s.revision,approval_hash:reviewed.body.submission.approval.approval_hash},{actor:'publisher'});status(apply,409);assert.equal(apply.body.error,'record_update_review_only');
+ assert.equal(reviewed.body.submission.application.applicable,true);
  const revisedValue=withSources(resolved,[{citation:'Second exact citation',url:null}]),request={idempotency_key:key(),submission_id:s.id,expected_revision:1,submission_json:JSON.stringify(revisedValue,null,2)},revised=await call(h,'revise',request);status(revised,200);
  assert.equal(revised.body.submission.revision,2);assert.equal(revised.body.submission.status,'draft');assert.equal(revised.body.submission.approval,null);assert.notEqual(revised.body.submission.diff_hash,s.diff_hash);assert.notEqual(revised.body.submission.payload_hash,s.payload_hash);
  assert.equal((await h.store.getRevision(s.id,1)).raw_json,created.request.submission_json);assert.equal((await h.store.getRevision(s.id,2)).raw_json,request.submission_json);

@@ -3,25 +3,50 @@ const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g
 const safeUrl=window.DraftModel.safeUrl;
 const link=(url,label)=>safeUrl(url)?`<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${esc(label)}</a>`:esc(label);
 const displayLabel=value=>String(value??'').replace(/\s*·\s*/g,', ');
-const locationLabel=record=>record.geoStatus==='approximate'?'Approximate':record.geoLabel;
+// Where a place is, by its nearest cross streets and neighbourhood (data/place-vicinity.json,
+// built by scripts/build-place-vicinity.mjs). A record moved since then falls back to its borough.
+let vicinity={};
+function vicinityOf(r,n=AtlasModel.normalize(r)){const v=vicinity[r.id],c=n.geometry?.coordinates;return v&&c&&v.at===c[1].toFixed(6)+','+c[0].toFixed(6)?v:null;}
+function whereLabel(r,n=AtlasModel.normalize(r)){if(!n.geometry)return 'Unlocated';const v=vicinityOf(r,n);return v?[v.near,v.area].filter(Boolean).join(' · '):String(r.borough||'New York City');}
+// Tooltips are for a hovering mouse. On touch a tap would leave one standing behind the popup or card.
+const hoverTips=matchMedia('(hover: hover)').matches;
+function bindHoverTip(marker,content,options){if(hoverTips)marker.bindTooltip(content,options);marker.on('popupopen',()=>marker.closeTooltip());return marker;}
+// Popups open between the title card (and any panel open below it) and the buttons along the bottom,
+// scrolling inside when the room between them is too short for the whole popup.
+if(window.L?.Popup){const adjustPan=L.Popup.prototype._adjustPan,edge=(selector,pick,start)=>[...document.querySelectorAll(selector)].map(el=>el.getBoundingClientRect()).filter(r=>r.height).reduce((v,r)=>pick(v,r),start);L.Popup.prototype._adjustPan=function(...args){const box=this._map?.getContainer().getBoundingClientRect();if(!box)return adjustPan.apply(this,args);const top=edge('.brand,.brand-drop[open]>.brand-panel',(v,r)=>Math.max(v,r.bottom),box.top),bottom=edge('.contribution-navigation,.contributors-footer,#recenterMap',(v,r)=>Math.min(v,r.top),box.bottom);this._basePad??=L.point(this.options.autoPanPaddingTopLeft||this.options.autoPanPadding);this._baseBottomPad??=L.point(this.options.autoPanPaddingBottomRight||this.options.autoPanPadding);this._baseMaxHeight??=this.options.maxHeight||Infinity;const padTop=Math.max(this._basePad.y,Math.round(top-box.top)+8),padBottom=Math.max(this._baseBottomPad.y,Math.round(box.bottom-bottom)+8);this.options.autoPanPaddingTopLeft=[this._basePad.x,padTop];this.options.autoPanPaddingBottomRight=[this._baseBottomPad.x,padBottom];const room=Math.floor(box.height-padTop-padBottom-48),maxHeight=Math.min(this._baseMaxHeight,Math.max(140,room));if(maxHeight!==this.options.maxHeight&&(Number.isFinite(maxHeight)||this.options.maxHeight)){this.options.maxHeight=Number.isFinite(maxHeight)?maxHeight:undefined;this._updateLayout();this._updatePosition();}
+// Zoomed out on a phone, the map already shows all of NYC, so maxBounds snaps any autopan straight back
+// and the popup stays under the title card. Hold the bounds while a popup is open and restore them after.
+const map=this._map;if(map.options.maxBounds){map._heldMaxBounds=map.options.maxBounds;map.setMaxBounds(null)}if(!map._restoresHeldBounds){map._restoresHeldBounds=true;map.on('popupclose',()=>setTimeout(()=>{if(map._heldMaxBounds&&!map._popup?.isOpen()){const held=map._heldMaxBounds;map._heldMaxBounds=null;map.setMaxBounds(held)}},0))}
+return adjustPan.apply(this,args)}
+// Opening Event details or Under review while a popup is up moves the card edge, so pan the popup again.
+document.addEventListener('toggle',e=>{if(e.target instanceof Element&&e.target.matches('.brand-drop')&&map?._popup?.isOpen())map._popup._adjustPan()},true)}
+fetch('data/place-vicinity.json',{cache:'force-cache'}).then(r=>r.ok?r.json():{}).then(data=>{vicinity=data&&typeof data==='object'?data:{};if(map)renderRecords();}).catch(()=>{});
 const NYC_BOUNDS=[[40.47737324425922,-74.25874745984156],[40.91766180885905,-73.70000906387347]], STORAGE='hauntologies-nyc-drafts-v1';
 const LAYERS=window.HAUNT_LAYERS||[], layerById=new Map(LAYERS.map(layer=>[layer.id,layer]));
 const layerOpacities=new Map();
 const pilot={...window.HAUNT_PILOT};
-let drafts=[],selected=pilot.id,picking=false,map,imagery,pointLayer,baseErrors=0,loadToken=0;
+let drafts=[],selected=pilot.id,picking=false,selectingContributionPlace=false,map,imagery,pointLayer,baseErrors=0,loadToken=0;
 try{drafts=JSON.parse(localStorage.getItem(STORAGE)||'[]').filter(r=>(validCoordinates(r.latitude,r.longitude)||((r.latitude===null||r.latitude==='')&&(r.longitude===null||r.longitude==='')))&&(safeUrl(r.source_url)||r.original_submission||r.sources?.length)).slice(0,500)}catch{}
 const sourceInventory=window.NYC_INVENTORY||{records:[],audits:[]};
 pilot.category='pilot';pilot.borough='Manhattan';
-let hostedRecords=[];
-const allRecords=()=>[pilot,...sourceInventory.records,...hostedRecords,...drafts];
+let hostedRecords=[],publishedPlaces=[];
+const allRecords=()=>[...new Map([...drafts,pilot,...sourceInventory.records,...publishedPlaces].map(record=>[record.id,record])).values()];
+let publishedRequest=0,publishedSignature='';
+async function refreshPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const response=await fetch('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''),{cache:'no-store'});if(!response.ok)return false;const page=await response.json();if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+window.HauntologiesPublic=Object.freeze({refresh:refreshPublishedPlaces});
+window.addEventListener('focus',refreshPublishedPlaces);
 function setHostedRecords(records){hostedRecords=records;populateFacets();renderRecords()}
 const hasPoint=r=>Boolean(AtlasModel.normalize(r).geometry);
 const markers=new Map();
 let uncertaintyLayer;
-let proposedPointMarker=null,proposedPanFrame=0,contributionPicking=false;
+let proposedPointMarker=null,proposedPanFrame=0,contributionPicking=false,statusBeforePicking=null;
 function clearProposedPoint(){cancelAnimationFrame(proposedPanFrame);if(proposedPointMarker&&map)map.removeLayer(proposedPointMarker);proposedPointMarker=null;}
 function stopContributionPicking(){
  contributionPicking=false;document.body.classList.remove('contribution-picking');
+ $('chooseContributionPoint')?.setAttribute('aria-pressed','false');
+ // A cancelled pick puts back whatever the location line said before, such as an earlier pin.
+ const status=$('newLocationStatus');if(status?.dataset.state==='picking'){status.textContent=statusBeforePicking?.text||'';if(statusBeforePicking?.state)status.dataset.state=statusBeforePicking.state;else delete status.dataset.state;}
+ statusBeforePicking=null;
  if($('mapStatus').textContent==='Choose a location')updateLayerStatus();
 }
 function showProposedPoint(point){
@@ -45,19 +70,117 @@ function emptyMapTarget(target){
 }
 function requestContributionPoint(latlng,replace=false){
  const accepted=window.ContributionPoint?.request({latitude:latlng.lat,longitude:latlng.lng},{replace});
- if(accepted){stopContributionPicking();toolOpener='map';}
+ if(accepted){stopContributionPicking();toolOpener='map';$('chooseContributionPoint').focus({preventScroll:true});$('newLocationStatus').scrollIntoView({block:'nearest'});}
  else if(window.ContributionPoint)$('mapStatus').textContent='Location unavailable for this contribution';
  return accepted;
 }
 window.addEventListener('contributions-point-changed',event=>showProposedPoint(event.detail?.point));
+// A contributor sees their own unpublished places, marked by status; nobody else does.
+let ownPlacesLayer=null,ownPlaces=[];
+function renderOwnPlaces(){
+ if(!map)return;ownPlacesLayer??=L.layerGroup().addTo(map);ownPlacesLayer.clearLayers();
+ for(const place of ownPlaces){
+  const label=place.status==='changes_requested'?'Sent back to you':place.status==='approved'?'Approved, not yet on the map':place.status==='draft'?'Draft':'Waiting for review';
+  const marker=L.marker([place.latitude,place.longitude],{pane:'researchPoints',zIndexOffset:700,title:place.title+', '+label,icon:L.divIcon({className:'own-place',html:'<span aria-hidden="true"></span>',iconSize:[26,26],iconAnchor:[13,13]})});
+  const tip=document.createElement('span');tip.append(document.createTextNode(place.title),document.createElement('br'),document.createTextNode(label));bindHoverTip(marker,tip,{direction:'top',offset:[0,-12]});
+  marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
+  marker.on('click',()=>window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:place.id}})));
+  ownPlacesLayer.addLayer(marker);
+ }
+}
+window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));renderOwnPlaces();renderPendingPlaces();});
+// Everyone sees places sent for review as their own layer, before a reviewer decides.
+// A contribution to a mapped place sits as a badge beside that place's marker.
+let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;const pendingMarkers=new Map();
+// An approved note on a mapped place stays a note; only a new point is published on approval.
+const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, awaiting publication'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
+// Where a pending place is: the contributor's own words, the place it adds to, or its cross streets.
+function pendingWhere(place,record){
+ if(record)return 'Adds to '+(record.title||'a mapped place')+' · '+whereLabel(record);
+ return place.location_text||'';
+}
+function pendingPopup(place,record){
+ const root=document.createElement('div');root.className='pending-place-popup';
+ const status=document.createElement('p');status.className='pending-place-status';status.textContent=pendingLabel(place);
+ const title=document.createElement('strong');title.textContent=place.title;root.append(status,title);
+ const where=document.createElement('p');where.className='pending-place-where';where.textContent=pendingWhere(place,record);root.append(where);
+ if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)where.textContent=v.label;}).catch(()=>{});
+ if(place.description){const p=document.createElement('p');p.textContent=place.description;root.append(p);}
+ const note=document.createElement('p');note.className='small';note.textContent='Shared by a contributor. Not yet checked by a reviewer.';root.append(note);return root;
+}
+function pendingPoint(place,records){const record=place.record_id?records.get(place.record_id):null,lat=record?Number(record.latitude):place.latitude,lon=record?Number(record.longitude):place.longitude;return Number.isFinite(lat)&&Number.isFinite(lon)?{record,lat,lon}:null;}
+function renderPendingPlaces(){
+ if(!map)return;pendingPlacesLayer??=L.layerGroup().addTo(map);pendingPlacesLayer.clearLayers();pendingMarkers.clear();
+ const own=new Set(ownPlaces.map(p=>p.id)),records=new Map(allRecords().map(r=>[r.id,r]));
+ for(const place of pendingPlaces){
+  if(own.has(place.id))continue;
+  const at=pendingPoint(place,records);if(!at)continue;const {record,lat,lon}=at;
+  const label=pendingLabel(place);
+  const marker=L.marker([lat,lon],{pane:'researchPoints',zIndexOffset:650,keyboard:true,title:place.title+', '+label,icon:L.divIcon({className:'pending-place'+(record?' attached':''),html:'<span aria-hidden="true">?</span>',iconSize:record?[18,18]:[24,24],iconAnchor:record?[-4,22]:[12,12]})});
+  marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
+  // Contributor text is untrusted: Leaflet renders a string tooltip as HTML, so pass a text node.
+  const tip=document.createElement('span');tip.textContent=place.title+' · '+label;bindHoverTip(marker,tip,{direction:'top',offset:[0,-10]});
+  marker.bindPopup(()=>pendingPopup(place,record),{maxWidth:280});
+  pendingPlacesLayer.addLayer(marker);pendingMarkers.set(place.id,marker);
+ }
+ renderPendingList(records,own);
+}
+// The title card lists everything under review; choosing one brings it up on the map.
+function bringUpPending(place){
+ const feed=$('pendingPlacesFeed');window.HauntologiesDisclosure?window.HauntologiesDisclosure.set(feed,false):(feed.open=false);
+ const marker=pendingMarkers.get(place.id);
+ if(marker){map.setView(marker.getLatLng(),Math.max(map.getZoom(),17));marker.openPopup();return;}
+ const at=pendingPoint(place,new Map(allRecords().map(r=>[r.id,r])));if(at)map.setView([at.lat,at.lon],Math.max(map.getZoom(),17));
+ // The contributor's own place is drawn by their layer; open it in their contributions.
+ if(ownPlaces.some(p=>p.id===place.id))window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:place.id}}));
+}
+function renderPendingList(records,own){
+ const feed=$('pendingPlacesFeed');if(!feed)return;
+ const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
+ feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
+ $('pendingPlacesList').replaceChildren(...shown.map(place=>{
+  const row=document.createElement('li'),button=document.createElement('button'),record=place.record_id?records.get(place.record_id):null;button.type='button';
+  const title=document.createElement('strong');title.textContent=place.title;const meta=document.createElement('span');
+  meta.textContent=[own.has(place.id)?'Yours':'',pendingLabel(place),pendingWhere(place,record)].filter(Boolean).join(' · ');
+  if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)meta.textContent+=' · '+v.label;}).catch(()=>{});
+  button.append(title,meta);button.addEventListener('click',()=>bringUpPending(place));row.append(button);return row;
+ }));
+}
+let pendingSignature='';
+async function refreshPendingPlaces(){
+ const request=++pendingRequest;
+ try{const response=await fetch('/api/pending-places',{cache:'no-store'});if(!response.ok)return;const data=await response.json();if(request!==pendingRequest||!Array.isArray(data.places))return;
+  const places=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string'),signature=JSON.stringify(places);
+  // Redrawing closes an open popup, so an unchanged list is left alone.
+  if(signature===pendingSignature)return;pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();}catch{}
+}
+window.addEventListener('contributions-records-changed',renderPendingPlaces);
+window.addEventListener('contributions-own-places',refreshPendingPlaces);
+window.addEventListener('focus',refreshPendingPlaces);
+// Places under review and newly published ones keep up on their own while the map is on screen,
+// and catch up as soon as it comes back (iOS rarely sends focus when a tab returns).
+setInterval(()=>{if(document.visibilityState==='visible'){refreshPendingPlaces();refreshPublishedPlaces();}},30000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){refreshPendingPlaces();refreshPublishedPlaces();}});
+// A fresh pin lands with one pulse; redrawing an existing pin does not repeat it.
+window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{
- if(!map)return;closeTools();contributionPicking=true;document.body.classList.add('contribution-picking');$('mapStatus').textContent='Choose a location';$('map').focus();
+ if(!map)return;
+ // Contribute stays on screen while a point is chosen. It stops being modal so the map takes the click;
+ // returning to the Contribute tab after a pin or cancel restores modality.
+ for(const id of ['toolsMenu','layersPanel','filtersPanel'])$(id).hidden=true;
+ for(const id of ['toolsButton','filtersButton','layersButton'])$(id).setAttribute('aria-expanded','false');
+ setSidecarModal(false);contributionPicking=true;document.body.classList.add('contribution-picking');
+ $('chooseContributionPoint').setAttribute('aria-pressed','true');
+ const status=$('newLocationStatus');if(status.dataset.state!=='picking')statusBeforePicking={text:status.textContent,state:status.dataset.state};
+ status.textContent='Select a spot on the map. Press Esc to cancel.';status.dataset.state='picking';
+ $('mapStatus').textContent='Choose a location';$('map').focus();
 });
+window.addEventListener('contributions-point-pick-cancelled',()=>{stopContributionPicking();$('draftTab').click();$('chooseContributionPoint').focus();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contributionPicking){event.preventDefault();stopContributionPicking();$('draftTab').click();$('chooseContributionPoint')?.focus();}});
 const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'Demolition list':['haunting','reported_haunting'].includes(r.category)?'Ghost story':r.category==='archival_gap'?'Archival gap':r.category==='vanished_place'?'Vanished place':r.category==='pending'?'Pending review':r.category==='submitted'?'Submitted record':'Place';
 function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&String(lat).trim()!==''&&String(lon).trim()!==''&&Number(lat)>=40.45&&Number(lat)<=40.98&&Number(lon)>=-74.30&&Number(lon)<=-73.65}
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
-let toolOpener='toolsButton';
+let toolOpener='toolsButton',placeLayout=null;
 const toolPanels=['toolsMenu','layersPanel','filtersPanel','researchSidecar'];
 let sidecarModalState=null;
 function setSidecarModal(active){
@@ -86,7 +209,7 @@ function closeTools(focus=false){
  setSidecarModal(false);
  for(const id of toolPanels)$(id).hidden=true;
  for(const id of ['toolsButton','filtersButton','mapToolsButton','layersButton','openResearch'])$(id).setAttribute('aria-expanded','false');
- document.body.classList.remove('sidecar-open');if(focus)$(toolOpener).focus({preventScroll:true});
+ document.body.classList.remove('sidecar-open','places-open');if(focus)$(toolOpener).focus({preventScroll:true});
 }
 function openSidecar(open=true){
  closeTools();toolOpener='toolsButton';$('researchSidecar').hidden=!open;$('openResearch').setAttribute('aria-expanded',String(open));
@@ -95,12 +218,14 @@ function openSidecar(open=true){
 function switchPanel(id){
  openSidecar();document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
- $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Submit';
+ $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Contribute';
+ document.body.classList.toggle('places-open',id==='casePanel');
+ if(id==='casePanel'){$('publishedEditsFeed').open=false;placeLayout?.layout();}
  if(id==='casePanel'){toolOpener='mapToolsButton';$('mapToolsButton').setAttribute('aria-expanded','true');}
  setSidecarModal(id==='draftPanel');
  if(id==='draftPanel')window.ContributionPoint?.show();
 }
-$('toolsButton').addEventListener('click',()=>{const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
+$('toolsButton').addEventListener('click',async()=>{if($('toolsButton').disabled)return;$('toolsButton').disabled=true;try{const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'});if(response.status===401){try{sessionStorage.setItem('hauntologies-return-edit','true');}catch{}location.assign('/register?return=edit');return;}if(!response.ok){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}const session=await response.json();if(session.password_required){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}}catch{window.dispatchEvent(new CustomEvent('account-open-requested'));return;}finally{$('toolsButton').disabled=false;}const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
 document.addEventListener('pointerdown',e=>{
  if(document.querySelector('dialog[open]')||e.target.closest('.header-tools'))return;
@@ -109,10 +234,10 @@ document.addEventListener('pointerdown',e=>{
 },{capture:true});
 $('mapToolsButton').addEventListener('click',()=>{
  if(!$('researchSidecar').hidden&&$('casePanel').classList.contains('active')){closeTools(true);return;}
- switchPanel('casePanel');$('sidecarTitle').focus({preventScroll:true});
+ switchPanel('casePanel');revealPlaceCard([...$('casePanel').querySelectorAll('.place-card')].find(card=>card.dataset.placeId===selected));$('sidecarTitle').focus({preventScroll:true});
 });
 $('layersButton').addEventListener('click',()=>{const open=$('layersPanel').hidden;closeTools();toolOpener='layersButton';$('layersPanel').hidden=!open;$('layersButton').setAttribute('aria-expanded',String(open));if(open)$('layersTitle').focus()});
-for(const [button,view,title] of [['submitTool','submissionView','Submit'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()});
+for(const [button,view,title] of [['submitTool','submissionView','Contribute'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()});
 $('openResearch').addEventListener('click',()=>switchPanel('casePanel'));
 for(const id of ['closeResearch','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
@@ -250,7 +375,6 @@ function markerSvg(r){return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="
 function renderLegend(records){
  const entries=new Map();for(const r of records){const label=layerName(r);if(!entries.has(label))entries.set(label,r)}
  $('mapLegend').innerHTML=[...entries].map(([label,r])=>`<li data-record-category="${esc(r.category||'draft')}"><span class="legend-symbol ${esc(r.category||'draft')}" aria-hidden="true">${markerSvg(r)}</span><span>${esc(label)}</span></li>`).join('');
- if(records.some(r=>AtlasModel.normalize(r).geoStatus==='approximate'))$('mapLegend').insertAdjacentHTML('beforeend','<li><span class="legend-symbol approximate" aria-hidden="true"></span><span>Approximate location</span></li>');
 }
 function syncFilterState(){
  const count=Number(Boolean($('search').value.trim()))+['filterStatus','filterPeriod',...Object.keys(facetControls)].filter(id=>$(id).value!=='all').length;
@@ -271,11 +395,12 @@ function renderRecords(){
  records.forEach(r=>{
   const n=AtlasModel.normalize(r),b=document.createElement('button');b.type='button';b.className='place-select';b.dataset.recordId=r.id;b.classList.toggle('active',selected===r.id);b.setAttribute('aria-pressed',String(selected===r.id));
   b.innerHTML=`<i class="dot ${esc(r.category||'draft')} ${esc(n.geoStatus)}" aria-hidden="true"></i><span class="place-title">${esc(r.title)}</span>`;
-  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;card.append(b);card.insertAdjacentHTML('beforeend',placeFacts(r));addContributionAction(card,r);
+  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;card.append(b);card.insertAdjacentHTML('beforeend',placeFacts(r));
+  const actions=document.createElement('div');actions.className='place-actions';appendPlaceRecord(actions,r);addContributionAction(actions,r);card.append(actions);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
-   const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+' '+n.geoStatus+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+locationLabel(n),keyboard:true,riseOnHover:true});
-   marker.on('click',()=>selectRecord(r));marker.bindTooltip(esc(r.title)+'<br><small>'+esc(locationLabel(n))+'</small>',{direction:'top',offset:[0,-9]});pointLayer.addLayer(marker);markers.set(r.id,marker);
+   const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+whereLabel(r,n),keyboard:true,riseOnHover:true});
+   marker.on('click',()=>selectRecord(r));bindHoverTip(marker,esc(r.title)+'<br><small>'+esc(whereLabel(r,n))+'</small>',{direction:'top',offset:[0,-9]});pointLayer.addLayer(marker);markers.set(r.id,marker);
    if(n.uncertaintyM>0)L.circle([n.geometry.coordinates[1],n.geometry.coordinates[0]],{radius:n.uncertaintyM,color:'#efad6b',weight:1,fillOpacity:.08,interactive:false}).addTo(uncertaintyLayer);
   }
  });
@@ -287,13 +412,20 @@ function renderRecords(){
 function fitRecords(records){if(!map)return;const pts=records.filter(hasPoint).map(r=>{const c=AtlasModel.normalize(r).geometry.coordinates;return[c[1],c[0]]});if(pts.length)map.fitBounds(L.latLngBounds(pts),{padding:[34,34],maxZoom:16,animate:false})}
 function visibleMapCenter(){
  const size=map.getSize(),panel=$('researchSidecar').getBoundingClientRect(),brand=document.querySelector('.brand').getBoundingClientRect();
- if(window.innerWidth>760)return L.point(Math.max(45,panel.left/2),size.y/2);
+ if(panel.left>120){
+  const x=panel.left/2,obstacles=[...document.querySelectorAll('.brand,.header-tools')].filter(node=>getComputedStyle(node).visibility!=='hidden').map(node=>node.getBoundingClientRect());
+  const top=Math.max(24,...obstacles.filter(r=>r.left<x&&r.right>x).map(r=>r.bottom+24));
+  const bottom=Math.min(size.y-24,...[...document.querySelectorAll('.contribution-navigation,.contributors-footer,.recenter-map')].map(node=>node.getBoundingClientRect()).filter(r=>r.left<x&&r.right>x).map(r=>r.top-24));
+  return L.point(x,(Math.min(top,bottom)+bottom)/2);
+ }
  const top=Math.min(brand.bottom+18,panel.top-45);return L.point(size.x/2,Math.max(24,(top+panel.top)/2));
 }
-function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});map.panBy(map.getSize().divideBy(2).subtract(visibleMapCenter()),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.zoomToShowLayer)pointLayer.zoomToShowLayer(marker,()=>{map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false})})}
+function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.getVisibleParent&&pointLayer.getVisibleParent(marker)!==marker)map.setZoom(Math.min(map.getMaxZoom(),18),{animate:false});map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false});}
+function revealPlaceCard(card){if(!card)return;const panel=$('casePanel');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-8;placeLayout?.remember();}
 function selectRecord(r){
- selected=r.id;renderRecords();switchPanel('casePanel');map?.closePopup();revealRecord(r);
- const button=[...$('recordList').querySelectorAll('button[data-record-id]'),...$('unlocatedList').querySelectorAll('button[data-record-id]')].find(b=>b.dataset.recordId===r.id);button?.scrollIntoView({block:'nearest'});button?.focus({preventScroll:true});
+ if(selectingContributionPlace){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
+ selected=r.id;renderRecords();switchPanel('casePanel');map?.closePopup();
+ const button=[...$('recordList').querySelectorAll('button[data-record-id]'),...$('unlocatedList').querySelectorAll('button[data-record-id]')].find(b=>b.dataset.recordId===r.id);revealPlaceCard(button?.closest('.place-card'));button?.focus({preventScroll:true});revealRecord(r);
 }
 function resetFilters(fit=true){$('search').value='';for(const id of ['filterStatus','filterPeriod',...Object.keys(facetControls)])$(id).value='all';$('periodStart').value='';$('periodEnd').value='';togglePeriod();renderRecords();if(fit)fitRecords(filtered())}
 function togglePeriod(){const active=$('filterPeriod').value==='custom';$('periodStart').disabled=!active;$('periodEnd').disabled=!active;if($('periodBounds'))$('periodBounds').hidden=!active;}
@@ -302,18 +434,22 @@ for(const id of ['filterStatus','filterPeriod',...Object.keys(facetControls)])$(
 for(const id of ['periodStart','periodEnd'])$(id).addEventListener('input',()=>{renderRecords();fitRecords(filtered())});
 $('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFilters').addEventListener('click',()=>resetFilters());
 function addContributionAction(card,r){
- if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!hostedRecords.some(x=>x.id===r.id)))return;
+ if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
  const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
- button.addEventListener('click',()=>{switchPanel('draftPanel');$('sidecarTitle').textContent='Submit';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
+ button.addEventListener('click',()=>{switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
  const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
  edit.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}})));card.append(edit);
 }
 function placeFacts(r){
- const p=PlaceSummary.view(r);
+ const p=PlaceSummary.view(r),v=vicinityOf(r),near=v?[v.near,v.area].filter(Boolean).join(', '):'';
  const coordinates=p.latitude===null||p.longitude===null
   ? '<p class="place-coordinate-note">Location unresolved</p>'
-  : `<dl class="place-coordinates"><dt>${p.approximate?'Approx. coordinates':'Coordinates'}</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
- return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${coordinates}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+  : `<dl class="place-coordinates"><dt>Coordinates</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
+ return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+}
+
+function appendPlaceRecord(card,r){
+ return window.PlaceRecordView.append(card,r,{summary:PlaceSummary.view(r),safeUrl});
 }
 
 function renderDetail(r){
@@ -339,3 +475,71 @@ $('exportCsv')?.addEventListener('click',()=>download([exportKeys.join(','),...a
 function parseCSV(text){const rows=[];let row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell=''}else cell+=c}if(quoted)throw Error('CSV has an unclosed quoted field.');if(cell||row.length){row.push(cell);rows.push(row)}const headers=rows.shift()?.map(x=>x.trim().replace(/^\uFEFF/,''))||[];return rows.map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]||''])))}
 $('importFile')?.addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>1000000)throw Error('Choose a file smaller than 1 MB.');const text=await file.text();let rows;if(/\.csv$/i.test(file.name))rows=parseCSV(text);else{const json=JSON.parse(text);if(json.type!=='FeatureCollection'||!Array.isArray(json.features))throw Error('Choose a GeoJSON FeatureCollection containing Point features.');rows=json.features.map(f=>{if(f.geometry===null)return{...f.properties,longitude:null,latitude:null};if(f.geometry?.type!=='Point')throw Error('Only Point features or null geometry (unlocated records) are supported.');return{...f.properties,longitude:f.geometry.coordinates[0],latitude:f.geometry.coordinates[1]}})}if(!rows.length)throw Error('No points were found.');if(rows.length+drafts.length>500)throw Error('Import would exceed the 500-point local limit.');await NycGeometry.ready;const imported=rows.map(draftFrom);drafts.push(...imported);populateFacets();const saved=persist();$('importStatus').classList.remove('error');$('importStatus').textContent=imported.length+' points imported as local drafts.'+(saved?'':' Browser storage unavailable; export now.');renderRecords()}catch(err){$('importStatus').textContent=err.message;$('importStatus').classList.add('error')}e.target.value=''});
 window.addEventListener('offline',()=>{$('mapStatus').textContent='Offline'});window.addEventListener('online',()=>changeYear($('layerSelect').value));populateFacets();togglePeriod();selected=pilot.id;closeTools();renderRecords();recenterNYC();
+
+window.addEventListener('edits-place-requested',async event=>{await refreshPublishedPlaces();const record=allRecords().find(item=>item.id===event.detail?.recordId);if(!record)return;resetFilters(false);selectRecord(record);});
+
+refreshPublishedPlaces();refreshPendingPlaces();
+
+window.addEventListener('contributions-place-pick-requested',()=>{closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');
+ // The visible place field replaced the old picker button, which is now hidden.
+ ($('contributionPlace')||$('chooseExistingPlace')).focus();}});
+
+window.addEventListener('contributions-records-changed',event=>{if(!event.detail?.publicRefresh)refreshPublishedPlaces();});
+
+// Keep the visible reading position while browser chrome, text or orientation changes.
+function setupPlaceLayout(){
+ const panel=$('casePanel'),sidecar=$('researchSidecar');
+ const header=document.querySelector('.masthead'),tools=document.querySelector('.header-tools'),brand=document.querySelector('.brand');
+ const dockNodes=()=>[...document.querySelectorAll('.contribution-navigation,.contributors-footer,.recenter-map')];
+ let anchor=null,frame=0,lastWidth=innerWidth,lastHeight=innerHeight;
+ const active=()=>document.body.classList.contains('places-open')&&!sidecar.hidden;
+ const visible=node=>node.getBoundingClientRect().height&&(!node.closest('.place-record-content')||node.closest('.place-record').open);
+ const readingNodes=card=>[...card.querySelectorAll('.place-select,.place-description,.place-location,.place-coordinates,.place-links,.place-record > summary,.place-record-content > *,.place-contribute,.place-edit')];
+ const remember=()=>{
+  if(!active())return;
+  const bounds=panel.getBoundingClientRect();
+  const card=[...panel.querySelectorAll('.place-card')].find(node=>{const r=node.getBoundingClientRect();return r.bottom>bounds.top+8&&r.top<bounds.bottom;});
+  if(!card){anchor=null;return;}
+  const candidates=readingNodes(card);
+  const node=candidates.find(node=>visible(node)&&node.getBoundingClientRect().bottom>bounds.top+8)||card;
+  anchor={node,card,id:card.dataset.placeId,index:candidates.indexOf(node),offset:node.getBoundingClientRect().top-bounds.top};
+ };
+ const layout=()=>{
+  if(!active())return;
+  const saved=anchor,view=window.visualViewport;
+  const docks=dockNodes();for(const node of docks)observer.observe(node);
+  // Pinch zoom remains browser-controlled; layout reflow uses the CSS viewport.
+  const viewTop=view?.scale===1?view.offsetTop:0,viewBottom=view?.scale===1?view.offsetTop+view.height:innerHeight;
+  const bounds=sidecar.getBoundingClientRect(),overlaps=r=>r.right>bounds.left&&r.left<bounds.right;
+  const short=matchMedia('(max-height:640px)').matches;
+  const top=Math.ceil(Math.max(viewTop+12,...[tools,...short?[]:[brand]].map(node=>{const r=node.getBoundingClientRect();return overlaps(r)?r.bottom+8:viewTop+12;})));
+  const bottom=Math.floor(Math.min(viewBottom-12,...docks.map(node=>{const r=node.getBoundingClientRect();return overlaps(r)?r.top-8:viewBottom-12;})));
+  const values={'--places-top':top+'px','--places-height':Math.max(0,bottom-top)+'px'};
+  for(const [key,value]of Object.entries(values))if(sidecar.style.getPropertyValue(key)!==value)sidecar.style.setProperty(key,value);
+  const card=saved&&(saved.card.isConnected?saved.card:[...panel.querySelectorAll('.place-card')].find(node=>node.dataset.placeId===saved.id));
+  if(card){
+   // A public-record refresh may replace DOM nodes during the same resize.
+   const previous=saved.node.isConnected?saved.node:readingNodes(card)[saved.index];
+   const node=previous&&visible(previous)?previous:card;
+   const offset=node===previous?saved.offset:8;
+   panel.scrollTop+=node.getBoundingClientRect().top-panel.getBoundingClientRect().top-offset;
+  }
+  lastWidth=innerWidth;lastHeight=innerHeight;remember();
+ };
+ const schedule=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(layout);};
+ panel.addEventListener('scroll',()=>{if(innerWidth===lastWidth&&innerHeight===lastHeight)remember();},{passive:true});
+ panel.addEventListener('toggle',event=>{
+  if(!event.target.matches('.place-record'))return;
+  const card=event.target.closest('.place-card'),bounds=card.getBoundingClientRect(),view=panel.getBoundingClientRect();
+  if(!event.target.open&&bounds.height<=view.height-16&&(bounds.top<view.top||bounds.bottom>view.bottom))revealPlaceCard(card);
+  schedule();
+ },true);
+ const observer=new ResizeObserver(schedule);
+ for(const node of [header,tools,brand,...dockNodes(),$('recordList'),$('unlocatedList'),sidecar.querySelector('.popout-head')])observer.observe(node);
+ window.addEventListener('resize',schedule);
+ window.visualViewport?.addEventListener('resize',schedule);
+ window.visualViewport?.addEventListener('scroll',schedule);
+ return{layout,remember};
+}
+placeLayout=setupPlaceLayout();

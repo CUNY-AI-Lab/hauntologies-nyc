@@ -2,7 +2,7 @@ import {fail,safeUrl} from './core.mjs';
 
 // Container validation is intentionally not a full image codec. Images are retained
 // as private, downloadable derivatives; embedded camera/location metadata is removed.
-export const MEDIA_LIMITS=Object.freeze({image_bytes:1048576,request_bytes:1064960,per_submission:3,total_bytes:33554432,max_dimension:8192,max_pixels:16777216,metadata_bytes:8192});
+export const MEDIA_LIMITS=Object.freeze({image_bytes:1048576,request_bytes:1064960,per_submission:3,owner_bytes:25165824,total_bytes:268435456,max_dimension:8192,max_pixels:16777216,metadata_bytes:8192});
 const encoder=new TextEncoder();
 const check=(value,code='invalid_image',status=400)=>{if(!value)fail(code,status)};
 const u16=(b,o)=>(b[o]<<8)|b[o+1];

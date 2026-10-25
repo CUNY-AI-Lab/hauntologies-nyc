@@ -1,0 +1,76 @@
+/* Place search. The icon sits at the top of the map controls; the field and
+   results open to its left without moving the column. */
+.place-search{position:relative;z-index:1001;display:flex;justify-content:stretch;min-height:44px}
+.header-tools .place-search-toggle{width:100%}
+.place-search-toggle svg{width:18px;height:18px}
+.masthead .header-tools .place-search-toggle[aria-expanded=true]::before,.masthead .header-tools .place-search-toggle.holding::before{border-color:#e9caa1;background:#2a251d}
+.place-search-held{position:absolute;left:7px;top:13px;width:7px;height:7px;border-radius:50%;background:#e9caa1;box-shadow:0 0 0 2px #151714}
+
+.place-search-form{position:absolute;top:0;right:calc(100% + 6px);width:var(--search-room,320px);margin:0;visibility:hidden;opacity:0;clip-path:inset(0 0 0 100%);transition:clip-path .18s ease-out,opacity .18s ease-out,visibility 0s .18s}
+.place-search.is-peeking .place-search-form,.place-search.is-open .place-search-form{visibility:visible;opacity:1;clip-path:inset(0 -12px -12px -12px);transition:clip-path .18s ease-out,opacity .18s ease-out,visibility 0s}
+.place-search-form input{min-height:44px;padding:10px 12px;border:1px solid #c1a47d;background:#11110f;color:var(--ink);box-shadow:0 10px 30px #0007;font-size:14px}
+.place-search-form input::placeholder{color:#a69d90}
+.place-search-form input::-webkit-search-cancel-button{filter:invert(.8) sepia(.4)}
+
+.place-search-panel{position:absolute;z-index:2;top:50px;right:calc(100% + 6px);width:var(--search-panel-width,320px);max-height:var(--search-panel-max,60vh);overflow:auto;overscroll-behavior:contain;background:#11110f;border:1px solid #625a4e;box-shadow:0 16px 60px #0008;scrollbar-width:thin;scrollbar-color:#66594a #151410;text-align:left;white-space:normal}
+.place-search-status:empty,.place-search-results:empty{display:none}
+.place-search-status{margin:0;padding:12px 14px 0;font-size:12px;color:var(--sun)}
+.place-search-results{padding:6px 0}
+.place-search-group{margin:10px 14px 4px;font-size:11px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:#dbb78c}
+.place-search-option{display:flex;align-items:center;gap:10px;min-height:48px;padding:6px 14px;cursor:pointer;color:var(--ink)}
+.place-search-option:hover,.place-search-option[aria-selected=true]{background:#2a251d}
+.place-search-option[aria-selected=true]{box-shadow:inset 2px 0 0 #e9caa1}
+.place-search-option[aria-disabled=true]{cursor:default;opacity:.65}
+.place-search-option[aria-disabled=true]:hover{background:none}
+.place-search-option.action{border-top:1px solid #302d26}
+.place-search-icon{display:flex;flex:0 0 18px;color:#e9caa1}.place-search-icon svg{width:18px;height:18px}
+.place-search-text{display:flex;flex-direction:column;min-width:0;flex:1}
+.place-search-title{font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.place-search-meta{font-size:11px;line-height:1.4;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.place-search-distance{flex:0 0 auto;font-size:11px;color:var(--sun);font-variant-numeric:tabular-nums}
+
+.place-search-target{padding:14px 16px 6px;border-top:1px solid var(--line)}
+.place-search-results[hidden]+.place-search-target{border-top:0}
+.place-search-kind{margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:#dbb78c}
+.place-search-target h3{margin:0 0 6px;font:400 20px/1.2 var(--serif)}
+.place-search-target h4{margin:14px 0 6px;font-size:12px;color:var(--muted);font-weight:400}
+.place-search-subtitle,.place-search-coords,.place-search-from{margin:0 0 6px;font-size:12px;color:var(--muted)}
+.place-search-coords{font-variant-numeric:tabular-nums}
+.place-search-from strong{color:var(--ink);font-weight:400}
+.place-search-links{display:flex;flex-wrap:wrap;gap:4px 14px;margin:2px 0 8px;font-size:12px}
+.place-search-actions{display:flex;flex-wrap:wrap;align-items:center;gap:0 2px}
+.header-tools .place-search-panel button{width:auto;min-width:44px;white-space:normal}
+.header-tools .place-search-panel .textbutton{padding:10px 8px;font-size:12px}
+.place-search-route{margin-top:6px;padding-top:10px;border-top:1px solid #302d26}
+.place-search-modes{display:flex;gap:2px}
+.masthead .header-tools .place-search-modes .outline[aria-pressed=true]::before{border-color:#e9caa1;background:#2a251d}
+.place-search-summary{margin:6px 0;font-size:14px;color:var(--sun)}
+.place-search-summary.error{color:#f0a48a}
+.place-search-along{list-style:none;margin:0 0 8px;padding:0;counter-reset:along}
+.header-tools .place-search-panel .place-search-along-item{display:flex;flex-direction:column;align-items:flex-start;width:100%;min-height:44px;padding:6px 0 6px 26px;border:0;background:none;color:var(--ink);font-size:13px;text-align:left;position:relative}
+.place-search-along-item::before{counter-increment:along;content:counter(along);position:absolute;left:0;top:8px;width:18px;height:18px;border:1px solid #c1a47d;border-radius:50%;font-size:10px;line-height:16px;text-align:center;color:#e9caa1}
+.place-search-along-item:hover{color:#fff1dd}
+.place-search-credit{margin:0;padding:8px 16px 10px;border-top:1px solid #302d26;font-size:10px;line-height:1.5;color:#9a9286}
+.place-search-credit a{color:#c9b18f}
+
+/* Inside a horizontal Tools tray the field and panel drop below the tray
+   into the popout column. On phones they drop below the title card, beside
+   the control column. Otherwise they open beside the toggle. */
+.place-search.drops-below .place-search-form{position:fixed;top:var(--search-top,124px);right:var(--search-right,20px);width:var(--search-width,400px);clip-path:inset(0 0 100% 0)}
+.place-search.drops-below.is-peeking .place-search-form,.place-search.drops-below.is-open .place-search-form{clip-path:inset(-12px)}
+.place-search.drops-below .place-search-panel{position:fixed;top:calc(var(--search-top,124px) + 50px);right:var(--search-right,20px);width:var(--search-width,400px)}
+
+/* Map marks: the found place, a route start, and a collection record. */
+.search-pin{border:2px solid #ffcf94;border-radius:50%;background:#171510b3;box-shadow:0 0 0 3px #171510aa}
+.search-pin span{position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#ffcf94}
+.search-pin.record{background:none;border-style:dashed;width:56px!important;height:56px!important;margin:-28px 0 0 -28px!important}
+.search-pin.record span{display:none}
+.search-pin.origin{border-color:#e9caa1;background:#080908}
+.search-pin.origin span{background:#080908;border:2px solid #e9caa1;width:10px;height:10px;margin:-5px 0 0 -5px}
+
+@media(max-width:760px){
+  .place-search-form input{font-size:16px}
+}
+@media(prefers-reduced-motion:reduce){
+  .place-search-form,.place-search.is-peeking .place-search-form,.place-search.is-open .place-search-form{transition:none}
+}

@@ -43,3 +43,266 @@
   #typedContributionForm .workflow-details > summary{min-height:44px;padding-block:11px}
 }
 @media(max-width:420px){#typedContributionForm .contribution-place-choice{grid-template-columns:minmax(0,1fr)}}
+
+.account-form { display: grid; gap: 16px; margin-block: 16px; }
+.account-form label { display: grid; gap: 6px; }
+.account-form input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 10px 12px; font: inherit; color: inherit; background: var(--bg, #131512); border: 1px solid var(--line, #57594f); border-radius: 6px; }
+#accountDialog .registration-content { display: grid; gap: 12px; }
+#accountStatus { margin: 0; overflow-wrap: anywhere; }
+#accountStatus:empty, #accountFormHost:empty, #accountActions:empty { display: none; }
+#accountActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#accountActions button { min-height: 44px; padding: 10px 12px; line-height: 22px; white-space: normal; }
+#accountRegistrationSection { margin: 0; }
+#accountRegistrationSection details { margin: 0 0 16px; padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+#accountRegistrationSection summary { min-height: 44px; padding: 11px 0; font-size: 13px; line-height: 22px; cursor: pointer; list-style-position: inside; }
+#accountRegistrationSection h3 { margin: 0 0 8px; font-size: 14px; }
+#accountRegistration { margin: 8px 0; overflow-wrap: anywhere; }
+#accountContributions { margin: 0; }
+#accountContributions > li.account-list-message { padding: 0; border: 0; color: var(--muted); }
+#accountRegistrationSection > button { min-height:44px; padding:10px 12px; }
+#accountContributions { margin-top:8px; }
+#ownEditsDialog { width:min(620px,calc(100vw - 24px)); }
+.edits-content { padding:16px; }
+#ownEditsStatus { margin:0 0 12px; }
+#ownEditsList, #publishedEditsList { padding:0; margin:0; list-style:none; }
+#ownEditsList > li { padding:12px 0; border-top:1px solid var(--line); }
+#ownEditsList p, #publishedEditsList p { font-size:12px; color:var(--muted); margin:4px 0; }
+.edit-title { display:block; width:100%; text-align:left; padding:8px 0; background:none; border:0; color:var(--ink); min-height:44px; overflow-wrap:anywhere; }
+.edit-targets, .edits-pagination { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.edit-targets button, .edits-pagination button { min-height:44px; padding:8px 12px; }
+.edits-pagination { justify-content:space-between; margin-top:16px; }
+.return-to-edits { min-height:44px; padding:8px 12px; margin-left:auto; background:var(--paper); }
+/* Published edits opens from the title card in the same button family as the map controls. */
+#publishedEditsFeed { pointer-events:auto; margin-top:10px; font:12px/1.4 Arial,Helvetica,sans-serif; }
+#publishedEditsFeed > summary { position:relative; isolation:isolate; display:flex; align-items:center; width:fit-content; min-height:44px; padding:6px 10px; color:var(--ink); }
+#publishedEditsFeed > summary::before { content:''; position:absolute; z-index:-1; inset:6px 0; border:1px solid #827563; background:#11110f; pointer-events:none; }
+#publishedEditsFeed > summary::after { content:''; position:absolute; right:0; top:6px; width:9px; height:9px; background:linear-gradient(45deg,#746652 0 43%,#bba78a 44% 54%,#080908 55%); pointer-events:none; }
+#publishedEditsFeed > summary:hover::before, #publishedEditsFeed[open]:not([data-closing]) > summary::before { background:#27231c; border-color:#c1a47d; }
+#publishedEditsList { max-height:min(300px,45dvh); overflow:auto; overscroll-behavior:contain; }
+#publishedEditsStatus { margin-top:8px; color:var(--muted); }
+#publishedEditsList > li { border-top:1px solid var(--line); padding:8px 0; }
+#publishedEditsList button { display:block; min-height:44px; text-align:left; width:100%; white-space:normal; padding:8px; }
+#ownEditsDialog .popout-head { position:sticky; top:0; background:var(--paper); z-index:1; }
+/* Places uses one bounded scroller, so a card heading cannot hide inside a nested list. */
+#casePanel .recordlist { max-height:none; overflow:visible; }
+#casePanel .place-card { scroll-margin-block:16px; }
+#casePanel { scroll-padding-block:16px; }
+.contribution-location-search { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+.contribution-location-search > p { grid-column:1/-1; font-size:12px; margin:0; }
+.contribution-location-search > p:empty { display:none; }
+#freeformPlacePicker { display:grid; gap:8px; }
+#freeformPlacePicker > button { justify-self:start; }
+#typedContributionForm > .workflow-details { margin-block:10px; }
+#typedContributionForm > .workflow-details > summary { min-height:44px; min-width:100px; padding:11px 12px; }
+#typedContributionForm > .workflow-details[open] { border:1px solid var(--line); padding:10px; }
+#extraSources { display:grid; gap:10px; margin-block:10px; }
+.place-record { margin:8px 14px 12px; }
+.place-record > summary { min-height:44px; cursor:pointer; padding:11px 0; }
+.place-record-content { overflow-wrap:anywhere; font-size:13px; }
+.place-record-content img { max-width:100%; height:auto; }
+.place-record-content figure { margin:12px 0; }
+.place-record-content figcaption, .place-record-content dt { color:var(--muted); font-size:12px; }
+.place-record-content dd { margin:0 0 8px; }
+.place-description { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; }
+
+/* A compact card keeps its disclosure and actions together at every viewport. */
+#casePanel { padding:8px; scroll-padding-block:8px; overflow-anchor:none; }
+#casePanel .place-card { scroll-margin-block:8px; }
+#casePanel .place-select { padding:10px 12px 3px; }
+#casePanel .place-facts { padding:0 12px 0 29px; }
+#casePanel .place-description { margin:0 0 4px; }
+#casePanel .place-coordinates, #casePanel .place-coordinate-note { margin-top:4px; }
+#casePanel .place-links { margin-top:4px; gap:0 12px; }
+.place-actions { display:flex; flex-wrap:wrap; align-items:start; gap:4px 8px; padding:0 12px 8px; }
+.place-actions .place-record { margin:0; min-width:0; }
+.place-actions .place-record > summary { min-width:72px; min-height:44px; padding:11px 4px; }
+.place-actions .place-record[open] { flex-basis:100%; }
+.place-actions .place-record-content { padding:0 4px 8px; }
+.place-actions .place-record-content > h3:first-child { margin-top:4px; }
+#researchSidecar .recordlist .place-actions :is(.place-contribute,.place-edit) { margin:0; min-height:44px; padding:8px 11px; }
+body.places-open #researchSidecar { top:var(--places-top,202px); bottom:auto; height:var(--places-height,calc(100dvh - 326px)); max-height:var(--places-height,calc(100dvh - 326px)); }
+body.places-open #researchSidecar .popout-head { flex-wrap:wrap; }
+body.places-open #researchSidecar .popout-head h2 { margin-right:auto; }
+body.places-open #researchSidecar .return-to-edits { margin-left:0; }
+@media(max-height:640px) {
+  body.places-open .masthead { flex-direction:row; }
+  body.places-open .masthead .header-tools { position:relative; margin-left:auto; flex:0 1 440px; flex-direction:row; flex-wrap:wrap; gap:2px; }
+  body.places-open .masthead .header-tools > button { flex:1 1 52px; width:auto; min-width:44px; padding-inline:6px; }
+  body.places-open .masthead .header-tools .zoom-tools { flex:0 0 90px; }
+  body.places-open .masthead .brand { position:absolute; visibility:hidden; }
+}
+@media(min-width:600px) and (max-height:640px) {
+  body.places-open .masthead .header-tools { margin-left:0; flex:0 0 min(180px,calc(100vw - 488px)); flex-direction:column; }
+  body.places-open .masthead .header-tools > button { flex:0 0 auto; }
+  body.places-open .masthead .header-tools .zoom-tools { flex:0 0 auto; }
+}
+
+.registration-admission { display:grid; gap:6px; min-width:0; }
+.registration-admission[hidden] { display:none; }
+.registration-admission label { display:grid; gap:6px; }
+.registration-admission label[hidden] { display:none; }
+.registration-admission input { margin-bottom:0; }
+.registration-admission-notice { margin:0; font-size:13px; line-height:1.45; color:inherit; }
+
+/* Pinning: Pin reads as pressed while the map is waiting, and a placed pin confirms where it landed. */
+#chooseContributionPoint[aria-pressed="true"] { background:#2a251d; border-color:#e9caa1; color:#fff1d8; }
+#newLocationStatus[data-state="picking"] { color:var(--sun); }
+#newLocationStatus[data-state="success"] { position:relative; padding-left:20px; color:var(--ink); }
+#newLocationStatus[data-state="success"]::before { content:''; position:absolute; left:3px; top:.2em; width:5px; height:10px; border:solid #a9d3a0; border-width:0 2px 2px 0; transform:rotate(45deg); }
+.proposed-point.just-pinned::after { content:''; position:absolute; inset:-2px; border:2px solid #ffcf94; border-radius:50%; pointer-events:none; animation:pin-landed 640ms cubic-bezier(.2,.7,.2,1) forwards; }
+@keyframes pin-landed { from { transform:scale(1); opacity:.9; } to { transform:scale(2.4); opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .proposed-point.just-pinned::after { animation:none; opacity:0; } }
+
+/* Contribute reads as one description record: each element is a ruled row naming what it holds. */
+#typedContributionForm { font-size:12px; }
+#typedContributionForm label { font-size:11px; }
+#typedContributionForm :is(input:not([type="checkbox"]):not([type="file"]), textarea, select) { font-size:13px; font-weight:400; }
+#typedContributionForm .workflow-details, #typedContributionForm > .workflow-details, #typedContributionForm .workflow-details[open], #typedContributionForm > .workflow-details[open] { margin:0; padding:0; border:0; border-top:1px solid var(--line); background:none; }
+#typedContributionForm .workflow-details:has(+ :not(.workflow-details)), #typedContributionForm .workflow-details:last-of-type { border-bottom:1px solid var(--line); }
+#typedContributionForm .workflow-details > summary, #typedContributionForm > .workflow-details > summary { display:flex; align-items:baseline; gap:12px; width:auto; min-width:0; min-height:44px; margin:0; padding:13px 30px 13px 0; border:0; background:none; color:var(--ink); font-size:12px; line-height:18px; }
+#typedContributionForm .workflow-details > summary::after { content:none; }
+#typedContributionForm .workflow-details > summary:hover { background:none; color:#fff1d8; }
+#typedContributionForm .workflow-details[open] > summary { margin:0; }
+#typedContributionForm .workflow-details > :not(summary) { margin-inline:0; }
+#typedContributionForm .workflow-details[open] > :last-child { margin-bottom:14px; }
+#newPlaceLocation { margin-bottom:12px; }
+
+/* A staged image is clipped to a board: the preview first, its status and credit beneath. */
+.staged-image { padding-block:14px; }
+.staged-image-board { position:relative; margin:8px 0 10px; padding:16px 10px 10px; background:#1b1915; border:1px solid #5d5447; border-radius:3px; }
+.staged-image-board::before { content:''; position:absolute; top:-7px; left:50%; width:56px; height:14px; margin-left:-28px; border-radius:3px 3px 2px 2px; background:linear-gradient(#d6c4a4,#8f7f66); box-shadow:0 1px 0 #0009; }
+.staged-image-board::after { content:''; position:absolute; top:-3px; left:50%; width:16px; height:5px; margin-left:-8px; border-radius:3px; background:#1b1915; }
+.staged-image-board img { display:block; width:100%; height:auto; max-height:220px; object-fit:contain; padding:6px; background:#ece4d6; box-shadow:0 1px 2px #0008; }
+.staged-image-board figcaption { margin-top:8px; font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+.staged-image-status { margin:0 0 8px; font-size:11px; line-height:1.5; color:var(--muted); }
+.staged-image-status[data-state="saved"] { color:var(--ink); }
+.staged-image-attribution { margin:10px 0 0; font-size:12px; overflow-wrap:anywhere; }
+.staged-image-attribution a, .staged-image-link { color:#ebc395; text-underline-offset:3px; }
+.staged-image-link { display:inline-block; min-height:44px; padding-block:12px; font-size:12px; }
+
+/* Draft state and service state are status lines, not panels: one quiet line each above the record. */
+#typedContributionForm > .draft-notice { margin:0 0 10px; padding:0; border:0; background:none; font-size:11px; line-height:1.5; color:var(--muted); }
+#typedContributionForm > .draft-notice .textbutton { min-height:0; min-width:0; margin-left:6px; padding:0; font-size:11px; color:#ebc395; text-decoration:underline; text-underline-offset:3px; background:none; border:0; }
+.contribution-workspace > #workflowConnection { margin:0 0 6px; padding:0; border:0; background:none; font-size:11px; line-height:1.5; color:var(--muted); }
+.preview-next-step { margin:12px 0 10px; padding:8px 10px; border-left:2px solid var(--orange); background:#171512; font-size:12px; line-height:1.5; color:#e6dccb; }
+
+/* Place: one field finds a mapped place, an address or a point; the plate under it says what was chosen. */
+#typedContributionForm .contribution-place { display:block; margin:0 0 8px; }
+#typedContributionForm .contribution-place-label { display:block; margin:0 0 4px; }
+.contribution-place-row { display:flex; gap:6px; align-items:stretch; }
+.contribution-place-combobox { position:relative; flex:1; min-width:0; }
+#typedContributionForm .contribution-place-combobox input { margin:0; }
+#typedContributionForm #newPlaceLocation { margin:0; }
+#typedContributionForm #chooseContributionPoint { height:100%; margin:0; min-width:56px; }
+.contribution-place-options { position:absolute; z-index:5; top:calc(100% + 2px); left:0; right:0; max-height:280px; overflow:auto; overscroll-behavior:contain; background:#11110f; border:1px solid #625a4e; box-shadow:0 12px 40px #0009; }
+.contribution-place-option { display:flex; flex-direction:column; justify-content:center; min-height:44px; padding:6px 12px; cursor:pointer; }
+.contribution-place-option + .contribution-place-option { border-top:1px solid #26231e; }
+.contribution-place-option:hover, .contribution-place-option[aria-selected="true"] { background:#2a251d; }
+.contribution-place-option[aria-selected="true"] { box-shadow:inset 2px 0 0 #e9caa1; }
+.contribution-place-option[aria-disabled="true"] { cursor:default; opacity:.6; background:none; }
+.contribution-place-option.action .contribution-place-option-title { color:#ebc395; }
+.contribution-place-option-title { font-size:13px; line-height:1.35; color:var(--ink); }
+.contribution-place-option-meta { font-size:11px; line-height:1.4; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.contribution-place-note { margin:0; padding:8px 12px; font-size:11px; color:var(--sun); border-top:1px solid #26231e; }
+/* The plate is the one emphatic moment: the chosen place named in the map's serif, ruled in its accent. */
+.contribution-place-plate { position:relative; margin-top:6px; padding:1px 56px 1px 10px; border-left:2px solid var(--orange); }
+.contribution-place-plate:not(:has(#newLocationStatus:not(:empty))):not(.is-record) { display:none; }
+.contribution-place-name { display:block; font:400 16px/1.25 var(--serif); color:var(--ink); overflow-wrap:anywhere; }
+.contribution-place-name:empty { display:none; }
+.contribution-place-plate > p { margin:0; font-size:11px; line-height:1.5; color:var(--muted); }
+#typedContributionForm .contribution-place-plate > .textbutton { position:absolute; right:0; top:50%; transform:translateY(-50%); min-height:44px; min-width:44px; margin:0; padding:0 2px; font-size:11px; text-align:right; }
+#typedContributionForm .contribution-place-plate #newLocationStatus { font-size:11px; }
+#typedContributionForm .contribution-place-plate #newLocationStatus[data-state="success"] { color:var(--muted); }
+#freeformRecordContext.contribution-place-plate { margin:8px 0 0; }
+/* Title and description read as the record's heading and body, not folded sections. */
+#typedContributionForm .contribution-title { margin:0 0 4px; }
+#typedContributionForm .contribution-title label { display:block; margin:0; }
+#typedContributionForm #freeformDescription { border-top:0; }
+#typedContributionForm #freeformDescription > summary { min-height:0; padding:8px 30px 4px 0; font-size:11px; color:var(--ink); }
+@media (max-width:760px), (pointer:coarse) {
+  .contribution-place-option-title { font-size:14px; }
+  #typedContributionForm .contribution-place-combobox input { font-size:16px; }
+}
+
+/* Submission status: where it stands, then what happens next. */
+.submission-title { margin:0 0 10px; font-family:var(--serif); font-size:18px; font-weight:400; line-height:1.3; color:var(--ink); overflow-wrap:anywhere; }
+.submission-state { margin:0 0 14px; }
+.submission-progress { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:0 0 10px; padding:0; list-style:none; counter-reset:none; }
+.submission-progress li { position:relative; padding-top:16px; font-size:11px; line-height:1.3; color:var(--muted); }
+.submission-progress li::before { content:''; position:absolute; top:3px; left:0; width:8px; height:8px; border-radius:50%; border:1px solid #6f665a; background:#11110f; z-index:1; }
+.submission-progress li::after { content:''; position:absolute; top:7px; left:9px; right:2px; height:1px; background:#3b3730; }
+.submission-progress li:last-child::after { display:none; }
+.submission-progress li[data-state="done"] { color:#d9cfbf; }
+.submission-progress li[data-state="done"]::before { background:var(--orange); border-color:var(--orange); }
+.submission-progress li[data-state="done"]::after { background:#8c6d4c; }
+.submission-progress li[data-state="current"] { color:var(--ink); font-weight:500; }
+.submission-progress li[data-state="current"]::before { border:2px solid var(--orange); width:8px; height:8px; top:2px; }
+.submission-next { margin:0 0 4px; font-size:12px; line-height:1.5; color:#e6dccb; }
+.submission-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:14px 0; }
+.review-checklist { display:grid; gap:2px; margin:0 0 10px; padding:0; border:0; }
+.review-checklist legend { margin-bottom:6px; font-size:12px; color:var(--ink); }
+.review-checklist label { display:flex; align-items:center; gap:8px; min-height:36px; font-size:12px; color:#d9cfbf; }
+.review-checklist input { width:16px; height:16px; margin:0; accent-color:var(--orange); }
+.approval-form { display:grid; gap:10px; margin:16px 0; padding-top:14px; border-top:1px solid var(--line); }
+.approval-form h4 { margin:0; font-size:13px; font-weight:500; }
+.approval-form .primary { justify-self:start; }
+.submission-reference { margin-top:18px; }
+.validation-result { margin:0 0 12px; padding:8px 10px; border-left:2px solid #d98b6a; background:#1b1412; font-size:12px; color:#f0d6c8; }
+.validation-result ul { margin:6px 0 0; padding-left:18px; }
+.queue-item .queue-status { display:inline-block; width:fit-content; margin:4px 0 2px; padding:1px 7px; border:1px solid #6f665a; font-size:11px; color:#e6dccb; }
+.queue-item .queue-status[data-status="submitted"] { border-color:var(--orange); }
+.queue-item .queue-status[data-status="changes_requested"] { border-color:#d98b6a; color:#f0d6c8; }
+.queue-item .queue-status[data-status="approved"], .queue-item .queue-status[data-status="merged"] { border-color:#7fae86; color:#d7ead9; }
+.submission-back { min-height:32px; margin:0 0 10px; padding:0; font-size:12px; }
+.submission-meta { margin:6px 0 0; font-size:12px; line-height:1.5; color:#d9cfbf; overflow-wrap:anywhere; }
+.submission-ref { margin:16px 0 0; font-size:10px; color:#8e8577; overflow-wrap:anywhere; }
+.approval-form > label { display:flex; align-items:flex-start; gap:8px; font-size:12px; line-height:1.45; color:#e6dccb; }
+.approval-form > label input { width:16px; height:16px; margin:1px 0 0; flex:0 0 auto; accent-color:var(--orange); }
+.approval-form textarea { font-size:13px; }
+#submissionDetail .textbutton + textarea { margin-top:8px; }
+.workflow-jobs[hidden] { display:none; }
+
+/* The contributor's own unpublished places: a dashed ring that reads as "not yet on the map". */
+.own-place { display:flex; align-items:center; justify-content:center; border:2px dashed #ffcf94; border-radius:50%; background:#171510cc; box-shadow:0 0 0 2px #171510aa; cursor:pointer; }
+.own-place span { width:8px; height:8px; border-radius:50%; background:#ffcf94; }
+.own-place[data-status="changes_requested"] { border-color:#e6977a; }
+.own-place[data-status="changes_requested"] span { background:#e6977a; }
+.own-place[data-status="approved"] { border-color:#9fd1a6; }
+.own-place[data-status="approved"] span { background:#9fd1a6; }
+.own-place:focus-visible { outline:2px solid #ffd39e; outline-offset:3px; }
+.moderation-message { display:grid; gap:8px; margin:0 0 12px; }
+.moderation-message .outline { justify-self:start; }
+
+/* One decision: approve, or send back with a comment. */
+.decision-form { display:grid; gap:10px; margin:16px 0; padding-top:14px; border-top:1px solid var(--line); }
+.decision-form textarea { font-size:13px; }
+.decision-actions { display:flex; flex-wrap:wrap; gap:10px; }
+
+/* Places anyone has sent for review: a dashed violet ring with a question mark,
+   distinct from published markers and from the contributor's own amber ring. */
+.pending-place { display:flex; align-items:center; justify-content:center; border:2px dashed #c9a7ff; border-radius:50%; background:#16121dcc; box-shadow:0 0 0 2px #16121daa; color:#e3d2ff; font:700 12px/1 system-ui, sans-serif; cursor:pointer; }
+.pending-place.attached { font-size:10px; }
+.pending-place[data-status="approved"] { border-color:#9fd1a6; color:#cfeccf; }
+.pending-place:focus-visible { outline:2px solid #ffd39e; outline-offset:3px; }
+.pending-place-popup p { margin:4px 0; overflow-wrap:anywhere; }
+.pending-place-popup .pending-place-status { margin:0 0 4px; color:#8a63c9; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+
+/* Record content follows the existing Places reading column, type and spacing. */
+.place-record-content{color:var(--ink);font:400 13px/1.5 Arial,Helvetica,sans-serif;min-width:0}
+.place-record-content .place-record-title{font:600 16px/1.35 Arial,Helvetica,sans-serif;margin:4px 0 8px}
+.place-record-content>p,.place-record-content figure{margin:0 0 12px}
+.place-record-content .place-record-description,.place-record-content .place-record-citation,.place-record-content .place-record-source-note{white-space:pre-wrap}
+.place-record-content .place-record-credit,.place-record-content figcaption{color:var(--muted);font-size:12px;line-height:1.5}
+.place-record-content figcaption{margin-top:6px}
+.place-record-metadata{display:grid;gap:8px;margin:0 0 12px}
+.place-record-metadata>div{display:grid;grid-template-columns:minmax(80px,.65fr) minmax(0,1.35fr);gap:4px 12px}
+.place-record-metadata dt{font-size:12px;color:var(--muted)}
+.place-record-metadata dd{min-width:0;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.place-record-content>h4{font:600 13px/1.4 Arial,Helvetica,sans-serif;margin:16px 0 8px}
+.place-record-sources{list-style:none;margin:0;padding:0}
+.place-record-sources>li{min-width:0;border-top:1px solid var(--line);padding:8px 0}
+.place-record-content a{display:inline-flex;align-items:center;min-height:44px;max-width:100%;color:var(--sun);font-size:12px;overflow-wrap:anywhere;text-underline-offset:4px}
+.place-record-content a:hover{color:var(--ink)}
+.place-record-sources p{margin:0 0 8px}
+.place-record-sources .place-record-metadata{margin-bottom:8px}
+@media(max-width:380px){.place-record-metadata>div{grid-template-columns:minmax(0,1fr);gap:2px}}

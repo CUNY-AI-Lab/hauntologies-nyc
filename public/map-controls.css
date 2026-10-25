@@ -1,0 +1,70 @@
+/* The map's own controls, a little larger than the buttons inside panels and forms.
+   Loaded last so it settles the size across the layouts in style.css. */
+.header-tools .outline,.contribution-navigation .outline,.recenter-map,.contributors-footer button{min-height:48px;font-size:13px}
+.header-tools button{min-height:48px}
+/* Two 48px buttons side by side (zoom, plot and search) set the column's width for every row. */
+.header-tools{min-width:98px}
+.map-tool-tray{width:100%;min-width:0}
+.contribution-navigation button{min-width:92px}
+.recenter-map{min-width:82px}
+.recenter-map svg{width:18px;height:18px}
+.zoom-tools,.header-tools .zoom-tools{min-height:48px}
+.zoom-tools .leaflet-control-zoom a{width:48px!important;height:48px!important;line-height:48px!important;font-size:26px!important}
+/* The place search and the plot tool share one row beneath Layers. */
+.map-find-row{display:flex;gap:2px;align-items:stretch}
+.map-find-row>.plot-place-toggle,.map-find-row>.place-search{flex:1 1 0;min-width:0}
+.header-tools .map-find-row button{min-width:0;width:100%;padding:6px 4px}
+.plot-place-toggle svg{width:18px;height:18px;flex:none}
+.masthead .header-tools .plot-place-toggle[aria-pressed=true]::before{border-color:#e9caa1;background:#2a251d}
+.map-tool-tray .map-find-row{min-width:96px}
+
+/* Event details, Published edits and Under review sit side by side in the title card and
+   never move: one opens at a time (name="brand-drop"), its panel hanging below the card. */
+.brand{position:relative}
+.brand-drops{display:flex;flex-wrap:wrap;gap:0 8px;margin-top:6px}
+.brand-drop{flex:0 0 auto;pointer-events:auto;font:12px/1.4 Arial,Helvetica,sans-serif}
+.brand-panel{position:absolute;left:-2px;right:0;top:100%;z-index:1;margin:0;padding:4px 16px 12px;border-left:2px solid var(--orange);background:#0b0c0b;box-shadow:0 10px 18px rgba(0,0,0,.35)}
+.brand-drop>summary{position:relative;isolation:isolate;display:flex;align-items:center;gap:6px;width:fit-content;min-height:44px;padding:6px 10px;color:var(--ink)}
+.brand-drop>summary::before{content:'';position:absolute;z-index:-1;inset:6px 0;border:1px solid #827563;background:#11110f;pointer-events:none}
+.brand-drop>summary::after{content:'';position:absolute;right:0;top:6px;width:9px;height:9px;background:linear-gradient(45deg,#746652 0 43%,#bba78a 44% 54%,#080908 55%);pointer-events:none}
+.brand-drop>summary:hover::before,.brand-drop[open]:not([data-closing])>summary::before{background:#27231c;border-color:#c1a47d}
+#publishedEditsFeed{margin-top:0}
+.brand-panel>.program-credits{margin:0}
+#pendingPlacesList{padding:0;margin:0;list-style:none;max-height:min(300px,45dvh);overflow:auto;overscroll-behavior:contain}
+#pendingPlacesList>li{border-top:1px solid var(--line);padding:4px 0}
+#pendingPlacesList button{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:0;background:none;color:var(--ink)}
+#pendingPlacesList button:hover{background:#27231c}
+#pendingPlacesList button span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+#pendingPlacesStatus{margin-top:8px;color:var(--muted)}
+#pendingPlacesStatus:empty{display:none}
+#pendingPlacesCount{background:#8a63c9;color:#fff}
+
+/* Plotting: a crosshair over the map and the plotted spot awaiting confirmation. */
+body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crosshair}
+.plot-spot{display:flex;align-items:center;justify-content:center;border:2px solid #ffcf94;border-radius:50%;background:#171510cc;box-shadow:0 0 0 3px #171510aa;color:#ffcf94;font:700 14px/1 Arial,Helvetica,sans-serif}
+.plot-confirm p{margin:4px 0;overflow-wrap:anywhere}
+.plot-confirm strong{display:block;font-size:14px}
+.plot-confirm .small{color:var(--muted)}
+.plot-confirm-actions{display:flex;gap:8px;margin-top:8px}
+.plot-confirm-actions button{min-height:40px;padding:6px 12px}
+
+/* iPhone Safari zooms the whole page when a field under 16px is focused, and stays zoomed. */
+@media (pointer:coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea{font-size:16px!important}
+}
+
+/* Taps on map controls act at once: Safari would otherwise read two quick taps on +/- as a page zoom. */
+.leaflet-control a,.leaflet-control button,.map-tool-tray a,.map-tool-tray button{touch-action:manipulation}
+
+/* Existing map controls grouped in reading and keyboard order: NYC, pin, Contributors. */
+#mapFooter{left:max(20px,env(safe-area-inset-left));display:flex;align-items:center;gap:4px}
+#mapFooter .recenter-map{position:relative;left:auto;bottom:auto}
+#mapFooter .plot-place-toggle{width:48px;min-width:48px;min-height:48px;padding:6px;touch-action:manipulation}
+#mapFooter .plot-place-toggle[aria-pressed=true]{border-color:var(--sun);background:#2a251d}
+.brand-drop>.review-hourglass{width:44px;min-height:44px;padding:6px;justify-content:center;color:var(--sun)}
+.brand-drop>.review-hourglass svg{width:28px;height:28px;flex:none}
+.brand-drop>.review-hourglass::before,.brand-drop>.review-hourglass::after,.review-hourglass>.disclosure-mark{display:none}
+.review-hourglass:hover,.brand-drop[open]>.review-hourglass{color:var(--ink)}
+.place-contributors{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+@media(max-width:760px){#mapFooter{left:max(12px,env(safe-area-inset-left))}}
+@media(max-width:520px){.contribution-navigation{bottom:calc(max(var(--dock-bottom),env(safe-area-inset-bottom)) + 52px)}}

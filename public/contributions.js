@@ -18,8 +18,8 @@
     if(drafts.length){local.append(el('h3','Earlier browser drafts'),el('p','Copy a draft into the form above to add it to the shared list.','small'));drafts.forEach(t=>local.append(taskCard(t)));}
   }
   async function loadSharedTasks(){
-    const status=byId('sharedTaskStatus');
-    try{sharedTasks=await taskClient.list();status.replaceChildren();renderTaskList();return true;}
+    const status=byId('sharedTaskStatus'),version=identityGeneration;
+    try{const tasks=await taskClient.list();if(version!==identityGeneration)return false;sharedTasks=tasks;status.replaceChildren();renderTaskList();return true;}
     catch(error){status.replaceChildren(el('span','Shared tasks unavailable'));if(error.status===401)await accessActions(status);return false;}
   }
   function restorePendingTask(){const task=taskClient.pendingTask();if(!task)return;for(const [id,key]of [['newTaskTitle','bounded_task'],['newTaskDescription','description'],['newTaskSection','section'],['newTaskSkill','skill_level'],['newTaskStatus','status']])byId(id).value=task[key];byId('createTaskResult').textContent='A shared save is pending. Retry this task to confirm it.';}
@@ -53,9 +53,10 @@
   const geoStatus = ['unresolved','approximate','located'];
   const geoMethods = ['unresolved','historic_map','address_match','gazetteer','contextual_estimate'];
   const boroughs = ['unknown','Bronx','Brooklyn','Manhattan','Queens','Staten Island'];
-  let dashboard = null, selectedSubmission = null, revisionOf = null, revisionOriginal = null, preview = null, pendingWrite = readPendingWrite(), busy = false, rowCounter = 0, connectionVersion = 0;
-  function readPendingWrite(){try{const value=JSON.parse(sessionStorage.getItem('hauntologies-pending-contribution-write')||'null');return value&&/^\/(submit|revise|triage|task|review|apply|verify|rollback)$/.test(value.path)&&typeof value.body?.idempotency_key==='string'?value:null;}catch{return null;}}
-  function retainWrite(value){pendingWrite=value;try{if(value)sessionStorage.setItem('hauntologies-pending-contribution-write',JSON.stringify(value));else sessionStorage.removeItem('hauntologies-pending-contribution-write');}catch{}}
+  let dashboard = null, selectedSubmission = null, revisionOf = null, revisionOriginal = null, preview = null, pendingWrite = readPendingWrite(), busy = false, rowCounter = 0, connectionVersion = 0, privateActor = null, dashboardRequest = 0, detailRequest = 0, identityGeneration = 0;
+  const privateImages=new Map();
+  function readPendingWrite(actor){try{const value=JSON.parse(sessionStorage.getItem(actor?'hauntologies-pending-contribution-write:'+actor:'hauntologies-pending-contribution-write')||'null');return value&&/^\/(submit|revise|triage|task|review|apply|verify|rollback)$/.test(value.path)&&typeof value.body?.idempotency_key==='string'?value:null;}catch{return null;}}
+  function retainWrite(value){pendingWrite=value;try{if(value)sessionStorage.setItem('hauntologies-pending-contribution-write:'+value.actor_id,JSON.stringify(value));else if(privateActor)sessionStorage.removeItem('hauntologies-pending-contribution-write:'+privateActor);}catch{}}
   const caps = () => dashboard?.capabilities || {};
   async function accessActions(root){
     const version=connectionVersion,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
@@ -64,16 +65,14 @@
       if(version!==connectionVersion||!response.ok)return;
       if(access.enabled===false){const pending=root.querySelector('[data-reconciliation]');root.textContent='Sign-in is not enabled yet';if(pending)root.append(pending);return;}
       if(access.enabled!==true||access.sign_in_url!=='/api/contributions/sign-in')return;
-      const pending=root.querySelector('[data-reconciliation]');root.textContent='Sign in to submit';if(pending)root.append(pending);
-      const link=el('a','Sign in');link.href=access.sign_in_url;link.target='_blank';link.rel='noopener noreferrer';
-      const retry=button('Retry',async()=>{retry.disabled=true;const data=await loadDashboard();await loadSharedTasks();if(data&&openTargetFailed&&openRequestedRecordId)await chooseOpenReference(openRequestedRecordId,openTargetLabel);if(data&&draftRevisionBlocked)await restoreRevisionDraft();retry.disabled=false;});
-      root.querySelector('[data-access-actions]')?.remove();const actions=el('span');actions.dataset.accessActions='true';actions.append(link,retry);root.append(actions);
+      const pending=root.querySelector('[data-reconciliation]');root.textContent='';if(pending)root.append(pending);
+      document.querySelectorAll('[data-access-actions]').forEach(node=>node.remove());const actions=el('span');actions.dataset.accessActions='true';actions.append(button('Sign in to contribute',()=>window.dispatchEvent(new CustomEvent('account-open-requested'))));byId('workflowConnection').append(actions);
     }catch{}finally{clearTimeout(timeout);}
   }
   function serviceFailure(error, retry){
     if(error.status===401||error.status===403)return;
     const root=byId('workflowConnection');root.textContent=error.message||'Submissions unavailable';
-    if(retry)root.append(document.createTextNode(' '),button('Retry',retry));
+
   }
   async function sessionActor(){
     const session=await api('/session');
@@ -85,9 +84,19 @@
     if(typeof request.actor_id!=='string'||!request.actor_id)throw Object.assign(new Error('Original account could not be confirmed'),{status:409});
     if(actor!==request.actor_id)throw Object.assign(new Error('Use the original account to retry this save'),{status:409});
   }
+  const signedOutMarker=actor=>'hauntologies-signed-out:'+actor;
+  const signedOutHere=actor=>{try{return !!localStorage.getItem(signedOutMarker(actor));}catch{return false;}};
   function clearPrivateView(message){
-    dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;
+    // After a sign-out in any tab the account's draft is removed, never saved again.
+    const endedKey=privateActor?draftStorageKey:null,signedOut=privateActor&&signedOutHere(privateActor);
+    if(signedOut)forgetDraft(endedKey);
+    if(privateActor){if(!signedOut)saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
+    dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
+    clearInterval(statusWatch?.timer);statusWatch=null;byId('contributionQueue').hidden=false;
+    window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:[]}}));
     byId('workflowConnection').textContent=message;byId('reviewCapabilityNotice').textContent='';
+    // Only when a session ended mid-edit; a signed-out page load keeps its own notice.
+    if(endedKey&&!signedOut&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
     byId('submissionDetail').replaceChildren();byId('submissionDetail').hidden=true;
     byId('contributionReceipt').replaceChildren();byId('contributionReceipt').hidden=true;
     byId('contributionTargetPick').replaceChildren(new Option('No records',''));byId('useContributionTarget').disabled=true;
@@ -209,7 +218,8 @@
     if(type==='entry_bundle'&&Object.prototype.hasOwnProperty.call(entry,'geo_status'))simpleDraft.geometry_kind=entry.geo_status==='unresolved'?'unknown':'point';
     if(Object.prototype.hasOwnProperty.call(entry,'dates'))simpleDraft.date_mode=entry.dates===null?'none':'provided';
     if(revisionOriginal&&['area_proposal','record_annotation'].includes(type))simpleDraft.payload_wording=entry[type==='record_annotation'?'text':'description'];
-    const summaryLabel=byId('contributionSummary').closest('label');if(summaryLabel?.firstChild?.nodeType===Node.TEXT_NODE)summaryLabel.firstChild.textContent=revisionOriginal&&['area_proposal','record_annotation'].includes(type)?'Summary':'Description';
+    // The accordion heading names the field; the label repeats it for screen readers only.
+    const summaryWord=revisionOriginal&&['area_proposal','record_annotation'].includes(type)?'Summary':'Description',summaryLabel=byId('contributionSummary').closest('label')?.querySelector('.sr-only'),summaryHeading=byId('freeformDescription')?.querySelector(':scope>summary');if(summaryLabel)summaryLabel.textContent=summaryWord;if(summaryHeading?.firstChild?.nodeType===Node.TEXT_NODE)summaryHeading.firstChild.textContent=summaryWord;
     if(type==='area_proposal'){simpleDraft.geo_basis=entry.geometry_basis||'';if(entry.geometry){simpleDraft.area_input='geojson';simpleDraft.geometry_json=JSON.stringify(entry.geometry,null,2);}}
     if(entry.entry_id)simpleEntryId=entry.entry_id;
     const root=byId('typedPayloadFields');root.replaceChildren(el('legend',simpleFlow()==='clarify'?'Clarify':'Place'));
@@ -270,8 +280,24 @@
   }
 
   // Intake stores the contributor's words; classification and plotting remain review work.
-  let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
-  const draftStorageKey='hauntologies-contribution-draft';let draftRevisionBlocked=null;
+  let openTargets=[],openRequestedRecordId='',openTargetLabel='',openTargetPending=false,openTargetFailed=false,openTargetStatus=0,openTargetLoad=null,openRequest=0,openTaskIds=[],openSourcesInitial='',openSourcesDisplayInitial='',openExplanationInitial='',openExplanationDisplayInitial='';
+  let draftStorageKey='hauntologies-contribution-draft:anonymous';let draftRevisionBlocked=null;
+  // Drafts outlive the tab: sign-in and email verification can continue in a new tab, and a
+  // session can expire mid-edit. Account drafts stay 14 days, signed-out drafts one day; both are
+  // cleared once the contribution is saved, can be discarded, and account drafts end at sign-out.
+  // Staged images stay in memory only.
+  const anonymousDraftKey='hauntologies-contribution-draft:anonymous',draftLifetime=key=>(key===anonymousDraftKey?1:14)*24*60*60*1000;
+  function readStoredDraft(key){
+    for(const store of [localStorage,sessionStorage]){try{const value=JSON.parse(store.getItem(key)||'null');if(value&&(!Number.isFinite(value.saved_at)||Date.now()-value.saved_at<draftLifetime(key)))return value;}catch{}}
+    return null;
+  }
+  function forgetDraft(key){for(const store of [localStorage,sessionStorage]){try{store.removeItem(key);}catch{}}}
+  function draftNotice(text,discard=false){
+    const notice=byId('draftNotice');if(!notice)return;notice.replaceChildren();notice.hidden=!text;if(!text)return;
+    notice.append(document.createTextNode(text));
+    if(discard){const control=button('Discard draft',()=>{forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);resetContributionForm();resetOpenContext();draftNotice('Draft discarded');},'textbutton');notice.append(' ',control);}
+  }
+  const draftTime=value=>Number.isFinite(value?.saved_at)?new Date(value.saved_at).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
   const isOpenForm=()=>!revisionOriginal||revisionOriginal.type==='open_proposal';
   const pointShape=point=>point&&typeof point.latitude==='number'&&typeof point.longitude==='number'&&Number.isFinite(point.latitude)&&Number.isFinite(point.longitude)&&Math.abs(point.latitude)<=90&&Math.abs(point.longitude)<=180;
   const pointForm=()=>isOpenForm()&&!revisionOriginal&&!revisionOf&&!draftRevisionBlocked&&byId('contributionPlaceMode').value==='new'&&!openRequestedRecordId&&!openTargets.length;
@@ -294,6 +320,7 @@
   }
   function showPoint(){const point=pointForm()?readPoint():null;byId('cancelContributionPoint').disabled=!pointFields().latitude&&!pointFields().longitude&&!byId('contributionLatitude').validity.badInput&&!byId('contributionLongitude').validity.badInput;window.dispatchEvent(new CustomEvent('contributions-point-changed',{detail:{point:point?{...point}:null}}));return point;}
   function setPointFields(point){byId('contributionLatitude').value=point?.latitude??'';byId('contributionLongitude').value=point?.longitude??'';}
+  function locationStatus(text,state=''){const status=byId('newLocationStatus');status.textContent=text;if(state)status.dataset.state=state;else delete status.dataset.state;}
   function canRequestPoint(){return pointForm()&&!pendingWrite&&!busy&&!imageBatch&&!imageBusy&&!imageProcessing;}
   window.ContributionPoint=Object.freeze({
     get:()=>{const point=pointForm()?readPoint():null;return point?{...point}:null;},
@@ -303,53 +330,81 @@
       const fields=pointFields(),hasInput=fields.latitude!==''||fields.longitude!==''||byId('contributionLatitude').validity.badInput||byId('contributionLongitude').validity.badInput;
       if(!replace&&hasInput&&!readPoint(false))return false;
       if(replace||!readPoint(false))setPointFields(point);
-      invalidatePreview();saveDraft();byId('draftTab').click();switchView('submissionView',false);byId('freeformLocation').open=true;showPoint();byId('contributionSummary').focus();return true;
+      invalidatePreview();saveDraft();byId('draftTab').click();switchView('submissionView',false);byId('freeformLocation').open=true;const placed=showPoint();byId('freeformDescription').open=true;
+      // Confirm the pin where the request was made, with the borough it falls in.
+      if(placed){const borough=window.NycGeometry?.findBorough(placed.latitude,placed.longitude);locationStatus('Pinned at '+placed.latitude.toFixed(5)+', '+placed.longitude.toFixed(5)+(borough?' in '+borough:''),'success');requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('contributions-point-pinned')));}
+      // Focus stays with whoever asked for the point, so the confirmation stays in view.
+      return true;
     }
   });
-  function draftValue(){return {version:1,explanation:byId('contributionSummary').value,sources:byId('freeformSources').value,attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
-  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude)sessionStorage.setItem(draftStorageKey,JSON.stringify(value));else sessionStorage.removeItem(draftStorageKey);}catch{}}
+  function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
+  function draftValue(){return {version:1,place_text:byId('contributionPlace')?.value||'',object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
+  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.place_text||value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
-      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets))sessionStorage.removeItem(draftStorageKey);
+      const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets)){forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);draftNotice('');
+        // A saved new place leaves an empty form, so the next one cannot inherit its title or place.
+        if(!revisionOf){resetOpenContext();byId('contributionSummary').value='';if(byId('contributionPlace'))byId('contributionPlace').value='';}}
     }catch{}
   }
   function restoreDraftFields(value){
+    byId('contributionObjectTitle').value=typeof value.object_title==='string'?value.object_title:'';byId('extraSources').replaceChildren();
     byId('contributionSummary').value=value.explanation;byId('freeformSources').value=value.sources;byId('contributionAttributes').replaceChildren();for(const attribute of value.attributes)addAttribute(attribute);
     const coordinates=value.geometry?.type==='Point'?value.geometry.coordinates:null,point=Array.isArray(coordinates)&&coordinates.length===2?{latitude:coordinates[1],longitude:coordinates[0]}:null;setPointFields(pointShape(point)?point:null);
     if(value.point_fields&&['latitude','longitude'].every(key=>typeof value.point_fields[key]==='string'&&value.point_fields[key].length<=64)){byId('contributionLatitude').value=value.point_fields.latitude;byId('contributionLongitude').value=value.point_fields.longitude;}
     byId('contributionPlaceMode').value=value.place_mode;openRequestedRecordId=value.record_id;openTargetLabel=value.title;showOpenReference();
+    if(byId('contributionPlace')&&typeof value.place_text==='string'&&value.place_text.length<=300)byId('contributionPlace').value=value.place_text;
   }
   async function restoreRevisionDraft(){
-    if(!draftRevisionBlocked)return;const expected=draftRevisionBlocked,value=draftValue();
-    try{const data=await api('/submission?id='+encodeURIComponent(expected.id));if(data.submission?.revision!==expected.revision){byId('workflowConnection').textContent='Submission changed. Open its latest revision from Review';return;}
+    if(!draftRevisionBlocked)return;const version=identityGeneration,actor=privateActor,expected=draftRevisionBlocked,value=draftValue();
+    try{const data=await api('/submission?id='+encodeURIComponent(expected.id));if(version!==identityGeneration||actor!==privateActor)return;if(data.submission?.revision!==expected.revision){byId('workflowConnection').textContent='Submission changed. Open its latest revision from Review';return;}
       if(data.submission.type!=='open_proposal'||!data.submission.is_own)return;
       draftRevisionBlocked=null;loadRevision(data.submission);restoreDraftFields(value);saveDraft();
     }catch(error){serviceFailure(error,restoreRevisionDraft);}
   }
+  const validDraft=value=>!(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string');
+  const draftBody=value=>JSON.stringify([value?.place_text||'',value?.object_title||'',value?.explanation||'',value?.sources||'',value?.attributes||[],value?.point_fields||{},value?.record_id||'',value?.place_mode||'new']);
+  const draftHasContent=value=>!!(value&&(value.place_text||value.object_title||value.explanation||value.sources||value.attributes?.length||value.record_id||value.point_fields?.latitude||value.point_fields?.longitude));
+  const sameDraft=(a,b)=>draftHasContent(a)&&draftBody(a)===draftBody(b);
+  function applyDraft(value,label){
+    if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
+    restoreDraftFields(value);draftNotice(label+(draftTime(value)?' from '+draftTime(value):'')+'.',true);if(draftRevisionBlocked){restoreRevisionDraft();}
+    else if(value.record_id)chooseOpenReference(value.record_id,value.title);
+  }
+  // A draft written while signed out may belong to someone else on a shared computer, so it is
+  // offered rather than filled in. Restoring it while signed in moves it to that account.
+  function offerDraft(value){
+    const notice=byId('draftNotice');if(!notice)return;notice.replaceChildren(document.createTextNode('An unsent draft'+(draftTime(value)?' from '+draftTime(value):'')+' is on this device. '));notice.hidden=false;
+    notice.append(button('Restore draft',()=>{applyDraft(value,'Restored your unsent draft');if(draftStorageKey!==anonymousDraftKey){saveDraft();forgetDraft(anonymousDraftKey);}},'textbutton'),' ',button('Discard',()=>{forgetDraft(anonymousDraftKey);draftNotice('Draft discarded');},'textbutton'));
+  }
   function restoreDraft(){
-    try{const value=JSON.parse(sessionStorage.getItem(draftStorageKey)||'null');if(!value||value.version!==1||typeof value.explanation!=='string'||value.explanation.length>15000||typeof value.sources!=='string'||value.sources.length>30000||!Array.isArray(value.attributes)||value.attributes.length>20||value.attributes.some(a=>!a||typeof a.name!=='string'||a.name.length>80||typeof a.value!=='string'||a.value.length>4000)||!['new','existing'].includes(value.place_mode)||typeof value.record_id!=='string'||value.record_id.length>200||typeof value.title!=='string')return;
-      if(value.revision&&typeof value.revision.id==='string'&&Number.isInteger(value.revision.revision))draftRevisionBlocked=value.revision;
-      restoreDraftFields(value);if(draftRevisionBlocked){restoreRevisionDraft();}
-      else if(value.record_id)chooseOpenReference(value.record_id,value.title);
+    try{
+      const signedOut=draftStorageKey===anonymousDraftKey,own=signedOut?null:readStoredDraft(draftStorageKey),anonymous=readStoredDraft(anonymousDraftKey);
+      // Signing in from this tab: the form already holds the signed-out draft, so it stays with the account.
+      // Only a non-empty form that matches the newer signed-out draft is adopted, written directly
+      // so an empty form can never overwrite the account's own draft.
+      if(anonymous&&!signedOut&&validDraft(anonymous)&&sameDraft(anonymous,draftValue())&&(!own||(anonymous.saved_at||0)>=(own.saved_at||0))){try{localStorage.setItem(draftStorageKey,JSON.stringify(anonymous));}catch{}forgetDraft(anonymousDraftKey);return;}
+      if(own&&validDraft(own))applyDraft(own,'Restored your unsent draft');
+      if(anonymous&&validDraft(anonymous)&&!sameDraft(anonymous,draftValue())&&(!own||(anonymous.saved_at||0)>(own.saved_at||0)))offerDraft(anonymous);
     }catch{}
   }
   function showOpenReference(){
     const visible=!!(openRequestedRecordId||openTargets.length||openTargetPending||openTargetFailed);
-    byId('freeformRecordContext').hidden=true;
+    byId('freeformRecordContext').hidden=!visible;
     byId('freeformRecordContext').dataset.recordId=openRequestedRecordId||openTargets[0]?.record_id||'';
     byId('freeformRecordLabel').textContent=openTargetLabel||openRequestedRecordId||openTargets[0]?.record_id||'';
     byId('freeformRecordContext').setAttribute('aria-busy',String(openTargetPending));
     if(visible)byId('contributionPlaceMode').value='existing';
     byId('freeformPlacePicker').hidden=byId('contributionPlaceMode').value!=='existing';
-    byId('freeformLocation').hidden=!pointForm();populatePlaceChoices();showPoint();
+    byId('freeformLocation').hidden=!pointForm();byId('newPlaceLocation').hidden=!pointForm();byId('contributionPlacePlate').hidden=!pointForm();byId('freeformTitle').hidden=byId('contributionPlaceMode').value==='existing';populatePlaceChoices();showPoint();
   }
   function resetOpenContext(){
     ++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;openTaskIds=[];openSourcesInitial='';openSourcesDisplayInitial='';openExplanationInitial='';openExplanationDisplayInitial='';
-    byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;byId('freeformLocation').open=false;setPointFields(null);byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
+    byId('contributionObjectTitle').value='';byId('extraSources').replaceChildren();byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;byId('freeformLocation').open=false;setPointFields(null);byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
   }
   function populatePlaceChoices(){
     const select=byId('freeformPlaceSelect'),records=typeof allRecords==='function'?allRecords():window.NYC_INVENTORY?.records||[];
-    const entries=new Map(records.filter(r=>r?.id&&r.status!=='draft'&&!r.hosted_pending).map(r=>[r.id,r.title||r.id]));
+    const entries=new Map(records.filter(r=>r?.id&&r.status!=='draft'&&!r.hosted_pending&&window.PlaceInput.matches(r,byId('existingPlaceSearch').value)).map(r=>[r.id,r.title||r.id]));
     if(openRequestedRecordId&&!entries.has(openRequestedRecordId))entries.set(openRequestedRecordId,openTargetLabel||openRequestedRecordId);
     select.replaceChildren(new Option('Choose a place',''));for(const [id,title] of [...entries].sort((a,b)=>a[1].localeCompare(b[1])))select.append(new Option(title,id));select.value=openRequestedRecordId||openTargets[0]?.record_id||'';select.title=select.selectedOptions[0]?.textContent||'';
   }
@@ -361,27 +416,57 @@
     const id='attribute-'+(++rowCounter);name.id=id+'-name';content.id=id+'-value';const nameLabel=el('label','Name'),valueLabel=el('label','Value');nameLabel.htmlFor=name.id;valueLabel.htmlFor=content.id;nameLabel.append(name);valueLabel.append(content);
     row.append(nameLabel,valueLabel,button('Remove',()=>{row.remove();byId('addContributionAttribute').disabled=false;invalidatePreview();saveDraft();},'textbutton'));root.append(row);byId('addContributionAttribute').disabled=root.children.length>=20;return name;
   }
-  async function chooseOpenReference(id,title=''){
-    const request=++openRequest;openTargets=[];openRequestedRecordId=id;openTargetPending=true;openTargetFailed=false;openTargetLabel=typeof title==='string'?title:'';showOpenReference();invalidatePreview();renderErrors([]);saveDraft();
+  function chooseOpenReference(id,title=''){openTargetLoad=loadOpenReference(id,title);return openTargetLoad;}
+  async function loadOpenReference(id,title){
+    const request=++openRequest;openTargetStatus=0;openTargets=[];openRequestedRecordId=id;openTargetPending=true;openTargetFailed=false;openTargetLabel=typeof title==='string'?title:'';showOpenReference();invalidatePreview();renderErrors([]);saveDraft();
     try{const data=await api('/target?id='+encodeURIComponent(id));if(request!==openRequest)return;const target=data.target;
       if(!target||target.record_id!==id||!Number.isInteger(target.expected_version)||typeof target.expected_hash!=='string')throw new Error('Reference unavailable');
       openTargets=[{record_id:target.record_id,expected_version:target.expected_version,expected_hash:target.expected_hash}];openTargetLabel=target.title||target.record_id;openTargetPending=false;showOpenReference();
-    }catch(error){if(request!==openRequest)return;openTargetPending=false;openTargetFailed=true;showOpenReference();serviceFailure(error,()=>chooseOpenReference(id,openTargetLabel));}
+    }catch(error){if(request!==openRequest)return;openTargetPending=false;openTargetFailed=true;openTargetStatus=error.status||0;showOpenReference();serviceFailure(error,()=>chooseOpenReference(id,openTargetLabel));}
   }
   let stagedImages=[],imageBatch=null,imageBusy=false,imageProcessing=false;
   const attachmentId=value=>typeof value==='string'&&/^watt_[0-9a-f-]{36}$/.test(value);
-  const imageFields=[['caption','Caption',2000],['alt','Description',1000],['credit','Credit',1000],['source_url','Source link',2048],['rights','Rights',2000]];
+  const imageFields=[['caption','Caption',2000],['alt','Alt text',1000],['credit','Credit',1000],['source_url','Source link',2048],['rights','Rights',2000]];
   function imageStatus(message,retry=false){
     byId('contributionImageProgress').hidden=!message;byId('contributionImageStatus').textContent=message;
     byId('retryContributionImages').hidden=!retry;byId('retryContributionImages').disabled=imageBusy;
   }
+  // Previews are local object URLs, released once their image leaves the list.
+  const imagePreviews=new Map();
+  const attributionHref=value=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:'';}catch{return '';}};
+  function imageField(entry,index,key,label,max,parent){
+    const input=el(key==='caption'||key==='alt'?'textarea':'input');input.id='image-'+index+'-'+key;input.dataset.imageField=key;input.value=entry.metadata[key]||'';input.maxLength=max;input.disabled=imageBusy||!!entry.pending||!!entry.receipt;
+    if(input.tagName==='TEXTAREA')input.rows=2;else{input.type=key==='source_url'?'url':'text';if(key==='source_url')input.placeholder='https://';}
+    const wrap=el('label',label);wrap.htmlFor=input.id;wrap.append(input);parent.append(wrap);
+    input.addEventListener('input',()=>{entry.metadata[key]=input.value;if(imageBatch&&!entry.pending)imageStatus('Contribution saved. Image not saved',true);});
+  }
+  // Once saved, credit and source read as one attribution line, linked when the source is a web address.
+  function attribution(entry){
+    const line=el('p','Attribution: ','staged-image-attribution'),credit=(entry.metadata.credit||'').trim(),href=attributionHref((entry.metadata.source_url||'').trim());
+    if(href){const link=el('a',credit||new URL(href).hostname);link.href=href;link.target='_blank';link.rel='noopener noreferrer';line.append(link);}
+    else line.append(document.createTextNode(credit||'None given'));
+    return line;
+  }
   function renderStagedImages(){
     const root=byId('stagedContributionImages');root.replaceChildren();
     byId('contributionImages').disabled=imageBusy||imageProcessing||!!imageBatch||stagedImages.length>=3;
+    for(const [entry,url] of imagePreviews)if(!stagedImages.includes(entry)){URL.revokeObjectURL(url);imagePreviews.delete(entry);}
     for(const [index,entry] of stagedImages.entries()){
-      const card=el('div',undefined,'staged-image');card.append(el('p',entry.file.name),el('p',entry.receipt?'Uploaded':'Not uploaded','small'),el('p','Metadata removed','small'));
+      if(!imagePreviews.has(entry))imagePreviews.set(entry,URL.createObjectURL(entry.file));
+      const card=el('div',undefined,'staged-image'),board=el('figure',undefined,'staged-image-board'),photo=el('img');
+      photo.src=imagePreviews.get(entry);photo.alt=entry.metadata.alt||'';photo.width=entry.width;photo.height=entry.height;photo.decoding='async';
+      // The person's own filename; the uploaded derivative is renamed by design.
+      board.append(photo,el('figcaption',(entry.name||entry.file.name)+' · '+entry.width+' × '+entry.height));
+      const state=entry.receipt?'saved':entry.pending?'saving':'ready';
+      const status=el('p',state==='saved'?'Uploaded with your contribution':state==='saving'?'Uploading…':'Not uploaded yet. Images upload when you submit, so nothing leaves this device before then. Camera and location metadata have been removed.','staged-image-status');status.dataset.state=state;
+      if(entry.resized)status.append(document.createTextNode(' Reduced from '+entry.sourceWidth+' × '+entry.sourceHeight+' to fit the 1 MB upload limit.'));
+      card.append(board,status);
       const details=disclosure('Details');
-      for(const [key,label,max] of imageFields){const input=el(key==='caption'||key==='alt'?'textarea':'input');input.id='image-'+index+'-'+key;input.dataset.imageField=key;input.value=entry.metadata[key]||'';input.maxLength=max;input.disabled=imageBusy||!!entry.pending||!!entry.receipt;if(input.tagName==='TEXTAREA')input.rows=2;else input.type=key==='source_url'?'url':'text';const wrap=el('label',label);wrap.htmlFor=input.id;wrap.append(input);details.append(wrap);input.addEventListener('input',()=>{entry.metadata[key]=input.value;if(imageBatch&&!entry.pending)imageStatus('Contribution saved. Image not saved',true);});}
+      for(const [key,label,max] of imageFields)imageField(entry,index,key,label,max,details);
+      // After upload, Details also links the attribution and the stored image.
+      const stored=entry.receipt?.result?.attachment_id;
+      if(entry.receipt)details.append(attribution(entry));
+      if(attachmentId(stored)){const link=el('a','Download uploaded image','staged-image-link');link.href=apiRoot+'/attachment?id='+encodeURIComponent(stored);link.target='_blank';link.rel='noopener';details.append(link);}
       card.append(details);
       if(!entry.receipt&&!entry.pending&&!imageBusy){card.append(button('Remove',()=>{stagedImages=stagedImages.filter(item=>item!==entry);renderStagedImages();if(imageBatch&&!stagedImages.some(item=>!item.receipt)){imageBatch=null;stagedImages=[];renderStagedImages();imageStatus('Contribution saved');}else if(imageBatch)imageStatus('Contribution saved. Image not saved',true);},'textbutton'));}
       root.append(card);
@@ -391,20 +476,22 @@
     const input=byId('contributionImages'),files=[...input.files];input.value='';if(!files.length||imageBusy||imageBatch)return;
     const error=byId('contributionImageError');error.hidden=true;error.textContent='';
     if(stagedImages.length+files.length>3){error.textContent='Choose up to 3 images';error.hidden=false;return;}
+    const owner=privateActor,generation=identityGeneration,images=stagedImages;
     imageProcessing=true;byId('previewContribution').disabled=true;invalidatePreview();renderStagedImages();
-    try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');stagedImages.push({file:prepared.file,width:prepared.width,height:prepared.height,metadata:{rights:'unknown'},pending:null,receipt:null});}}
-    catch(failure){error.textContent=failure.message||'Image could not be prepared';error.hidden=false;}
-    finally{imageProcessing=false;byId('previewContribution').disabled=false;renderStagedImages();}
+    try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');images.push({file:prepared.file,name:file.name,width:prepared.width,height:prepared.height,resized:prepared.resized===true,sourceWidth:prepared.sourceWidth,sourceHeight:prepared.sourceHeight,metadata:{rights:'unknown'},pending:null,receipt:null});}}
+    catch(failure){if(generation!==identityGeneration||owner!==privateActor)return;error.textContent=failure.message||'Image could not be prepared';error.hidden=false;}
+    finally{imageProcessing=false;byId('previewContribution').disabled=busy;renderStagedImages();}
   }
   async function attachmentRequest(entry){
-    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000),pending=entry.pending,body=new FormData();
-    body.set('submission_id',imageBatch.submission_id);body.set('expected_revision',String(pending.expected_revision));body.set('idempotency_key',pending.idempotency_key);body.set('metadata_json',pending.metadata_json);body.set('image',entry.file,entry.file.name);
+    const batch=imageBatch;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000),pending=entry.pending,body=new FormData();
+    body.set('submission_id',batch.submission_id);body.set('expected_revision',String(pending.expected_revision));body.set('idempotency_key',pending.idempotency_key);body.set('metadata_json',pending.metadata_json);body.set('image',entry.file,entry.file.name);
     try{
-      const response=await fetch(apiRoot+'/attachment',{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',body,signal:controller.signal});
+      const response=await fetch(apiRoot+'/attachment',{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',headers:{'X-Hauntologies-Actor':batch.actor_id},body,signal:controller.signal});
       let data;try{data=await response.json();}catch{throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});}
       if(!response.ok){if(response.status===401||response.status===403){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)await accessActions(byId('workflowConnection'));}throw Object.assign(new Error(typeof data.error==='string'?data.error:'Image not saved'),{status:response.status});}
+      const confirmedActor=await sessionActor();if(imageBatch!==batch||privateActor!==batch.actor_id||confirmedActor!==batch.actor_id)throw Object.assign(new Error('Account changed'),{status:409});
       const receipt=data.receipt,result=receipt?.result;
-      if(typeof receipt?.id!=='string'||!receipt.id||receipt.action!=='attachment'||result?.submission_id!==imageBatch.submission_id||result.revision!==pending.expected_revision+1||!attachmentId(result.attachment_id)||data.submission?.id!==imageBatch.submission_id||!Number.isInteger(data.submission.revision)||data.submission.revision<result.revision)throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});
+      if(typeof receipt?.id!=='string'||!receipt.id||receipt.action!=='attachment'||result?.submission_id!==batch.submission_id||result.revision!==pending.expected_revision+1||!attachmentId(result.attachment_id)||data.submission?.id!==batch.submission_id||!Number.isInteger(data.submission.revision)||data.submission.revision<result.revision)throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});
       const ref=data.attachment,expectedMetadata={rights:'unknown',...JSON.parse(pending.metadata_json)};
       const equalMetadata=value=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===Object.keys(expectedMetadata).length&&Object.entries(expectedMetadata).every(([key,valueText])=>value[key]===valueText);
       const referenceShape=value=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')==='attachment_id,byte_length,height,media_type,metadata,sha256,width'&&value.attachment_id===result.attachment_id&&typeof value.sha256==='string'&&/^[a-f0-9]{64}$/.test(value.sha256)&&Number.isInteger(value.byte_length)&&value.byte_length>0&&value.byte_length<=1048576&&['image/jpeg','image/png','image/webp'].includes(value.media_type)&&value.media_type===entry.file.type&&Number.isInteger(value.width)&&Number.isInteger(value.height)&&value.width>0&&value.height>0&&value.width<=8192&&value.height<=8192&&value.width*value.height<=16777216&&value.width===entry.width&&value.height===entry.height&&equalMetadata(value.metadata);
@@ -420,25 +507,34 @@
     await uploadImages();
   }
   async function uploadImages(){
-    if(!imageBatch||imageBusy)return;imageBusy=true;renderStagedImages();imageStatus('Saving images');
+    if(!imageBatch||imageBusy)return;const batch=imageBatch,images=stagedImages,generation=identityGeneration;imageBusy=true;renderStagedImages();imageStatus('Saving images');
     try{
-      const actor=await sessionActor();if(actor!==imageBatch.actor_id)throw Object.assign(new Error('Use the original account to retry images'),{accountMismatch:true});
-      for(const entry of stagedImages){
+      const actor=await sessionActor();if(actor!==batch.actor_id||imageBatch!==batch)throw Object.assign(new Error('Use the original account to retry images'),{accountMismatch:true});
+      for(const entry of images){
+        if(imageBatch!==batch||generation!==identityGeneration)return;
         if(entry.receipt)continue;
         if(!entry.pending)entry.pending={idempotency_key:crypto.randomUUID(),expected_revision:imageBatch.revision,metadata_json:JSON.stringify(entry.metadata)};
         renderStagedImages();
-        const response=await attachmentRequest(entry);entry.receipt=response.receipt;entry.pending=null;imageBatch.revision=response.submission.revision;
+        const response=await attachmentRequest(entry);entry.receipt=response.receipt;entry.pending=null;batch.revision=response.submission.revision;
         showReceipt(response.submission,response);renderStagedImages();
       }
       stagedImages=[];imageBatch=null;renderStagedImages();imageStatus('Images saved');
     }catch(error){
-      const entry=stagedImages.find(item=>!item.receipt),definite=!!error.status&&error.status<500;
+      if(imageBatch!==batch||generation!==identityGeneration)return;
+      const entry=images.find(item=>!item.receipt),definite=!!error.status&&error.status<500;
       if(entry&&definite&&!entry.uncertain&&![401,403,409].includes(error.status))entry.pending=null;
       if(entry&&(error.uncertain||!error.status&&!error.accountMismatch||error.status>=500))entry.uncertain=true;
-      const blocked=[400,403,409,413,415].includes(error.status);
+      if(error.status===409&&error.message==='revision_conflict'&&entry){
+        const data=await api('/submission?id='+encodeURIComponent(batch.submission_id));
+        const confirmedActor=await sessionActor();if(imageBatch!==batch||generation!==identityGeneration||confirmedActor!==batch.actor_id)return;
+        batch.revision=data.submission.revision;entry.pending=null;entry.uncertain=false;showSavedReadback(data.submission);
+        imageStatus('Contribution changed. Review the saved contribution, then resume the image upload.',true);return;
+      }
+      if(entry&&error.status===409&&['attachment_limit','attachment_quota'].includes(error.message)){entry.pending=null;entry.uncertain=false;}
+      const blocked=[400,403,413,415].includes(error.status)||['attachment_limit','attachment_quota'].includes(error.message);
       imageStatus(error.accountMismatch?'Contribution saved. Use the original account to retry images':error.status===409?'Contribution saved. Review it before retrying images':'Contribution saved. Image not saved',!blocked);
       if(error.status===401){byId('retryContributionImages').hidden=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);try{const response=await fetch('/api/access-status',{credentials:'same-origin',cache:'no-store',signal:controller.signal});const access=await response.json();byId('retryContributionImages').hidden=!(response.ok&&access.enabled===true&&access.sign_in_url==='/api/contributions/sign-in');}catch{}finally{clearTimeout(timer);}}
-    }finally{imageBusy=false;renderStagedImages();byId('retryContributionImages').disabled=false;}
+    }finally{imageBusy=false;if(imageBatch===batch||generation===identityGeneration){renderStagedImages();byId('retryContributionImages').disabled=false;}}
   }
   function renderPrivateImages(root,attachments){
     const list=el('div');for(const [index,ref] of (attachments||[]).entries()){
@@ -448,7 +544,8 @@
   }
   byId('contributionImages').addEventListener('change',stageImages);
   byId('retryContributionImages').addEventListener('click',uploadImages);
-  window.addEventListener('beforeunload',event=>{if(stagedImages.some(entry=>!entry.receipt)){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if((stagedImages.some(entry=>!entry.receipt)||[...privateImages.values()].some(saved=>saved.stagedImages.some(entry=>!entry.receipt)))){event.preventDefault();event.returnValue='';}});
+  const placeTyped=()=>(byId('contributionPlace')?.value||'').trim().slice(0,300);
   function buildIntakeEnvelope(){
     const explanation=revisionOriginal&&byId('contributionSummary').value===openExplanationDisplayInitial?openExplanationInitial:byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
@@ -460,10 +557,16 @@
     const prior=revisionOriginal?structuredClone(revisionOriginal):null;
     const payload=prior?prior.payload:{explanation,geometry:pointForm()?pointGeometry():null};
     payload.explanation=explanation;
-    const sourcesText=byId('freeformSources').value;
+    const sourcesText=sourceText();
     if(!prior||sourcesText!==openSourcesDisplayInitial)payload.sources_text=sourcesText===''?null:sourcesText;
     const attributes=attributeValues();if(attributes.length||Object.hasOwn(payload,'attributes'))payload.attributes=attributes;
-    return prior?{...prior,summary:explanation,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title:'Contribution',summary:explanation,public_credit:{consent:false,label:''},sources:[],attachments:[],targets:structuredClone(openTargets),payload};
+    // A place typed but never picked from the list is kept as words, not dropped.
+    // A pinned point keeps the name shown on its plate (an address, intersection or cross streets),
+    // so the map and reviewers can say where it is without coordinates.
+    const placeText=payload.geometry?text(byId('contributionPlaceName')?.textContent).trim().slice(0,300):placeTyped();if(!prior&&placeText&&!openTargets.length&&!openRequestedRecordId)payload.location_text=placeText;
+    // Title is shown for new places only; a title typed before choosing an existing place is not sent.
+    const title=(byId('freeformTitle')?.hidden?'':byId('contributionObjectTitle').value.trim())||prior?.title||'Contribution';
+    return prior?{...prior,title,summary:explanation,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title,summary:explanation,public_credit:{consent:false,label:''},sources:[],attachments:[],targets:structuredClone(openTargets),payload};
   }
   function buildEnvelope(){
     return buildIntakeEnvelope();
@@ -500,8 +603,7 @@
     if(isOpenForm()){
       if(path==='summary'||path==='payload.explanation')return byId('contributionSummary');
       if(path==='payload.sources_text')return byId('freeformSources');
-      if(path==='payload.geometry'||path.startsWith('payload.geometry.'))return byId('contributionLatitude');
-      if(path==='targets'||path.startsWith('targets.'))return byId('freeformPlaceSelect');
+      if(path==='payload.geometry'||path.startsWith('payload.geometry.')||path==='targets'||path.startsWith('targets.'))return byId('contributionPlace');
       const attribute=path.match(/^payload\.attributes\.(\d+)(?:\.(name|value))?$/);if(attribute)return byId('contributionAttributes').children[Number(attribute[1])]?.querySelector('[data-attribute="'+(attribute[2]||'name')+'"]');
       return null;
     }
@@ -520,14 +622,14 @@
   async function api(path,body){
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{
-    const response=await fetch(apiRoot+path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
+    const response=await fetch(apiRoot+path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json',...(privateActor?{'X-Hauntologies-Actor':privateActor}:{})}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
     let data;try{data=await response.json();}catch{throw Object.assign(new Error('The contribution service returned an unreadable response.'),{status:response.status,uncertain:true});}
     if(!response.ok){if(response.status===401||response.status===403){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
     }finally{clearTimeout(timeout);}
   }
   function empty(container,message){container.replaceChildren(el('p',message,'empty'));}
   function switchView(id,focus=true){
-    const title=byId('sidecarTitle');if(title)title.textContent=({taskView:'Tasks',submissionView:'Submit',reviewView:'Review'})[id]||title.textContent;
+    const title=byId('sidecarTitle');if(title)title.textContent=({taskView:'Tasks',submissionView:'Contribute',reviewView:'Review'})[id]||title.textContent;
     document.querySelectorAll('.workflow-view').forEach(n=>n.hidden=n.id!==id);document.querySelectorAll('[data-workflow-view]').forEach(b=>{const active=b.dataset.workflowView===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
     if(focus)byId(id).querySelector('h3')?.focus();
   }
@@ -536,7 +638,16 @@
   function labeledControl(label,input){const node=el('label');node.append(el('span',label),input);return node;}
   function resetContributionForm(){byId('typedContributionForm').reset();['submissionSources','submissionTargets','submissionAttachments','targetSnapshot'].forEach(id=>byId(id).replaceChildren());byId('publicCreditLabel').disabled=true;byId('useContributionTarget').disabled=true;renderErrors([]);}
 
-  function applyDashboard(data){dashboard=data;sharedTasks=data.tasks||sharedTasks;connectionVersion++;
+  // The contributor's own unpublished places, for the map layer only they see.
+  function ownPlaces(submissions){
+    return submissions.filter(s=>s.is_own&&!['withheld','merged'].includes(s.status)).flatMap(s=>{
+      try{const g=JSON.parse(s.raw_json).payload?.geometry;const c=g?.type==='Point'?g.coordinates:null;
+        return Array.isArray(c)&&c.length===2&&c.every(Number.isFinite)?[{id:s.id,title:s.title||'Your contribution',status:s.status,latitude:c[1],longitude:c[0]}]:[];}catch{return [];}
+    });
+  }
+  let dashboardLoadedAt=0;
+  function applyDashboard(data){dashboard=data;sharedTasks=data.tasks||sharedTasks;connectionVersion++;dashboardLoadedAt=Date.now();
+    window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:ownPlaces(data.submissions||[])}}));
     byId('workflowConnection').textContent=caps().can_submit?'':'Read-only';
     byId('reviewCapabilityNotice').textContent=caps().independent_review_available?'':'Independent reviewer required';
     const targetSelect=byId('contributionTargetPick');targetSelect.replaceChildren();const first=el('option',(data.targets||[]).length?'Choose a record':'No records');first.value='';targetSelect.append(first);(data.targets||[]).forEach((target,index)=>{const option=el('option',target.title);option.value=String(index);targetSelect.append(option);});byId('useContributionTarget').disabled=true;
@@ -544,9 +655,14 @@
     const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!caps().can_submit||busy||!!pendingWrite||preview?.result?.validation?.valid!==true;
     if(pendingWrite)showReconciliation();
   }
-  async function loadDashboard(){try{const data=await api('/dashboard');applyDashboard(data);return data;}catch(error){clearPrivateView(error.status===401?'Submissions unavailable':'Review unavailable');await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
+  async function loadDashboard(){const request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest)return null;
+    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();}
+    const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
+   }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
-  function validationView(validation){const root=el('div',undefined,'validation-result');root.append(el('strong',validation?.valid?'Valid':'Check fields'));['errors','warnings'].forEach(kind=>{if(validation?.[kind]?.length){root.append(el('h4',kind==='errors'?'Errors':'Warnings'));const list=el('ul');validation[kind].forEach(e=>list.append(el('li',typeof e==='string'?e:e.message||pretty(e))));root.append(list);}});return root;}
+  // Only problems a person can act on; a valid submission shows nothing, and the server's
+  // standing review notice is not repeated on every screen.
+  function validationView(validation){if(validation?.valid)return document.createDocumentFragment();const root=el('div',undefined,'validation-result');root.append(el('strong','Check these fields'));const list=el('ul');(validation?.errors||[]).forEach(e=>list.append(el('li',typeof e==='string'?e:e.message||pretty(e))));if(!list.children.length)list.append(el('li','This submission could not be checked.'));root.append(list);return root;}
   function diffView(diff){const root=el('details',undefined,'field-diff workflow-details');root.append(el('summary','Changes'));if(!diff||Array.isArray(diff)&&!diff.length){root.append(el('p','No data changes','small'));return root;}
     const changes=Array.isArray(diff)?diff:[diff];changes.forEach(change=>{const row=el('div',undefined,'diff-row');row.append(el('strong',change.field||change.path||change.record_id||'Proposed change'));const pair=el('div',undefined,'diff-pair');[['Before',change.before],['After',change.after]].forEach(([label,value])=>{const cell=el('div');cell.append(el('small',label),el('pre',value===undefined?'Not specified':pretty(value)));pair.append(cell);});row.append(pair);if(change.field===undefined&&change.before===undefined&&change.after===undefined)row.append(rawDisclosure('Details',change));root.append(row);});return root;}
   function editorialChecks(submission){const root=el('div',undefined,'editorial-checks');root.append(el('h4','Checks'));const checks=submission?.approval?.checks||submission?.checks||{};const list=el('dl',undefined,'workflow-metadata');['evidence_check','geography_check','rights_check','duplicate_check'].forEach(k=>list.append(el('dt',k.replace('_check','')),el('dd',checks[k]||submission?.approval?.[k]||'pending')));list.append(el('dt','Privacy review'),el('dd',checks.privacy_check||submission?.approval?.privacy_check||submission?.approval?.privacy_review||'pending'));root.append(list);return root;}
@@ -556,7 +672,7 @@
     const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3','Preview'));root.firstChild.id='previewContributionTitle';
     if(envelope.type==='open_proposal'){
       root.append(intakeText(envelope.payload.explanation));if(result.local)root.append(el('p','Local preview','small'));
-      const location=locationDetails(envelope.payload);if(location)root.append(location);
+      const location=locationDetails(envelope.payload);if(location)root.append(location);if(envelope.payload.location_text)root.append(metadata([['Place',envelope.payload.location_text]]));
       if(envelope.payload.attributes?.length)root.append(disclosure('Details',metadata(envelope.payload.attributes.map(a=>[a.name,a.value]))));
       if(openTargetLabel)root.append(el('p',openTargetLabel));
       if(envelope.payload.sources_text)root.append(rawDisclosure('Sources',envelope.payload.sources_text));
@@ -567,7 +683,16 @@
     }else{
       root.append(intakeText(envelope.summary),el('p','Review only','small'),validationView(result.validation),diffView(result.diff),rawDisclosure('Original',raw));
     }
-    const send=button(revisionOf?'Revise':'Submit',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
+    // A preview the server could not check says why, and offers the step that gets it saved.
+    if(result.local){
+      const why={'sign-in':'Sign in to save this place. Your draft stays on this device while you do.',unavailable:'Saving is unavailable right now. Your draft stays on this device.',pending:'Still loading the place this changes. Try Preview again in a moment.'}[result.reason]||'This preview has not been checked yet.';
+      root.append(el('p',why,'preview-next-step'));
+      if(result.reason==='sign-in')root.append(button('Sign in to contribute',()=>{resumePreviewAfterSignIn=true;window.dispatchEvent(new CustomEvent('account-open-requested'));},'primary'));
+      else root.append(button('Try again',()=>byId('previewContribution').click(),'primary'));
+      root.focus();return;
+    }
+    if(!caps().can_submit)root.append(el('p','This account cannot submit contributions.','preview-next-step'));
+    const send=button(revisionOf?'Revise':'Contribute',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
   }
   async function previewForm(event){
     event.preventDefault();if(imageProcessing||imageBusy)return;if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
@@ -578,13 +703,27 @@
     if(isOpenForm()&&byId('contributionPlaceMode').value==='existing'&&!openRequestedRecordId&&!openTargets.length)errors.push({field:'targets',message:'Choose an existing place'});
     const locationError=pointError();if(locationError)errors.push(locationError);
     for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
-    if(errors.length){renderErrors(errors);return;}let envelope,raw;
+    if(errors.length){renderErrors(errors);return;}
+    if(pointForm()&&readPoint())await window.ContributionPlace?.named();
+    // A place chosen while signed out, or before a dropped connection, failed to load. Ask again
+    // rather than stopping at a local preview: signing in afterwards does not reload it.
+    const lookupGeneration=identityGeneration,lookupOwner=privateActor;
+    if(openRequestedRecordId&&openTargetFailed&&!draftRevisionBlocked)await chooseOpenReference(openRequestedRecordId,openTargetLabel);
+    else if(openTargetPending)await openTargetLoad;
+    if(lookupOwner&&(lookupGeneration!==identityGeneration||lookupOwner!==privateActor))return;
+    let envelope,raw;
     try{envelope=buildEnvelope();raw=JSON.stringify(envelope,null,2);}catch(error){renderErrors([{field:error.field,message:error.message}]);return;}
-    const local=()=>{const result={local:true,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
-    if(openTargetPending||openTargetFailed||draftRevisionBlocked){local();return;}
-    byId('previewContribution').disabled=true;
-    try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
-    catch(error){local();serviceFailure(error,()=>byId('previewContribution').click());}
+    const local=(reason='pending')=>{const result={local:true,reason,validation:{valid:false}};preview={raw,envelope,result};renderPreview(envelope,result,raw);};
+    if(openTargetFailed){local(openTargetStatus===401?'sign-in':'unavailable');return;}
+    if(openTargetPending||draftRevisionBlocked){local();return;}
+    const generation=identityGeneration,owner=privateActor;byId('previewContribution').disabled=true;
+    try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});const confirmedActor=await sessionActor();if(generation!==identityGeneration||owner!==privateActor||confirmedActor!==owner)return;preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
+    catch(error){
+      // A 401 ends the private view, which changes identityGeneration. Signed out from the start,
+      // the preview still says how to save; after an expired session the draft notice says it.
+      if(error.status===401){if(!owner)local('sign-in');return;}
+      if(generation!==identityGeneration||owner!==privateActor)return;local('unavailable');serviceFailure(error,()=>byId('previewContribution').click());}
+    // Preview must never stay disabled after a failed check, whatever happened to the session.
     finally{byId('previewContribution').disabled=false;}
   }
 
@@ -593,21 +732,54 @@
     if(!preview||!caps().can_submit||busy||imageProcessing||imageBusy||imageBatch||draftRevisionBlocked)return;
     const exact=preview;
     if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw){invalidatePreview();renderErrors(['Form changed. Preview again.']);return;}
-    busy=true;byId('confirmContribution').disabled=true;let request=null;
+    const generation=identityGeneration,owner=privateActor;busy=true;byId('confirmContribution').disabled=true;let request=null;
     try{
-      const actor_id=await sessionActor();
+      const actor_id=await sessionActor();if(generation!==identityGeneration||actor_id!==owner||privateActor!==owner)return;
       if(pendingWrite)throw Object.assign(new Error('Previous save unresolved; check the queue'),{status:409});
       if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw)throw Object.assign(new Error('Form changed. Preview again.'),{status:400});
       request=revisionOf?{actor_id,path:'/revise',body:{idempotency_key:crypto.randomUUID(),submission_id:revisionOf.id,expected_revision:revisionOf.revision,submission_json:exact.raw}}:{actor_id,path:'/submit',body:{idempotency_key:crypto.randomUUID(),submission_json:exact.raw}};
       retainWrite(request);const response=requireReceipt(await api(request.path,request.body),request);
-      retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;await beginImages(response.submission,request);await loadDashboard();
+      await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;await beginImages(response.submission,request);await loadDashboard();
     }catch(error){
-      const uncertain=!!request&&(error.uncertain||!error.status||error.status>=500);
+      if(generation!==identityGeneration||privateActor!==owner)return;const uncertain=!!request&&(error.uncertain||!error.status||error.status>=500);
       if(uncertain)renderErrors([]);else if(error.status===400)renderErrors([error.message]);else serviceFailure(error);
       if(!uncertain){if(request)retainWrite(null);}else showReconciliation();
     }finally{busy=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}
   }
-  function showReceipt(submission,response){const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;root.append(el('h3','Saved'),metadata([['Submission',submission.id],['Revision',response.receipt.result.revision??submission.revision],['Status',statusLabel(submission.status)],['Receipt',response.receipt.id]]));if(submission.id)root.append(button('Review',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.focus();}
+  function showSavedReadback(submission){const root=byId('contributionReceipt');root.replaceChildren(el('h3','Current saved contribution'),metadata([['Submission',submission.id],['Revision',submission.revision],['Status',statusLabel(submission.status)]]),button('Review',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.hidden=false;}
+  // Where a submission stands, in the order a contributor experiences it.
+  const progressSteps=['Saved','In review','Approved','On the map'];
+  const progressStage=status=>({draft:0,submitted:1,changes_requested:1,approved:2,merged:3})[status]??1;
+  const whenText=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';};
+  function nextStep(s){
+    if(s.status==='approved')return s.type==='open_proposal'?'Approved. Waiting for a publisher to add it to the map.':'Approved. Waiting to be published.';
+    return({draft:'Draft. Submit it when it is ready.',submitted:'Waiting for a reviewer.',changes_requested:'Sent back. Revise it and submit again.',merged:'On the public map.',withheld:'Withdrawn.'})[s.status]||'';
+  }
+  function submissionProgress(s){
+    const wrap=el('div',undefined,'submission-state'),list=el('ol',undefined,'submission-progress'),stage=progressStage(s.status);list.setAttribute('aria-label','Progress');
+    progressSteps.forEach((label,index)=>{const item=el('li',index===1&&s.status==='changes_requested'?'Needs changes':label);item.dataset.state=index<stage?'done':index===stage?'current':'next';if(index===stage)item.setAttribute('aria-current','step');list.append(item);});
+    wrap.append(list);const next=nextStep(s);if(next)wrap.append(el('p',next,'submission-next'));
+    return wrap;
+  }
+  // Keeps an open receipt or own submission current with the database while it is on screen.
+  let statusWatch=null;
+  function watchSubmission(id,root,status){
+    clearInterval(statusWatch?.timer);if(['merged','withheld'].includes(status))return;
+    const watch={id,status,timer:setInterval(async()=>{
+      if(!root.isConnected||root.hidden||root.dataset.submissionId!==id||!root.querySelector('.submission-state')){clearInterval(watch.timer);return;}
+      if(document.visibilityState!=='visible')return;
+      try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!s||s.status===watch.status)return;watch.status=s.status;
+        root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','withheld'].includes(s.status))clearInterval(watch.timer);}catch{}
+    },30000)};statusWatch=watch;
+  }
+  function showReceipt(submission,response){
+    const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;root.dataset.submissionId=submission.id;const revision=response.receipt.result.revision??submission.revision;
+    root.append(el('h3',revision>1?'Revision sent for review':'Sent for review'));
+    if(submission.title)root.append(el('p',submission.title,'submission-title'));
+    root.append(submissionProgress({...submission,revision}));
+    if(submission.id)root.append(button('View status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'textbutton'),el('p','Reference '+submission.id,'submission-ref'));
+    watchSubmission(submission.id,root,submission.status);root.focus();
+  }
 
   function clearRevision(){revisionOf=null;revisionOriginal=null;byId('revisionContext').hidden=true;byId('cancelRevision').hidden=true;invalidatePreview();}
   function loadRevision(submission){
@@ -617,40 +789,54 @@
     clearRevision();resetContributionForm();resetOpenContext();revisionOriginal=structuredClone(value);revisionOf={id:submission.id,revision:submission.revision};
     openExplanationInitial=value.type==='open_proposal'?value.payload.explanation:value.summary||'';byId('contributionSummary').value=openExplanationInitial;openExplanationDisplayInitial=byId('contributionSummary').value;
     openTargets=structuredClone(value.targets||[]);openRequestedRecordId=openTargets[0]?.record_id||'';openTargetLabel=openRequestedRecordId;openTaskIds=[...(value.task_ids||[])];
+    byId('contributionObjectTitle').value=value.title||'';byId('extraSources').replaceChildren();
     openSourcesInitial=value.type==='open_proposal'?value.payload.sources_text??'':'';byId('freeformSources').value=openSourcesInitial;openSourcesDisplayInitial=byId('freeformSources').value;
     for(const attribute of value.payload.attributes||[])addAttribute(attribute);
     for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
-    byId('revisionContext').replaceChildren(el('span','Revision '+submission.revision),el('br'),el('span','Submission: '+submission.id));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('contributionSummary').focus();
+    byId('revisionContext').replaceChildren(el('span','Revision '+submission.revision),el('br'),el('span','Submission: '+submission.id));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   }
 
-  function renderQueue(){const items=dashboard?.submissions||[],filter=byId('queueState').value,visible=items.filter(s=>filter==='all'||s.status===filter);byId('queueSummary').textContent=dashboard?`${visible.length} ${visible.length===1?'submission':'submissions'}`:'';const root=byId('contributionQueue');root.replaceChildren();if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'No matches':'No submissions');return;}visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');b.append(el('strong',s.title||s.id),el('span','Submission: '+s.id),el('span','Revision: '+s.revision),el('small','Status: '+statusLabel(s.status)));root.append(b);});}
+  function renderQueue(){const items=dashboard?.submissions||[],visible=items;byId('queueSummary').textContent='';const root=byId('contributionQueue');root.replaceChildren();if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'No matches':'No submissions');return;}visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');const status=el('span',statusLabel(s.status),'queue-status');status.dataset.status=s.status;const when=whenText(s.updated_at||s.created_at);b.append(el('strong',s.title||'Untitled contribution'),status,...(when?[el('small','Updated '+when)]:[]));root.append(b);});}
 
-  async function loadSubmission(id){const root=byId('submissionDetail');root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const data=await api('/submission?id='+encodeURIComponent(id));selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){empty(root,error.message);}}
-  function renderSubmission(s){const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.append(el('h3','Review'),el('strong',s.title||s.id),metadata([['Submission',s.id],['Revision',s.revision],['Status',statusLabel(s.status)]]),disclosure('Details',metadata([['Type',labels[s.type]||s.type],['Credit',s.public_credit?.consent?s.public_credit.label:'None'],['Created',s.created_at],['Updated',s.updated_at],['Payload hash',s.payload_hash],['Diff hash',s.diff_hash]]),validationView(s.validation)),diffView(s.diff),editorialChecks(s));
+  async function loadSubmission(id){const request=++detailRequest,version=identityGeneration,root=byId('submissionDetail');root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const actor=await sessionActor(),data=await api('/submission?id='+encodeURIComponent(id)),confirmed=await sessionActor();if(request!==detailRequest||version!==identityGeneration||confirmed!==actor)return;if(privateActor&&privateActor!==actor){clearPrivateView('Account changed');return;}selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){if(request===detailRequest&&version===identityGeneration){empty(root,error.message);byId('contributionQueue').hidden=false;}}}
+  // Review shows each viewer only what they can act on: owners see their contribution and its
+  // progress; reviewers get one checklist; publishers see Apply only when something can be applied.
+  function renderSubmission(s){
+    const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.dataset.submissionId=s.id;byId('contributionQueue').hidden=true;clearInterval(statusWatch?.timer);statusWatch=null;
+    root.append(button('All submissions',()=>{root.hidden=true;root.replaceChildren();byId('contributionQueue').hidden=false;renderQueue();},'textbutton submission-back'));
+    root.append(el('h3',s.title||'Untitled contribution','submission-title'),submissionProgress(s),validationView(s.validation));
     if(s.type==='open_proposal'){
       let original;try{original=JSON.parse(s.raw_json);}catch{}
-      if(original?.payload){root.append(intakeText(original.payload.explanation));const location=locationDetails(original.payload);if(location)root.append(location);if(original.payload.sources_text)root.append(rawDisclosure('Sources',original.payload.sources_text));if(original.payload.attributes?.length)root.append(disclosure('Details',metadata(original.payload.attributes.map(a=>[a.name,a.value]))));root.append(metadata([['Evidence','Unverified']]));}
+      const p=original?.payload;
+      if(p){root.append(intakeText(p.explanation));const c=p.geometry?.type==='Point'?p.geometry.coordinates:null;if(Array.isArray(c)&&c.length===2&&c.every(Number.isFinite))root.append(el('p',c[1].toFixed(5)+', '+c[0].toFixed(5),'submission-meta'));if(p.sources_text)root.append(el('p','Sources: '+p.sources_text,'submission-meta'));
+        // Reviewers confirm privacy for everything submitted, so they see all of it.
+        if(!s.is_own&&Array.isArray(p.attributes)&&p.attributes.length)root.append(disclosure('Facts',metadata(p.attributes.map(a=>[a.name,a.value]))));}
+    }else{
+      if(s.type==='record_update'&&s.proposal?.change_message)root.append(intakeText(s.proposal.change_message));
+      root.append(diffView(s.diff));
     }
+    if(s.application?.applicable)root.append(disclosure('Publication preview',diffView(s.diff)));
     renderPrivateImages(root,s.attachments);
-    if(s.type==='record_update'&&s.proposal?.change_message)root.append(el('h4','Message'),intakeText(s.proposal.change_message));
-    if(!s.application?.applicable)root.append(el('p','Review only','small'));
-    if(s.targets?.length)root.append(rawDisclosure('Targets',s.targets));root.append(rawDisclosure('Original',s.raw_json));
-    const history=el('details',undefined,'workflow-details');history.append(el('summary','History'));const list=el('ol');[...(s.revisions||[]),...(s.events||[])].forEach(event=>list.append(el('li',pretty(event))));if(!list.children.length)list.append(el('li','No events'));history.append(list);root.append(history);
-    if(s.is_own&&caps().can_submit)root.append(button('Revise',()=>loadRevision(s),'outline'));
-    if(s.capabilities?.can_triage||s.capabilities?.can_withhold){const form=el('form',undefined,'triage-form');form.append(el('h4','Triage'));const select=el('select');select.setAttribute('aria-label','Triage action');[...(s.capabilities?.can_triage?[['request_information','Request information'],['ready_for_review','Submit for review']]:[]),...(s.capabilities?.can_withhold?[['withhold','Withhold']]:[])].forEach(([value,label])=>{const o=el('option',label);o.value=value;select.append(o);});const reason=el('textarea');reason.rows=3;reason.required=true;reason.setAttribute('aria-label','Triage reason');reason.placeholder='';const save=el('button','Save','outline');save.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(labeledControl('Action',select),labeledControl('Reason',reason),save,output);form.addEventListener('submit',async event=>{event.preventDefault();save.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:select.value,rationale:reason.value});await loadDashboard();await loadSubmission(s.id);}catch(error){output.textContent=error.message;save.disabled=false;}});root.append(form);}
+    if(s.is_own){
+      watchSubmission(s.id,root,s.status);
+      const actions=el('div',undefined,'submission-actions');
+      if(caps().can_submit&&['draft','submitted','changes_requested','approved'].includes(s.status))actions.append(button(s.status==='changes_requested'?'Revise and resubmit':'Revise',()=>loadRevision(s),'outline'));
+      if(actions.children.length)root.append(actions);
+    }
     renderReviewControls(root,s);
+    root.append(el('p','Reference '+s.id+(s.revision>1?', revision '+s.revision:''),'submission-ref'));
   }
-  function renderJobs(){const root=byId('applicationJobs'),jobs=dashboard?.jobs||[];root.replaceChildren();if(!jobs.length){empty(root,'No jobs');return;}jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
+  function renderJobs(){const root=byId('applicationJobs'),jobs=dashboard?.jobs||[];root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;if(!jobs.length)return;jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
   function showReconciliation(ready=false){
-    if(!pendingWrite)return;
+    if(!pendingWrite||pendingWrite.actor_id!==privateActor)return;
     const root=byId('workflowConnection');root.querySelector('[data-reconciliation]')?.remove();
     const controls=el('span');controls.dataset.reconciliation='true';controls.append(el('span',' Save outcome unknown '));root.append(controls);
-    const retry=button(ready?'Retry save':'Check queue',async()=>{
+    const retry=button(ready?'Confirm save':'Check queue',async()=>{
       retry.disabled=true;
       if(!ready){const data=await loadDashboard();showReconciliation(!!data);return;}
       if(!pendingWrite)return;const request=pendingWrite,selectedId=selectedSubmission?.id;
       try{
-        await requireOriginalActor(request);const result=requireReceipt(await api(request.path,request.body),request);retainWrite(null);renderErrors([]);
+        await requireOriginalActor(request);const result=requireReceipt(await api(request.path,request.body),request);await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);renderErrors([]);
         if(result.submission){if(['/submit','/revise'].includes(request.path))clearSavedDraft(request);showReceipt(result.submission,result);if(['submit','revise'].includes(request.path.slice(1)))await beginImages(result.submission,request);}
         else{byId('contributionReceipt').replaceChildren(el('h3','Saved'),metadata([['Receipt',result.receipt.id]]));byId('contributionReceipt').hidden=false;}
         await loadDashboard();
@@ -665,24 +851,52 @@
   }
   async function safeMutation(path,body){
     if(pendingWrite)throw new Error('Previous save unresolved; check the queue');
-    const actor_id=await sessionActor();if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);retainWrite(null);return result;}catch(error){if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
+    const actor_id=await sessionActor();if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
   }
+  const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
+  // Approval, staging and map/list verification are separate, observable decisions.
+  async function stageForVerification(s){
+    const staged=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});
+    await loadDashboard();
+    window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:staged.job}));
+  }
+  const publishable=s=>!!caps().can_apply&&s.status==='approved'&&(s.approval?.independent===true||s.approval?.admin_self_approval===true)&&s.approval?.revision===s.revision&&s.application?.applicable===true;
+  // One decision: approve, with an optional comment, or send back to revise, with a required one.
   function renderReviewControls(root,s){
-    const canReview=!!caps().can_review&&!!caps().independent_review_available&&!s.is_own&&s.status==='submitted'&&s.validation?.valid===true;
-    const form=el('form',undefined,'approval-form');form.append(el('h4','Review'));
-    const checkFields={};['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'].forEach(key=>{
-      const label=el('label',key==='privacy_check'?'Privacy review':key.replace('_check','')+' review');const select=el('select');select.setAttribute('aria-label',key);['pending','pass','fail'].forEach(value=>{const option=el('option',statusLabel(value));option.value=value;select.append(option);});select.disabled=!canReview;checkFields[key]=select;label.append(select);form.append(label);
-    });
-    const reasonLabel=el('label','Reason');const reason=el('textarea');reason.rows=3;reason.disabled=!canReview;reason.required=true;reason.setAttribute('aria-label','Independent review reason');reasonLabel.append(reason);form.append(reasonLabel);
-    const approve=el('button','Approve','outline');approve.type='submit';approve.disabled=true;const result=el('p',undefined,'small');result.setAttribute('role','status');form.append(approve,result);
-    const update=()=>approve.disabled=!canReview||Object.values(checkFields).some(input=>input.value!=='pass')||!reason.value.trim();form.addEventListener('input',update);form.addEventListener('change',update);
-    form.addEventListener('submit',async event=>{event.preventDefault();if(approve.disabled)return;approve.disabled=true;try{await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(Object.entries(checkFields).map(([k,v])=>[k,v.value])),rationale:reason.value});await loadDashboard();await loadSubmission(s.id);}catch(error){result.textContent=error.message;update();}});
-    if(!canReview)form.append(el('p',s.is_own?'A different reviewer is required':!caps().can_review||!caps().independent_review_available?'Reviewer permission required':s.status!=='submitted'?'Submit for review first':'Resolve validation errors','small'));
-    root.append(form);
-    const canApply=!!caps().can_apply&&s.status==='approved'&&s.approval?.independent===true&&s.approval?.revision===s.revision&&s.application?.applicable;
-    const apply=button('Apply',async()=>{
-      apply.disabled=true;const out=el('div',undefined,'small');root.append(out);try{const result=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});out.replaceChildren(metadata([['Job',result.job?.id||'Unknown'],['Status',statusLabel(result.job?.status)||'Recorded']]));await loadDashboard();}catch(error){out.textContent=error.message;apply.disabled=!canApply;}
-    },'outline');apply.disabled=!canApply;root.append(apply);
+    const canReview=!!caps().can_review&&!!caps().independent_review_available&&(!s.is_own||!!caps().can_self_approve)&&s.status==='submitted'&&s.validation?.valid===true;
+    const out=el('p',undefined,'small');out.setAttribute('role','status');
+    const refresh=async()=>{await loadDashboard();await loadSubmission(s.id);};
+    if(canReview){
+      const form=el('div',undefined,'decision-form'),comment=el('textarea'),reviewInputs=new Map(),approve=button('Approve',async()=>{
+        if([...reviewInputs.values()].some(input=>!input.checked)){out.textContent='Confirm each review check before approving.';return;}
+        approve.disabled=revise.disabled=true;out.textContent='Approving…';
+        try{
+          const result=await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries([...reviewInputs].map(([key,input])=>[key,input.checked?'pass':'not_tested'])),rationale:comment.value.trim()||'Approved.'});
+          out.textContent='Approved. Publication still requires staging and map/list verification.';
+          await refresh();
+        }catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
+      },'primary'),revise=button('Revise and resubmit',async()=>{
+        if(!comment.value.trim()){out.textContent='Say what to change.';comment.focus();return;}
+        approve.disabled=revise.disabled=true;
+        try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'request_information',rationale:comment.value.trim()});await refresh();}
+        catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
+      },'outline');
+      comment.rows=2;comment.placeholder='Comment (optional to approve, required to send back)';comment.setAttribute('aria-label','Comment');
+      if(s.is_own)form.append(el('p','You are approving your own contribution as an admin. This is recorded.','small'));
+      const labels={evidence_check:'I checked the evidence and its limits.',geography_check:'I checked the location and uncertainty.',rights_check:'I checked rights and permitted reuse.',duplicate_check:'I checked for duplicate records.',privacy_check:'I checked privacy and public credit consent.'};
+      for(const key of reviewKeys){const label=el('label',undefined,'consent-line'),input=el('input');input.type='checkbox';reviewInputs.set(key,input);label.append(input,document.createTextNode(labels[key]));form.append(label);}
+      form.append(el('p',s.application?.applicable?'Approval permits this displayed change to be staged. It does not publish it.':'This contribution is review-only; approval does not publish it.','small'));
+      if(caps().can_apply&&s.application?.applicable!==true)form.append(el('p','Approving records it, but this one cannot go on the map automatically.','small'));
+      const actions=el('div',undefined,'decision-actions');actions.append(approve,revise);
+      form.append(comment,actions,out);root.append(form);
+    }else if(publishable(s)){
+      const go=button('Stage for verification',async()=>{go.disabled=true;out.textContent='Staging…';try{await stageForVerification(s);await refresh();}catch(error){out.textContent=error.message;go.disabled=false;}},'primary');
+      root.append(el('p','Stage this approved change, inspect its map and list preview, then record verification to publish.','small'),go,out);
+    }else if(caps().can_triage&&s.status==='draft'){
+      // Sending a revision back to the queue is not a decision on it, so it may be one's own.
+      const start=button(s.is_own?'Send for review':'Start review',async()=>{start.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'ready_for_review',rationale:'Revision ready for review.'});await refresh();}catch(error){out.textContent=error.message;start.disabled=false;}},'outline');
+      root.append(start,out);
+    }
   }
   function jobControls(card,job){
     if(job.status==='verification_pending')card.append(button('Preview',()=>window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:job})),'outline'));
@@ -708,23 +922,38 @@
   for(const [value,label]of [['area_proposal','Proposed area'],['record_annotation','Clarification']])if(![...byId('contributionType').options].some(o=>o.value===value)){const option=new Option(label,value);option.hidden=true;byId('contributionType').append(option);}
   byId('contributionFlow')?.addEventListener('change',()=>{rememberSimple();clearRevision();syncFlow();if(simpleFlow()==='other')renderPayload(byId('contributionType').value);});
   byId('clarificationTarget')?.addEventListener('change',()=>chooseClarification(byId('clarificationTarget').value));
-  byId('removeFreeformRecord').addEventListener('click',()=>{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;byId('contributionPlaceMode').value='new';showOpenReference();invalidatePreview();saveDraft();byId('contributionSummary').focus();});
+  byId('removeFreeformRecord').addEventListener('click',()=>{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;byId('contributionPlaceMode').value='new';showOpenReference();invalidatePreview();saveDraft();byId('contributionPlace').focus();});
+  byId('existingPlaceSearch').addEventListener('input',populatePlaceChoices);
+  byId('chooseExistingPlace').addEventListener('click',()=>window.dispatchEvent(new CustomEvent('contributions-place-pick-requested')));
+  byId('addFreeformSource').addEventListener('click',()=>{const root=byId('extraSources');if(root.children.length>=19)return;const row=el('div'),label=el('label','Link or reference'),input=el('textarea');input.rows=2;input.maxLength=30000;label.append(input);row.append(label,button('Remove',()=>{row.remove();invalidatePreview();saveDraft();},'textbutton'));root.append(row);input.focus();});
+  byId('newLocationSearch').addEventListener('input',()=>{const query=byId('newLocationSearch').value,records=typeof allRecords==='function'?allRecords():[];byId('newLocationMatches').replaceChildren(...records.filter(record=>Number.isFinite(record.latitude)&&Number.isFinite(record.longitude)&&window.PlaceInput.matches(record,query)).slice(0,20).map(record=>new Option(record.title,record.title+' — '+record.latitude+', '+record.longitude)));});
+  byId('newLocationSearch').addEventListener('change',()=>{const value=byId('newLocationSearch').value,point=window.PlaceInput.point(value)||window.PlaceInput.point(value.split(' — ').at(-1));if(!point){locationStatus('Choose a listed place, enter coordinates, or paste an OpenStreetMap link with coordinates.');return;}if(!window.ContributionPoint.request(point,{replace:true})){locationStatus('Choose a point in New York City.');return;}});
   byId('contributionPlaceMode').addEventListener('change',()=>{if(byId('contributionPlaceMode').value==='new'){++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;}showOpenReference();invalidatePreview();});
   byId('freeformPlaceSelect').addEventListener('change',()=>{const select=byId('freeformPlaceSelect');if(select.value)chooseOpenReference(select.value,select.selectedOptions[0].textContent);else{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;showOpenReference();invalidatePreview();}});
   byId('addContributionAttribute').addEventListener('click',()=>{addAttribute()?.focus();invalidatePreview();saveDraft();});
   for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('input',()=>{invalidatePreview();saveDraft();showPoint();});
-  byId('chooseContributionPoint').addEventListener('click',()=>{if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
-  byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
+  byId('chooseContributionPoint').addEventListener('click',()=>{if(byId('chooseContributionPoint').getAttribute('aria-pressed')==='true'){window.dispatchEvent(new CustomEvent('contributions-point-pick-cancelled'));return;}if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
+  byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);locationStatus('');invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
   window.addEventListener('contributions-clarify-requested',event=>{
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
-    clearRevision();for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('contributionSummary').focus();
+    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
+  window.addEventListener('contributions-refresh-requested',()=>loadDashboard());
   window.addEventListener('contributions-review-requested',async event=>{
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;
     byId('draftTab').click();switchView('reviewView');await loadSubmission(id);
   });
-  window.addEventListener('contributions-session-ended',event=>clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to submit'));
+  window.addEventListener('contributions-session-ended',event=>{const accountKey=privateActor?draftStorageKey:null;if(event.detail?.signedOut&&privateActor){try{localStorage.setItem(signedOutMarker(privateActor),String(Date.now()));}catch{}}clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute');
+    // Signing out on purpose removes the account's draft; an expired session keeps it for the next sign-in.
+    if(event.detail?.signedOut&&accountKey){forgetDraft(accountKey);draftNotice('');}});
+  // Signing in from a preview carries straight on to the checked preview.
+  let resumePreviewAfterSignIn=false;
+  window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(data&&openRequestedRecordId&&openTargetFailed&&!draftRevisionBlocked)await chooseOpenReference(openRequestedRecordId,openTargetLabel);if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
+  // Returning to the tab picks up review decisions made elsewhere.
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&privateActor&&Date.now()-dashboardLoadedAt>30000)loadDashboard();});
+  window.addEventListener('storage',event=>{if(privateActor&&event.key===signedOutMarker(privateActor)&&event.newValue)window.dispatchEvent(new CustomEvent('contributions-session-ended',{detail:{signedOut:true}}));});
+  window.addEventListener('focus',async()=>{if(privateActor){const old=privateActor;try{const confirmed=await sessionActor();if(privateActor===old&&confirmed!==old)clearPrivateView('Account changed');}catch{if(privateActor===old)clearPrivateView('Sign in to contribute');}}});
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
   byId('tasksTool').addEventListener('click',()=>{byId('draftTab').click();switchView('taskView');loadSharedTasks();byId('toolsMenu').hidden=true;byId('toolsButton').setAttribute('aria-expanded','false');});
   byId('createTaskForm').addEventListener('submit',createTask);

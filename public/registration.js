@@ -13,6 +13,7 @@
   window.HauntologiesRegistration=Object.freeze({receipt:()=>savedReceipt?{...savedReceipt}:readReceipt()});
   if(!form||!name||!email||!submit||!status||!error||!receipt)return;
 
+  const admission=window.HauntologiesAdmission?.attach({form,email,anchor:email,deferred:!!pending});
   async function payloadHash(value){
     const address=value.email.trim(),at=address.lastIndexOf('@');
     const normalized={name:value.name.trim(),email:address.slice(0,at)+address.slice(at).toLowerCase()};
@@ -22,7 +23,7 @@
   function retainPending(value){sessionStorage.setItem(pendingKey,JSON.stringify(value));pending=value;}
   function clearPending(){pending=null;try{sessionStorage.removeItem(pendingKey);}catch{}}
   function renderReceipt(){
-    registered=true;form.hidden=true;name.value=email.value='';receipt.replaceChildren();
+    registered=true;form.hidden=true;name.value=email.value='';admission?.clear();receipt.replaceChildren();
     const heading=document.createElement(dialog?'h3':'h2');heading.textContent='Registered';
     const saved=document.createElement('p');saved.textContent='Receipt: '+savedReceipt.receipt_id;receipt.append(heading,saved);
     if(!dialog){const map=document.createElement('a');map.href='/';map.textContent='View map';receipt.append(map);}
@@ -31,9 +32,10 @@
   }
 
   function message(node,value){node.textContent=value;node.hidden=!value;}
-  function lock(){submit.disabled=busy;name.readOnly=email.readOnly=busy||!!request;form.setAttribute('aria-busy',String(busy));}
+  function lock(){submit.disabled=busy;name.readOnly=email.readOnly=busy||!!request;admission?.lock(busy||!!request);form.setAttribute('aria-busy',String(busy));}
   function showError(value){message(error,value);if(!dialog||dialog.open)error.focus();}
   const errors={
+    registration_restricted:'Please use your CUNY email address. Guests can enter an access code below.',
     invalid_name:'Enter a name of 120 characters or fewer',
     invalid_email:'Enter a valid email address',
     rate_limited:'Too many attempts. Please try again later',
@@ -66,11 +68,12 @@
   }
   form.addEventListener('submit',async event=>{
     event.preventDefault();if(busy||registered)return;
+    await admission?.ready;if(busy||registered)return;
     if(!request&&!form.reportValidity())return;
     busy=true;lock();message(error,'');message(status,'Saving…');
     if(!request){
       try{
-        const body={name:name.value,email:email.value},hash=await payloadHash(body);
+        const body={name:name.value,email:email.value,...admission?.payload()},hash=await payloadHash(body);
         if(pending&&pending.payload_hash!==hash){showError('Enter the same name and email to retry this registration');busy=false;lock();message(status,'');return;}
         const key=pending?.key||crypto.randomUUID();
         retainPending({event_id:eventId,key,payload_hash:hash});request={key,body:JSON.stringify(body)};
@@ -85,6 +88,7 @@
         if(response.status>=500)throw new Error('registration_unavailable');
         request=null;clearPending();
         showError(errors[data?.error]||(response.status===401?'Registration is unavailable':'Registration was not saved. Please try again'));
+        if(data?.error==='registration_restricted')admission?.reject();
         return;
       }
       if(data?.ok!==true||!uuid(data.receipt_id)||data.event?.id!==eventId)throw new Error('missing_receipt');

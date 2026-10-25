@@ -1,0 +1,310 @@
+import { isCunyEmail, normalizeRegistrationEmail, registrationAllowed, registrationRestricted } from '../server/registration-eligibility.mjs';
+import { betterAuth } from 'better-auth';
+import { magicLink } from 'better-auth/plugins/magic-link';
+import { getIP } from '@better-auth/core/utils/ip';
+
+export const MAP_ORIGIN = 'https://hauntologies-nyc.ailab-452.workers.dev';
+const COOKIE = '__Host-hauntologies-session';
+const SESSION_SECONDS = 7 * 24 * 60 * 60;
+const cache = new WeakMap();
+const tokenPattern = /^[A-Za-z0-9_-]{24,128}$/;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const failure = (code, status) => Object.assign(new Error(code), { code, status });
+// Dispatched-mail budgets. Admission separately allows 5 messages per recipient
+// per hour and 500 per day, so these stay below both. The global hour covers a
+// room registering at once; the per-address budgets in handleMapAccount sit well
+// below it, so one network address cannot take every message.
+const MAIL_GLOBAL = 240, MAIL_RECIPIENT = 3;
+// Setup links work for 30 days from issue, measured from the stored row's
+// createdAt so links issued before this limit keep their full term.
+const SETUP_LINK_MS = 30 * 24 * 60 * 60 * 1000;
+const randomToken = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+export const privateJson = (body, status = 200, cookies = []) => {
+  const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
+  for (const cookie of cookies) headers.append('Set-Cookie', cookie);
+  return new Response(JSON.stringify(body), { status, headers });
+};
+
+export function mapAccountsReady(env) {
+  return env.MAP_ACCOUNTS_ENABLED === 'true' && typeof env.MAP_AUTH_SECRET === 'string' && env.MAP_AUTH_SECRET.length >= 32 && Boolean(env.DB && env.ACCOUNT_MAIL?.send);
+}
+
+export function accountOptions(env) {
+  async function send(kind, email, token) {
+    // Count only messages that are dispatched. A recipient over budget is answered
+    // like any other address, without mail, so the response reveals no account;
+    // earlier setup and reset links remain usable.
+    if (!await spend(env, 'mail:' + email.toLowerCase(), MAIL_RECIPIENT, 3600)) return;
+    await rate(env, 'mail-global', MAIL_GLOBAL, 3600);
+    const result = await env.ACCOUNT_MAIL.send({ kind, email, token, requestId: crypto.randomUUID(), expiresAt: kind === 'verify_email' ? null : new Date(Date.now() + 30 * 60 * 1000).toISOString() });
+    if (result?.status !== 'accepted') throw failure('mail_unavailable', 503);
+  }
+  return {
+    appName: 'Hauntologies of New York', baseURL: MAP_ORIGIN, basePath: '/api/auth',
+    secret: env.MAP_AUTH_SECRET, database: env.DB, trustedOrigins: [MAP_ORIGIN],
+    user: { modelName: 'hny_auth_user' },
+    account: { modelName: 'hny_auth_account', accountLinking: { enabled: false } },
+    // A sign-in lasts a week and renews, at most daily, when the map checks it on load.
+    session: { modelName: 'hny_auth_session', expiresIn: SESSION_SECONDS, updateAge: 86400, cookieCache: { enabled: false } },
+    // Setup links remain stored until used or 30 days old. The wrapper cleans
+    // both kinds separately so Better Auth's 30-minute expiresAt cannot remove an
+    // unused setup link.
+    verification: { modelName: 'hny_auth_verification', storeIdentifier: 'hashed', disableCleanup: true },
+    emailAndPassword: {
+      enabled: true, disableSignUp: true, requireEmailVerification: true, minPasswordLength: 12, maxPasswordLength: 128,
+      revokeSessionsOnPasswordReset: true, resetPasswordTokenExpiresIn: 1800,
+      sendResetPassword: ({ user, token }) => send('reset_password', user.email, token),
+    },
+    plugins: [magicLink({ expiresIn: 1800, storeToken: 'hashed', generateToken: randomToken, sendMagicLink: ({ email, token }) => send('verify_email', email, token) })],
+    // The public wrapper below owns durable rate limits, including server API calls.
+    rateLimit: { enabled: false },
+    advanced: {
+      // Disable Better Auth's automatic __Secure- name prefix so the explicit
+      // __Host- name below keeps its browser-enforced host-only semantics.
+      // Secure remains mandatory for every cookie through these attributes.
+      useSecureCookies: false, defaultCookieAttributes: { secure: true }, database: { generateId: 'uuid' },
+      cookies: { session_token: { name: COOKIE, attributes: { path: '/', secure: true, httpOnly: true, sameSite: 'lax', maxAge: SESSION_SECONDS } } },
+      ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
+    },
+    logger: { disabled: true }, telemetry: { enabled: false },
+  };
+}
+
+function authFor(env) {
+  let saved = cache.get(env.DB);
+  if (!saved || saved.secret !== env.MAP_AUTH_SECRET) {
+    saved = { secret: env.MAP_AUTH_SECRET, auth: betterAuth(accountOptions(env)) };
+    cache.set(env.DB, saved);
+  }
+  return saved.auth;
+}
+
+async function credential(env, userId) {
+  return env.DB.prepare('SELECT id FROM hny_auth_account WHERE userId = ? AND providerId = ? AND password IS NOT NULL LIMIT 1').bind(userId, 'credential').first();
+}
+
+async function clearSetupLinks(env, email) {
+  await env.DB.prepare("DELETE FROM hny_auth_verification WHERE json_valid(value) AND json_extract(value, '$.type') = 'magic-link' AND lower(json_extract(value, '$.email')) = ?").bind(email.toLowerCase()).run();
+}
+
+// Only the account session route renews a sign-in (and returns its cookie); every other check reads it.
+export async function mapSession(request, env, requirePassword = true, renew = null) {
+  if (!mapAccountsReady(env)) return null;
+  const query = { disableCookieCache: true, ...(renew ? {} : { disableRefresh: true }) };
+  const result = await authFor(env).api.getSession({ headers: request.headers, query, returnHeaders: Boolean(renew) });
+  const session = renew ? result?.response : result;
+  if (!session?.user?.emailVerified || new Date(session.session.expiresAt).getTime() <= Date.now()) return null;
+  const hasPassword = Boolean(await credential(env, session.user.id));
+  if (requirePassword && !hasPassword) return null;
+  if (renew) for (const cookie of result.headers?.getSetCookie?.() || []) renew.append('Set-Cookie', cookie);
+  return { actor_id: 'map_' + session.user.id, email: session.user.email, password_required: !hasPassword };
+}
+
+async function digest(value) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function limitBucket(key, windowSeconds) {
+  return [await digest('hny-auth:' + key), Math.floor(Date.now() / (windowSeconds * 1000))];
+}
+
+async function spend(env, key, limit, windowSeconds) {
+  const [bucket, window] = await limitBucket(key, windowSeconds);
+  const row = await env.DB.prepare('INSERT INTO hny_auth_limits (bucket, window, count, expires_at) VALUES (?, ?, 1, ?) ON CONFLICT(bucket, window) DO UPDATE SET count = count + 1 RETURNING count').bind(bucket, window, (window + 1) * windowSeconds * 1000).first();
+  return Boolean(row && row.count <= limit);
+}
+
+async function rate(env, key, limit, windowSeconds) {
+  if (!await spend(env, key, limit, windowSeconds)) throw failure('rate_limited', 429);
+}
+
+async function refund(env, key, windowSeconds) {
+  const [bucket, window] = await limitBucket(key, windowSeconds);
+  await env.DB.prepare('UPDATE hny_auth_limits SET count = count - 1 WHERE bucket = ? AND window = ? AND count > 0').bind(bucket, window).run();
+}
+
+// Reads a budget without spending it, so every address gets the same answer once
+// the shared mail budget is gone, whether or not a message would be dispatched.
+async function exhausted(env, key, limit, windowSeconds) {
+  const [bucket, window] = await limitBucket(key, windowSeconds);
+  const row = await env.DB.prepare('SELECT count FROM hny_auth_limits WHERE bucket = ? AND window = ?').bind(bucket, window).first();
+  return Boolean(row && row.count >= limit);
+}
+
+// Guest codes are shared secrets, so each check that depends on one spends a
+// durable attempt before the comparison: per network address on every route,
+// and per account once a setup link or session proves the address. Register
+// never spends the account budget, because anyone can name any address there.
+// CUNY addresses need no code and spend nothing.
+async function admitted(env, email, code, ip, perAccount) {
+  if (registrationRestricted(env) && !isCunyEmail(email)) {
+    await rate(env, 'code-ip:' + ip, 60, 900);
+    if (perAccount) await rate(env, 'code:' + email.toLowerCase(), 10, 3600);
+  }
+  return registrationAllowed(email, code, env);
+}
+
+async function bodyOf(request, allowed) {
+  if (request.headers.get('origin') !== MAP_ORIGIN || (request.headers.get('sec-fetch-site') || 'same-origin') !== 'same-origin') throw failure('same_origin_required', 403);
+  if (!(request.headers.get('content-type') || '').startsWith('application/json')) throw failure('json_required', 415);
+  const reader = request.body?.getReader();
+  if (!reader) throw failure('invalid_request', 400);
+  let size = 0; const chunks = [];
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break;
+    size += value.length; if (size > 4096) { await reader.cancel(); throw failure('request_too_large', 413); }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  let body; try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw failure('invalid_request', 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !allowed.includes(key))) throw failure('invalid_request', 400);
+  return body;
+}
+
+const fields = {
+  register: ['email', 'access_code'], 'sign-in': ['email', 'password'], 'request-reset': ['email'],
+  verify: ['token', 'password', 'access_code'], 'set-password': ['password', 'access_code'], reset: ['token', 'password', 'access_code'], 'sign-out': [],
+};
+const validPassword = value => typeof value === 'string' && value.length >= 12 && value.length <= 128;
+function cookieHeaders(response) { return response.headers.getSetCookie(); }
+function sessionCookieRequest(request, response) {
+  const headers = new Headers(request.headers);
+  headers.set('cookie', cookieHeaders(response).map(value => value.split(';', 1)[0]).join('; '));
+  return new Request(request.url, { headers });
+}
+
+export async function handleMapAccount(request, env) {
+  if (!mapAccountsReady(env)) return privateJson({ error: 'accounts_unavailable' }, 503);
+  const url = new URL(request.url), action = url.pathname.slice('/api/auth/'.length);
+  if (url.origin !== MAP_ORIGIN || url.search || url.pathname !== '/api/auth/' + action) return privateJson({ error: 'invalid_request' }, 400);
+  try {
+    if (action === 'session' && request.method === 'GET') {
+      const renewed = new Headers(), session = await mapSession(request, env, false, renewed);
+      if (!session) return privateJson({ error: 'sign_in_required' }, 401);
+      return privateJson(session, 200, renewed.getSetCookie());
+    }
+    if (!Object.hasOwn(fields, action)) return privateJson({ error: 'not_found' }, 404);
+    if (request.method !== 'POST') return privateJson({ error: 'method_not_allowed' }, 405);
+    const body = await bodyOf(request, fields[action]);
+    await env.DB.prepare('DELETE FROM hny_auth_limits WHERE expires_at < ?').bind(Date.now() - 3600000).run();
+    await env.DB.prepare("DELETE FROM hny_auth_verification WHERE (CASE WHEN json_valid(value) THEN json_extract(value, '$.type') END) IS NOT 'magic-link' AND (CASE WHEN typeof(expiresAt) IN ('integer','real') THEN expiresAt/1000 ELSE unixepoch(expiresAt) END) < ?").bind(Math.floor(Date.now()/1000)).run();
+    await env.DB.prepare("DELETE FROM hny_auth_verification WHERE json_valid(value) AND json_extract(value, '$.type') = 'magic-link' AND (CASE WHEN typeof(createdAt) IN ('integer','real') THEN createdAt/1000 ELSE unixepoch(createdAt) END) < ?").bind(Math.floor((Date.now() - SETUP_LINK_MS)/1000)).run();
+    await rate(env, 'all-mutations', 3000, 3600);
+    const ip = getIP(request, { advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'], ipv6Subnet: 64 } } }) || 'unknown';
+    // Account and global limits remain effective across addresses and Worker isolates.
+    // Campus participants may share one network address (an IPv6 /64 counts as
+    // one). Recipient and global limits still bound email volume independently
+    // of this shared-IP allowance.
+    await rate(env, 'ip:' + ip, 120, 900);
+    if (fields[action].includes('email')) {
+      if (action === 'register') {
+        body.email = normalizeRegistrationEmail(body.email, true);
+        if (!body.email) throw failure('invalid_email', 400);
+      }
+      if (typeof body.email !== 'string' || body.email.length > 254 || !emailPattern.test(body.email)) throw failure('invalid_email', 400);
+      body.email = body.email.toLowerCase();
+      // Keyed per network and account first, so failed attempts from one network cannot lock
+      // the account for everyone; the looser account total takes several networks.
+      await rate(env, 'account-ip:' + ip + ':' + body.email, 12, 900);
+      await rate(env, 'account:' + body.email, 60, 900);
+    }
+    if (action === 'register' && !await admitted(env, body.email, body.access_code, ip, false)) throw failure('registration_restricted', 403);
+    if (['register', 'request-reset'].includes(action)) {
+      if (await exhausted(env, 'mail-global', MAIL_GLOBAL, 3600)) throw failure('rate_limited', 429);
+      // Per-address request budgets, spent whether or not mail follows, so they
+      // reveal no account. The day budget keeps one address to under a third of
+      // Admission's 500 daily messages.
+      await rate(env, 'mail-ip:' + ip, 80, 3600);
+      await rate(env, 'mail-ip-day:' + ip, 160, 86400);
+      // A spent recipient is answered before Better Auth stores another link that
+      // could not be mailed; setup links never expire, so they must stay bounded.
+      if (await exhausted(env, 'mail:' + body.email, MAIL_RECIPIENT, 3600)) return privateJson({ status: 'check_email' });
+    }
+    if (fields[action].includes('password') && !validPassword(body.password)) throw failure('password_length', 400);
+    if (fields[action].includes('token') && (typeof body.token !== 'string' || !tokenPattern.test(body.token))) throw failure('invalid_token', 400);
+    const auth = authFor(env), headers = request.headers;
+    const context = await auth.$context;
+    // Finish initialization within this request, including when admission or
+    // an existing account makes the wrapper return before calling an auth API.
+    await context.checkSchema?.();
+    if (action === 'register') {
+      const existing = await env.DB.prepare('SELECT id FROM hny_auth_user WHERE email = ? LIMIT 1').bind(body.email).first();
+      if (!existing || !await credential(env, existing.id)) await auth.api.signInMagicLink({ headers, body: { email: body.email } });
+      return privateJson({ status: 'check_email' });
+    }
+    if (action === 'request-reset') {
+      await auth.api.requestPasswordReset({ headers, body: { email: body.email } });
+      return privateJson({ status: 'check_email' });
+    }
+    if (action === 'reset') {
+      const pending = await context.internalAdapter.findVerificationValue('reset-password:' + body.token);
+      if (!pending || new Date(pending.expiresAt).getTime() <= Date.now()) throw failure('invalid_token', 400);
+      const user = await env.DB.prepare('SELECT id, email FROM hny_auth_user WHERE id = ? LIMIT 1').bind(pending.value).first();
+      if (!user) throw failure('invalid_token', 400);
+      // A reset can create a first credential. Preserve ordinary password resets,
+      // while applying admission to accounts whose setup is still unfinished.
+      if (!await credential(env, user.id) && !await admitted(env, user.email, body.access_code, ip, true)) throw failure('registration_restricted', 403);
+      await auth.api.resetPassword({ headers, body: { token: body.token, newPassword: body.password } });
+      await clearSetupLinks(env, user.email);
+      return privateJson({ status: 'password_reset' }, 200, [`${COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`]);
+    }
+    if (action === 'sign-in') {
+      // Only failed sign-ins keep the day cap's attempt. It stays near the old
+      // account cap's daily maximum (12 × 96 = 1152), so guesses spread over
+      // networks gain nothing, and above what one network can send against one
+      // account a day. The attempt is reserved atomically and refunded on success.
+      await rate(env, 'account-day:' + body.email, 1200, 86400);
+      const response = await auth.api.signInEmail({ headers, body: { email: body.email, password: body.password }, asResponse: true });
+      if (!response.ok) return privateJson({ error: 'invalid_credentials' }, 401);
+      await refund(env, 'account-day:' + body.email, 86400);
+      return privateJson({ status: 'signed_in' }, 200, cookieHeaders(response));
+    }
+    if (action === 'sign-out') {
+      const response = await auth.api.signOut({ headers, asResponse: true });
+      if (!response.ok) throw failure('account_unavailable', 503);
+      return privateJson({ status: 'signed_out' }, 200, cookieHeaders(response));
+    }
+    let verifiedRequest = request, cookies = [];
+    if (action === 'verify') {
+      const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body.token)));
+      const key = btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+      // Setup proof lasts 30 days from issue, checked before any guest-code
+      // attempt is spent; an unreadable issue time fails closed. Better Auth still
+      // owns identifier hashing and atomic consumption; a deleted proof can never
+      // be recreated here.
+      const pending = await context.internalAdapter.findVerificationValue('magic-link:' + key);
+      let value; try { value = JSON.parse(pending?.value); } catch {}
+      if (!pending || value?.type !== 'magic-link' || typeof value.email !== 'string') throw failure('invalid_token', 400);
+      if (!(Date.now() - new Date(pending.createdAt).getTime() < SETUP_LINK_MS)) throw failure('invalid_token', 400);
+      if (!await admitted(env, value.email, body.access_code, ip, true)) throw failure('registration_restricted', 403);
+      const existing = await env.DB.prepare('SELECT id FROM hny_auth_user WHERE email = ? LIMIT 1').bind(value.email.toLowerCase()).first();
+      if (existing && await credential(env, existing.id)) {
+        await clearSetupLinks(env, value.email);
+        throw failure('password_already_set', 409);
+      }
+      // This timestamp bounds Better Auth's processing of the current request,
+      // not the lifetime of the emailed invitation. Only an existing, validated
+      // setup record is updated, after admission and before atomic consumption.
+      const refreshed = await env.DB.prepare('UPDATE hny_auth_verification SET expiresAt = ?, updatedAt = ? WHERE id = ? AND identifier = ? AND value = ? RETURNING id')
+        .bind(new Date(Date.now() + 30 * 60 * 1000).toISOString(), new Date().toISOString(), pending.id, pending.identifier, pending.value).first();
+      if (!refreshed) throw failure('invalid_token', 400);
+      const response = await auth.api.magicLinkVerify({ headers, query: { token: body.token }, asResponse: true });
+      if (!response.ok) throw failure('invalid_token', 400);
+      cookies = cookieHeaders(response); verifiedRequest = sessionCookieRequest(request, response);
+    }
+    const session = await mapSession(verifiedRequest, env, false);
+    if (!session) throw failure('sign_in_required', 401);
+    if (!session.password_required) return privateJson({ error: 'password_already_set' }, 409);
+    // Verify already spent an attempt for this account above.
+    if (!await (action === 'verify' ? registrationAllowed(session.email, body.access_code, env) : admitted(env, session.email, body.access_code, ip, true))) throw failure('registration_restricted', 403);
+    await auth.api.setPassword({ headers: verifiedRequest.headers, body: { newPassword: body.password } });
+    await clearSetupLinks(env, session.email);
+    return privateJson({ status: 'signed_in' }, 200, cookies);
+  } catch (error) {
+    if (error?.code && Number.isInteger(error.status)) return privateJson({ error: error.code }, error.status);
+    const status = error?.statusCode;
+    return privateJson({ error: status === 400 || status === 401 ? 'invalid_token' : 'account_unavailable' }, status === 400 || status === 401 ? 400 : 503);
+  }
+}

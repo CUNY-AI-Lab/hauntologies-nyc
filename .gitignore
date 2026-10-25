@@ -57,3 +57,5 @@ next-env.d.ts
 *.db
 .dev.vars*
 /public/data/source-inventory.json
+# Local map server data (npm run local)
+/.local/

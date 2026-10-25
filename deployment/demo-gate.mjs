@@ -1,6 +1,10 @@
-// The demo can serve the map after a sharing decision. APIs remain closed until
-// verified identity is configured; old hosting identity headers are never trusted.
+import { registrationRestricted } from '../server/registration-eligibility.mjs';
+// Public map with account-derived identity for private contribution routes.
+// Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
+import { MAP_ORIGIN, handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
+import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage, setRosterListing } from '../server/published-edits.mjs';
+import { pendingPlaces } from '../server/pending-places.mjs';
 const privateJson = (value, status = 200) => Response.json(value, { status, headers: {
   'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer'
 } });
@@ -13,16 +17,66 @@ export function createDemoWorker(handler, registration, authenticate = authentic
         for(let i=0;i<4;i++){const decoded=decodeURIComponent(path);if(decoded===path)break;path=decoded;}
       } catch { return new Response('Invalid path',{status:400}); }
       path=path.replace(/\/+/g,'/').toLowerCase();
+      const mapEnabled = mapAccountsReady(env);
+      if (rawPath === '/api/registration-policy' && ['GET','HEAD'].includes(request.method)) {
+        const response = privateJson({ restricted: registrationRestricted(env) });
+        return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
+      }
+      if (['/api/published-edits','/api/published-records'].includes(rawPath) && ['GET','HEAD'].includes(request.method) ) {
+        try {
+          const query=new URL(request.url).searchParams;if([...query.keys()].some(key=>key!=='after')||query.getAll('after').length>1||rawPath==='/api/published-edits'&&query.size||query.has('after')&&!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(query.get('after')))return privateJson({error:'invalid_page'},400);
+          const data = rawPath==='/api/published-edits'?{items:await publishedEdits(env.DB)}:await publishedRecordPage(env.DB,query.get('after')||'');
+          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
+        } catch { return privateJson({error:'feed_unavailable'},503); }
+      }
+      if (rawPath === '/api/contributor-credits' && ['GET','HEAD'].includes(request.method)) {
+        if (new URL(request.url).search) return privateJson({error:'invalid_page'},400);
+        try {
+          const data = await contributorCredits(env.DB);
+          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
+        } catch { return privateJson({error:'feed_unavailable'},503); }
+      }
+      // Registrant names are for signed-in map accounts only; POST is the viewer leaving or rejoining the list.
+      if (rawPath === '/api/contributor-roster' && ['GET','HEAD','POST'].includes(request.method)) {
+        if (new URL(request.url).search) return privateJson({error:'invalid_page'},400);
+        let viewer;
+        try { viewer = mapEnabled ? await mapSession(request, env) : null; } catch { return privateJson({error:'account_unavailable'},503); }
+        if (!viewer) return privateJson({error:'sign_in_required'},401);
+        if (request.method === 'POST') {
+          if (request.headers.get('origin') !== MAP_ORIGIN || (request.headers.get('sec-fetch-site') || 'same-origin') !== 'same-origin') return privateJson({error:'same_origin_required'},403);
+          if (!(request.headers.get('content-type') || '').startsWith('application/json')) return privateJson({error:'json_required'},415);
+          let listed;
+          try { const text = await request.text(); if (text.length > 64) throw 0; listed = JSON.parse(text).listed; } catch { return privateJson({error:'invalid_request'},400); }
+          if (typeof listed !== 'boolean') return privateJson({error:'invalid_request'},400);
+          try { return privateJson(await setRosterListing(env.DB, viewer.actor_id, listed)); } catch { return privateJson({error:'feed_unavailable'},503); }
+        }
+        try {
+          const data = await contributorRoster(env.DB, viewer.actor_id);
+          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'private, no-store'}}) : Response.json(data, {headers:{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+        } catch { return privateJson({error:'feed_unavailable'},503); }
+      }
+      // Places sent for review are public as their own map layer, before any decision.
+      if (rawPath === '/api/pending-places' && ['GET','HEAD'].includes(request.method)) {
+        if (new URL(request.url).search) return privateJson({error:'invalid_page'},400);
+        try {
+          const data = await pendingPlaces(env.DB);
+          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
+        } catch { return privateJson({error:'feed_unavailable'},503); }
+      }
+      if (path === '/api/auth' || path.startsWith('/api/auth/')) {
+        if (rawPath !== path) return privateJson({error:'invalid_path'},400);
+        return handleMapAccount(request, env);
+      }
       // CUNY Login was withdrawn. An obsolete enable setting must never
       // activate that adapter or fall back to another identity provider.
       const withdrawnIdentity = env?.CONTRIBUTIONS_CUNY_ENABLED === 'true';
       if (rawPath === '/api/access-status' && ['GET','HEAD'].includes(request.method)) {
-        const enabled = !withdrawnIdentity && Boolean(accessConfiguration(env));
-        const response = privateJson({ enabled, sign_in_url: enabled ? '/api/contributions/sign-in' : null, dashboard_enabled: false });
+        const enabled = mapEnabled || (!withdrawnIdentity && Boolean(accessConfiguration(env)));
+        const response = privateJson({ enabled, sign_in_url: enabled ? '/api/contributions/sign-in' : null, ...(mapEnabled ? {account_mode:'map'} : {}), dashboard_enabled: false });
         return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
       }
-      // Replacement map accounts are not activated. Legacy session cookies,
-      // headers and owner names cannot open authentication or attendee routes.
+      // Legacy session cookies, headers and owner names cannot open obsolete
+      // authentication or attendee routes.
       if (path === '/auth' || path.startsWith('/auth/') || path === '/api/admin/registrations') {
         return privateJson({error:'sign_in_required'},401);
       }
@@ -33,8 +87,15 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       // Only exact contribution routes can use verified identity. Encoded,
       // repeated, case-folded and bare API paths stay closed.
       if (rawPath === path && /^\/api\/contributions\/[a-z][a-z0-9-]*$/.test(rawPath)) {
-        const actor = withdrawnIdentity ? null : await authenticate(request, env);
+        if (rawPath === '/api/contributions/sign-in' && mapEnabled && ['GET','HEAD'].includes(request.method)) return new Response(null, {status:303,headers:{Location:'/#sign-in','Cache-Control':'no-store'}});
+        let actor;
+        try { actor = mapEnabled ? (await mapSession(request, env))?.actor_id : withdrawnIdentity ? null : await authenticate(request, env); }
+        catch { return privateJson({error:'account_unavailable'},503); }
         if (actor) {
+          // A tab can retain a draft while another tab changes the session.
+          // This assertion binds its write to the expected account; it never grants identity.
+          const expectedActor=request.headers.get('X-Hauntologies-Actor');
+          if(!['GET','HEAD'].includes(request.method)&&expectedActor&&expectedActor!==actor)return privateJson({error:'account_changed'},409);
           if (rawPath === '/api/contributions/sign-in' || rawPath === '/api/contributions/session') {
             if (!['GET','HEAD'].includes(request.method)) return new Response(null, { status:405, headers:{Allow:'GET, HEAD','Cache-Control':'no-store'} });
             if (rawPath.endsWith('/sign-in')) return new Response(null, { status:303, headers:{Location:'/', 'Cache-Control':'no-store'} });
@@ -42,6 +103,7 @@ export function createDemoWorker(handler, registration, authenticate = authentic
             return request.method === 'HEAD' ? new Response(null, { headers:response.headers }) : response;
           }
           const headers = stripIdentityHeaders(request);
+          headers.delete('X-Hauntologies-Actor');
           headers.delete('cookie');
           headers.set('oai-authenticated-user-id', actor);
           const response = await handler.fetch(new Request(request, { headers }), env, ctx);

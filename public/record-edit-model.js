@@ -119,6 +119,7 @@
       else if(['date_start','date_end'].includes(field.key)&&!dateBounds(value))issue(path+'.after','invalid_date','Use YYYY, YYYY-MM or YYYY-MM-DD, or null for unknown.');
       after[field.key]=structuredClone(value);
     }
+    for(const [primary,alias] of Object.entries(sourceAliases))if(changed.has(primary)&&changed.has(alias)&&equal(before?.[primary],before?.[alias])&&!equal(after[primary],after[alias]))issue('changes','aliased_source_fields','Change the primary source field or the first source, not both to different values.');
     if(['latitude','longitude','geo_status','uncertainty_m'].some(key=>changed.has(key))){
       const {latitude:lat,longitude:lon,geo_status:state,uncertainty_m:radius}=after;
       if((lat===null)!==(lon===null)||![lat,lon].every(value=>value===null||(typeof value==='number'&&Number.isFinite(value))))issue('geometry','coordinate_pair','Keep coordinates as paired finite numbers or paired nulls.');
@@ -133,5 +134,43 @@
     }
     return{valid:errors.length===0,errors,after};
   }
-  root.RecordEditModel=Object.freeze({fields:Object.freeze(fields),fieldsFor,snapshot,changes,sourceFields,maxSourceAdditions,validateSourceAdditions,validateChanges});
+  // The inverse of snapshot for a flat public record: each edited value is written where snapshot
+  // reads it first, so snapshot(applyChanges(record, changes)) returns the edited values and every
+  // field the editor does not touch is kept. Never mutates the input.
+  const writeTargets={
+    title:[['title']],inclusion_reason:[['display_reason'],['inclusion_reason']],description:[['description']],
+    category:[['category']],place_type:[['place_type']],borough:[['borough']],address:[['location_text'],['place_original']],
+    latitude:[['latitude']],longitude:[['longitude']],geo_status:[['geo_status']],geo_basis:[['geo_basis'],['location_precision']],
+    uncertainty_m:[['uncertainty_m']],uncertainty_note:[['uncertainty_note']],date_wording:[['time_original']],
+    date_start:[['time_start_year'],['event_date_start']],date_end:[['time_end_year'],['event_date_end']],date_precision:[['time_precision'],['event_date_precision']],
+    date_basis:[['time_basis']],built:[['built']],demolished:[['demolished']],
+    source_url:[['source_url'],['display_source_url'],['sources',0,'url']],source_title:[['source_title'],['sources',0,'title']],source_citation:[['source_citation'],['sources',0,'citation']],
+    source_date:[['sources',0,'source_date_original'],['source_date']],source_locator:[['source_locator'],['sources',0,'locator']],source_type:[['source_type'],['sources',0,'source_type']],
+    rights_notes:[['rights_or_license'],['sources',0,'rights_statement']],
+    image_url:[['image','url'],['image_url']],image_source_url:[['image','sourceUrl'],['image_source_url']],image_credit:[['image','creator'],['image','credit'],['image_credit']],
+    image_license:[['image','license'],['image_license']],image_license_url:[['image','licenseUrl'],['image_license_url']],image_caption:[['image','caption'],['image_caption']],image_alt:[['image','alt'],['image_alt']],
+  };
+  // Primary-source fields are another view of the first source when the record stores no separate value;
+  // validateChanges treats them as one field only when the snapshot shows them sharing a value.
+  const sourceAliases=Object.freeze({source_url:'sources.0.url',source_title:'sources.0.title',source_citation:'sources.0.citation',source_date:'sources.0.source_date_original',source_locator:'sources.0.locator',source_type:'sources.0.source_type',rights_notes:'sources.0.rights_statement'});
+  const holds=(record,path)=>{let node=record;for(const key of path.slice(0,-1)){node=node?.[key];if(!node||typeof node!=='object')return false;}return own(node,path.at(-1));};
+  const parentExists=(record,path)=>{let node=record;for(const key of path.slice(0,-1)){node=node?.[key];if(!node||typeof node!=='object')return false;}return true;};
+  function put(record,path,value){let node=record;for(const key of path.slice(0,-1))node=node[key];node[path.at(-1)]=structuredClone(value);}
+  function applyChanges(record,proposed=[],additions=[]){
+    const next=structuredClone(record);
+    for(const change of proposed){
+      const dynamic=dynamicField(change.field),value=change.after;
+      if(dynamic?.sourceIndex!==undefined){const key=change.field.split('.')[2];next.sources[dynamic.sourceIndex][key]=structuredClone(value);continue;}
+      if(change.field.startsWith('aliases.')){next.aliases[Number(change.field.split('.')[1])]=structuredClone(value);continue;}
+      const paths=writeTargets[change.field];if(!paths)continue;
+      const stored=['date_start','date_end'].includes(change.field)&&typeof value==='string'&&/^\d{4}$/.test(value)?Number(value):value;
+      const path=paths.find(candidate=>holds(next,candidate))||paths.find(candidate=>candidate.length===1)||paths.find(candidate=>parentExists(next,candidate));
+      put(next,path,stored);
+      // A new image URL replaces any locally cached copy, which the page would otherwise show first.
+      if(change.field==='image_url'&&next.image&&typeof next.image==='object')delete next.image.localUrl;
+    }
+    if(Array.isArray(additions)&&additions.length)next.sources=[...(Array.isArray(next.sources)?next.sources:[]),...structuredClone(additions)];
+    return next;
+  }
+  root.RecordEditModel=Object.freeze({fields:Object.freeze(fields),fieldsFor,snapshot,changes,sourceFields,maxSourceAdditions,validateSourceAdditions,validateChanges,applyChanges,sourceAliases});
 })(typeof window!=='undefined'?window:globalThis);

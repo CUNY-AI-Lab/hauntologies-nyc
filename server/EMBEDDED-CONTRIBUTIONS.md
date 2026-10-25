@@ -1,6 +1,6 @@
 # Embedded contribution contracts
 
-These additions use the existing `/api/contributions/preview`, `/submit`, `/revise` and readback endpoints and existing D1 tables. They do not change authentication, grant reviewer/publisher permissions, enable AI, or change the canonical point-oriented Entries schema. New points continue to use `entry_bundle`.
+These additions use the existing `/api/contributions/preview`, `/submit`, `/revise` and readback endpoints and existing D1 tables. They do not change authentication, grant reviewer/publisher permissions, enable AI, or change the canonical point-oriented Entries schema. New points use `entry_bundle` or qualifying pointed `open_proposal` submissions.
 
 Both `area_proposal` and `record_annotation` are review-only. Valid submissions enter `submitted`; deterministic errors enter `changes_requested`. Independent review still requires all editorial/privacy checks and cannot be performed by the contributor. Even an independently approved proposal cannot be applied by the existing data operator. No polygon or annotation is automatically written into map records.
 
@@ -77,4 +77,4 @@ Kind is `addition` or `clarification`. Dates can be null or the shared date obje
 
 Submission JSON bytes, original source snapshots, revisions, validation results and receipt bindings remain in the existing immutable workflow history. Existing idempotency keys and same-origin checks apply. Static target review uses a fresh server catalog check and rejects D1 ID collisions; static targets are never accepted by apply/activation/rollback operators.
 
-Local tests use explicitly synthetic identities and isolated SQLite. They establish deterministic service behavior, not authenticated production acceptance. Hosted submission/revision acceptance still requires a real authorized browser session. The owner-private Site still has no independent reviewer/publisher grants.
+Local tests use explicitly synthetic identities and isolated SQLite. They establish deterministic service behavior, not authenticated production acceptance. Hosted submission/revision acceptance still requires a real authorized browser session. The public map uses map accounts; open review grants bounded peer review/publication, while private hosted targets and raw job snapshots retain explicit privileged access.

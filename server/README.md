@@ -4,7 +4,7 @@ Provider: CUNY AI Lab gateway, exact model glm-5.3-flash. No model request is po
 
 The original JSON string and parsed participant fields remain immutable. GLM may return only validated source spans and constrained derived fields. Coordinates come from explicit cited input or exact matches in the already sourced Site gazetteer. Other place names stay unlocated for review; there is no guessed or ambient geocoding.
 
-Endpoints require the Sites authenticated-user header. Mutations require a same-origin Origin header and JSON body. All database reads/writes are scoped to that user. The current Site remains owner-private. Broader participant collection requires an explicit sharing and reviewer-role design.
+The ingestion service trusts only the authenticated-user header supplied by its server gate. The public Worker strips client identity claims and derives contribution identity from verified map sessions. Mutations require same-origin Origin and bounded bodies. Ingestion remains disabled in the production release; contribution peer/privileged access is documented in [Map accounts](../docs/contribution-access.md).
 
 Environment setup after secure approval:
 - CAIL_API_KEY: server secret, never client code

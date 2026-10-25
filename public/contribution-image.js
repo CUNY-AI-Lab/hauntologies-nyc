@@ -1,15 +1,17 @@
 /* Prepare a metadata-free image derivative locally; the server validates uploads independently. */
 (function (root) {
   'use strict';
-  const MAX_BYTES=1024*1024, MAX_AXIS=8192, MAX_PIXELS=16777216;
+  // Files up to 5 MiB are accepted; the stored derivative stays within the server's 1 MiB limit,
+  // which keeps each D1 row under its 2,000,000-byte value cap.
+  const MAX_INPUT_BYTES=5*1024*1024, MAX_BYTES=1024*1024, MAX_AXIS=8192, MAX_PIXELS=16777216;
   const TYPES=new Set(['image/jpeg','image/png','image/webp']);
   const messages={
-    image_too_large:'Choose an image no larger than 1 MiB.',
+    image_too_large:'Choose an image no larger than 5 MB.',
     unsupported_image_type:'Choose a JPEG, PNG, or WebP image.',
     animated_image_unsupported:'Choose a still image. Animated images are not supported.',
     invalid_image:'This image is incomplete or could not be read.',
     image_dimensions_exceeded:'Use an image at most 8192 pixels per side and 16,777,216 pixels in total.',
-    image_output_too_large:'The prepared image exceeds 1 MiB. Choose a smaller image.',
+    image_output_too_large:'This image could not be reduced below 1 MB. Choose a smaller image.',
     image_processing_unavailable:'This browser could not prepare the image.'
   };
   const fail=code=>{throw Object.assign(new Error(messages[code]),{code});};
@@ -99,12 +101,26 @@
     if(type==='image/webp')return webp(bytes,view);
     fail('unsupported_image_type');
   }
-  function encode(canvas,type){
-    return new Promise(resolve=>{try{canvas.toBlob(resolve,type,0.9);}catch{resolve(null);}});
+  function encode(canvas,type,quality=0.9){
+    return new Promise(resolve=>{try{canvas.toBlob(resolve,type,quality);}catch{resolve(null);}});
+  }
+  // Steps quality, then dimensions, down until the derivative fits. A type the browser cannot
+  // write comes back as PNG and is skipped; PNG may become lossy WebP, which keeps transparency.
+  async function fit(canvas,context,bitmap,size,type){
+    const types={'image/png':['image/png','image/webp'],'image/webp':['image/webp','image/png'],'image/jpeg':['image/jpeg']}[type];
+    for(let step=0,scale=1;step<10;step++,scale*=0.8){
+      const width=Math.max(1,Math.round(size.width*scale)),height=Math.max(1,Math.round(size.height*scale));
+      canvas.width=width;canvas.height=height;context.imageSmoothingQuality='high';context.drawImage(bitmap,0,0,width,height);
+      for(const candidate of types)for(const quality of candidate==='image/png'?[1]:[0.9,0.8,0.7]){
+        const output=await encode(canvas,candidate,quality);
+        if(output?.type===candidate&&output.size&&output.size<=MAX_BYTES)return {output,width,height};
+      }
+    }
+    fail('image_output_too_large');
   }
   async function prepare(file){
     if(!(file instanceof root.Blob)||!file.size)invalid();
-    if(file.size>MAX_BYTES)fail('image_too_large');
+    if(file.size>MAX_INPUT_BYTES)fail('image_too_large');
     if(!TYPES.has(file.type))fail('unsupported_image_type');
     let bytes;
     try{bytes=new Uint8Array(await file.arrayBuffer());}catch{invalid();}
@@ -119,15 +135,12 @@
       canvas=root.document.createElement('canvas');canvas.width=size.width;canvas.height=size.height;
       const context=canvas.getContext('2d',{alpha:true});
       if(!context||typeof canvas.toBlob!=='function')fail('image_processing_unavailable');
-      context.drawImage(bitmap,0,0);
-      let output=await encode(canvas,file.type);
-      if(!output||(output.type!==file.type&&output.type!=='image/png'))output=await encode(canvas,'image/png');
+      const {output,width,height}=await fit(canvas,context,bitmap,size,file.type);
       if(!output||!output.size||!TYPES.has(output.type))fail('image_processing_unavailable');
-      if(output.size>MAX_BYTES)fail('image_output_too_large');
       const retained=inspect(new Uint8Array(await output.arrayBuffer()),output.type);
-      if(retained.width!==size.width||retained.height!==size.height)fail('image_processing_unavailable');
+      if(retained.width!==width||retained.height!==height)fail('image_processing_unavailable');
       const extension={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[output.type];
-      return {file:new root.File([output],'contribution-image.'+extension,{type:output.type}),...size,metadataRemoved:true,inputType:file.type,outputType:output.type,usedPngFallback:output.type!==file.type};
+      return {file:new root.File([output],'contribution-image.'+extension,{type:output.type}),width,height,sourceWidth:size.width,sourceHeight:size.height,resized:width!==size.width,metadataRemoved:true,inputType:file.type,outputType:output.type,usedPngFallback:output.type==='image/png'&&file.type!=='image/png'};
     }catch(error){
       if(Object.prototype.hasOwnProperty.call(messages,error?.code))throw error;
       fail('image_processing_unavailable');
