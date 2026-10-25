@@ -322,7 +322,7 @@ test('open review: any map account approves and publishes another person\'s plac
   status(await call(h, 'revise', { idempotency_key: key(h, 'revise'), submission_id: s.id, expected_revision: 2, submission_json: raw }, as(A)), 200);
   status(await call(h, 'submission?id=' + s.id, undefined, as(B)), 404);
   assert.ok(!(await call(h, 'dashboard', undefined, as(B))).body.submissions.some(x => x.id === s.id));
-  status(await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 3, action: 'ready_for_review', rationale: 'Not mine.' }, as(B)), 403);
+  status(await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 3, action: 'ready_for_review', rationale: 'Not mine.' }, as(B)), 404);
   const queued = await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 3, action: 'ready_for_review', rationale: 'Revision ready for review.' }, as(A)); status(queued, 200);
   // B approves, and the approval can publish: B applies and verifies.
   const approved = await call(h, 'review', review(h, queued.body.submission), as(B)); status(approved, 200);
@@ -334,7 +334,7 @@ test('open review: any map account approves and publishes another person\'s plac
   const outsider = await call(h, 'review', review(h, queued.body.submission), as('access_' + 'a'.repeat(64))); assert.ok([403, 404, 409].includes(outsider.status));
 });
 
-test('a preview saved under an earlier operator is approved and published as the current one, without proposal_changed', async t => {
+test('a stale saved preview is displayed fresh before approval and old publication effects are rejected', async t => {
   const A = 'map_00000000-0000-4000-8000-00000000000a', B = 'map_00000000-0000-4000-8000-00000000000b';
   const { reviewAuthorization } = await import('../server/review-authorization.mjs');
   const h = harness({ authorization: reviewAuthorization(undefined, undefined, undefined, 'true') }); t.after(() => h.db.close());
@@ -344,8 +344,13 @@ test('a preview saved under an earlier operator is approved and published as the
   const old = { ...JSON.parse(fresh.preview_json), diff_hash: 'f'.repeat(64), application: { applicable: false, reason: 'open_proposal_review_only', operations: [] } };
   h.db.native.prepare('UPDATE workflow_revisions SET diff_hash=?,preview_json=? WHERE submission_id=?').run(old.diff_hash, JSON.stringify(old), id);
   const shown = (await call(h, 'submission?id=' + id, undefined, { actor: B })).body.submission;
-  assert.equal(shown.diff_hash, old.diff_hash);
+  assert.equal(shown.diff_hash, fresh.diff_hash);
+  const staleRequest={...review(h,shown),diff_hash:old.diff_hash};
+  status(await call(h,'review',staleRequest,{actor:B}),409);
+  assert.equal(h.db.native.prepare('SELECT COUNT(*) n FROM workflow_approvals WHERE submission_id=?').get(id).n,0);
+  assert.equal(h.db.native.prepare('SELECT preview_json FROM workflow_revisions WHERE submission_id=?').get(id).preview_json,JSON.stringify(old));
   const approved = await call(h, 'review', review(h, shown), { actor: B }); status(approved, 200);
+  assert.equal(h.db.native.prepare('SELECT diff_hash FROM workflow_revisions WHERE submission_id=?').get(id).diff_hash,old.diff_hash,'historical saved preview stays intact');
   assert.equal(approved.body.submission.diff_hash, fresh.diff_hash); assert.equal(approved.body.submission.application.applicable, true);
   const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, { actor: B }); status(staged, 201);
   status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }, { actor: B }), 200);

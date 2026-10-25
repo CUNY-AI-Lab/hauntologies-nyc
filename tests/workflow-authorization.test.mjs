@@ -127,3 +127,62 @@ test('scope filtering occurs before list limits, so other users cannot crowd out
  const d=await call(h,'dashboard');status(d,200);assert.deepEqual(d.body.submissions.map(s=>s.id),[own.submission.id]);assert.deepEqual(d.body.jobs.map(j=>j.id),['old-owned-job']);assert.deepEqual(d.body.targets.map(r=>r.record_id),['old-owned-record']);
  assert.equal((await h.store.listSubmissions()).length,100);assert.equal((await h.store.listJobs()).length,100);assert.equal((await h.store.listRecords()).length,1000);
 });
+
+test('open peers cannot enumerate unpublished targets, private target proposals or raw job snapshots',async t=>{
+ const A='map_00000000-0000-4000-8000-000000000001',B='map_00000000-0000-4000-8000-000000000002';
+ const h=harness(t,{everyone:true,reviewers:['moderator'],publishers:['publisher']});
+ await hosted(h,'hosted-private',A);
+ status(await call(h,'target?id=hosted-private',undefined,B),404);
+ status(await call(h,'target?id=hosted-private',undefined,A),200);
+ status(await call(h,'target?id=hosted-private',undefined,'moderator'),200);
+ status(await call(h,'target?id=hosted-private',undefined,'publisher'),200);
+ const dashboard=await call(h,'dashboard',undefined,B);status(dashboard,200);assert.deepEqual(dashboard.body.targets,[]);assertNoPrivate(dashboard);
+ const saved=await submit(h,'A submitted proposal',A),id=job(h,saved.submission);
+ h.db.native.prepare("UPDATE workflow_submissions SET review_state='draft' WHERE id=?").run(saved.submission.id);
+ status(await call(h,'job?id='+id,undefined,B),404);
+ for(const action of ['verify','rollback']){
+  const request={idempotency_key:key(),job_id:id,...action==='verify'?{map_list_check:{status:'pass',evidence:'Forged peer assertion'}}:{rationale:'Forged peer rollback'}};
+  status(await call(h,action,request,B),404);
+ }
+ h.db.native.prepare("UPDATE workflow_submissions SET review_state='approved' WHERE id=?").run(saved.submission.id);
+ const peerJob=await call(h,'job?id='+id,undefined,B);status(peerJob,200);assertNoPrivate(peerJob);
+ assert.equal(Object.hasOwn(peerJob.body.job.manifest.targets[0],'after'),false);
+ const moderatorJob=await call(h,'job?id='+id,undefined,'moderator');status(moderatorJob,200);assert.ok(JSON.stringify(moderatorJob.body).includes(privateText));
+ // A saved preview referring to a private hosted target is also outside the peer queue.
+ const row=h.db.native.prepare('SELECT preview_json FROM workflow_revisions WHERE submission_id=?').get(saved.submission.id),preview=JSON.parse(row.preview_json);
+ preview.targets=[{record_id:'hosted-private'}];h.db.native.prepare('UPDATE workflow_revisions SET preview_json=? WHERE submission_id=?').run(JSON.stringify(preview),saved.submission.id);
+ status(await call(h,'submission?id='+saved.submission.id,undefined,B),404);
+ h.db.native.prepare("UPDATE workflow_submissions SET review_state='submitted' WHERE id=?").run(saved.submission.id);
+ status(await call(h,'triage',triageBody(saved.submission,'request_information'),B),404);
+ assert.equal((await h.store.getSubmission(saved.submission.id)).review_state,'submitted');
+ const hidden=await call(h,'dashboard',undefined,B);status(hidden,200);assert.deepEqual(hidden.body.submissions,[]);assert.deepEqual(hidden.body.jobs,[]);
+});
+
+test('a newly created shared task can be linked without accepting malformed or nonexistent task IDs',async t=>{
+ const h=harness(t),created=await call(h,'task-create',{idempotency_key:key(),task:{bounded_task:'Synthetic link test',description:'Use a generated task ID.',section:'Research',skill_level:'beginner',status:'proposed'}});status(created,201);
+ const value=envelope('Linked synthetic contribution',{task_ids:[created.body.task.task_id]});
+ const linked=await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify(value)});status(linked,201);assert.deepEqual(linked.body.submission.task_ids,[created.body.task.task_id]);
+ for(const id of ['HNY-nope','HNY-00000000-0000-4000-8000-000000000099']){
+  const rejected=await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify({...value,task_ids:[id]})});status(rejected,400);
+ }
+});
+
+test('a public projection never grants a peer access to private canonical correction snapshots',async t=>{
+ const A='map_00000000-0000-4000-8000-000000000001',B='map_00000000-0000-4000-8000-000000000002';
+ const h=harness(t,{everyone:true});await hosted(h,'hosted-private',A);
+ const derived={canonical_entry:{entry_id:'private-entry',title:'Hosted title',claim_text:privateText,contributor:'HIDDEN_SYNTHETIC_NAME',review_notes:'PRIVATE_SYNTHETIC_REVIEW'}};
+ h.db.native.prepare('UPDATE approved_records SET derived_json=? WHERE id=?').run(JSON.stringify(derived),'hosted-private');
+ h.store.getPublicRecord=async id=>id==='hosted-private'?{id,title:'Safe public title',description:'Safe public text'}:null;
+ h.service=createWorkflowService({...h.settings,store:h.store});
+ const record=await h.store.getRecord('hosted-private'),value=envelope('Synthetic correction',{type:'date_correction',targets:[{record_id:record.id,expected_version:record.version,expected_hash:record.hash}],payload:{original_wording:'unknown',reason:'Synthetic test',after:{time_original:'1900',time_start_year:1900,time_end_year:1900,time_precision:'year',time_basis:'Synthetic source'}}});
+ const result=await call(h,'preview',{submission_json:JSON.stringify(value)},B);status(result,200);assertNoPrivate(result);
+ for(const secret of ['HIDDEN_SYNTHETIC_NAME','PRIVATE_SYNTHETIC_REVIEW'])assert.equal(JSON.stringify(result.body).includes(secret),false);
+ assert.equal(result.body.preview.application.applicable,false);
+});
+
+
+test('an ordinary owner receives safe job projections even with open review disabled',async t=>{
+ const h=harness(t),saved=await submit(h,'Synthetic own submission');const id=job(h,saved.submission);
+ const result=await call(h,'job?id='+id);status(result,200);assertNoPrivate(result);
+ assert.equal(Object.hasOwn(result.body.job.manifest.targets[0],'after'),false);
+});

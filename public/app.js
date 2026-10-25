@@ -93,7 +93,7 @@ window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.deta
 // A contribution to a mapped place sits as a badge beside that place's marker.
 let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;const pendingMarkers=new Map();
 // An approved note on a mapped place stays a note; only a new point is published on approval.
-const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, publishing soon'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
+const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, awaiting publication'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
 // Where a pending place is: the contributor's own words, the place it adds to, or its cross streets.
 function pendingWhere(place,record){
  if(record)return 'Adds to '+(record.title||'a mapped place')+' · '+whereLabel(record);
@@ -137,7 +137,7 @@ function bringUpPending(place){
 function renderPendingList(records,own){
  const feed=$('pendingPlacesFeed');if(!feed)return;
  const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
- feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);
+ feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
  $('pendingPlacesList').replaceChildren(...shown.map(place=>{
   const row=document.createElement('li'),button=document.createElement('button'),record=place.record_id?records.get(place.record_id):null;button.type='button';
   const title=document.createElement('strong');title.textContent=place.title;const meta=document.createElement('span');
@@ -445,18 +445,11 @@ function placeFacts(r){
  const coordinates=p.latitude===null||p.longitude===null
   ? '<p class="place-coordinate-note">Location unresolved</p>'
   : `<dl class="place-coordinates"><dt>Coordinates</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
- return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+ return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
 }
 
 function appendPlaceRecord(card,r){
- const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('div');details.className='place-record';summary.textContent='Record';body.className='place-record-content';details.append(summary,body);
- const text=(tag,value)=>{const el=document.createElement(tag);el.textContent=String(value);return el;};
- body.append(text('h3',r.title));const description=PlaceSummary.view(r).description;if(description)body.append(text('p',description));
- const p=PlaceSummary.view(r);if(p.latitude!==null)body.append(text('p',p.latitude+', '+p.longitude));
- const photo=r.image||{},url=photo.localUrl&&/^assets\/[A-Za-z0-9_./-]+$/.test(photo.localUrl)?photo.localUrl:safeUrl(photo.url||r.image_url);
- if(url){const figure=document.createElement('figure'),image=document.createElement('img');image.src=url;image.alt=photo.alt||photo.caption||r.image_caption||r.title;image.loading='lazy';figure.append(image);if(photo.caption||r.image_caption)figure.append(text('figcaption',photo.caption||r.image_caption));if(photo.creator||photo.license)figure.append(text('p',[photo.creator,photo.license].filter(Boolean).join(' · ')));body.append(figure);}
- const sources=Array.isArray(r.sources)?r.sources:[];if(sources.length||r.source_url){body.append(text('h4','Sources'));const list=document.createElement('ul');for(const source of sources.length?sources:[{url:r.source_url,title:r.source_title}]){const row=document.createElement('li'),url=safeUrl(source.url);if(url){const a=text('a',source.title||source.citation||source.source_ref||'Source');a.href=url;a.target='_blank';a.rel='noopener noreferrer';row.append(a);}else row.append(text('span',source.citation||source.title||'Source'));if(source.evidence_note)row.append(text('p',source.evidence_note));list.append(row);}body.append(list);}
- const metadata=[['Location',r.location_text||r.place_original],['Borough',r.borough],['Dates',r.time_original||r.event_date_start],['Date basis',r.time_basis],['Location basis',r.geo_basis||r.location_precision],['Uncertainty',r.uncertainty_note],['Rights',r.rights_or_license]];const dl=document.createElement('dl');for(const[label,value]of metadata)if(value!==undefined&&value!==null&&value!==''){dl.append(text('dt',label),text('dd',value));}if(dl.children.length)body.append(dl);card.append(details);
+ return window.PlaceRecordView.append(card,r,{summary:PlaceSummary.view(r),safeUrl});
 }
 
 function renderDetail(r){

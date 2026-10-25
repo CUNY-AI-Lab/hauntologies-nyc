@@ -55,3 +55,16 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 
 /* Taps on map controls act at once: Safari would otherwise read two quick taps on +/- as a page zoom. */
 .leaflet-control a,.leaflet-control button,.map-tool-tray a,.map-tool-tray button{touch-action:manipulation}
+
+/* Existing map controls grouped in reading and keyboard order: NYC, pin, Contributors. */
+#mapFooter{left:max(20px,env(safe-area-inset-left));display:flex;align-items:center;gap:4px}
+#mapFooter .recenter-map{position:relative;left:auto;bottom:auto}
+#mapFooter .plot-place-toggle{width:48px;min-width:48px;min-height:48px;padding:6px;touch-action:manipulation}
+#mapFooter .plot-place-toggle[aria-pressed=true]{border-color:var(--sun);background:#2a251d}
+.brand-drop>.review-hourglass{width:44px;min-height:44px;padding:6px;justify-content:center;color:var(--sun)}
+.brand-drop>.review-hourglass svg{width:28px;height:28px;flex:none}
+.brand-drop>.review-hourglass::before,.brand-drop>.review-hourglass::after,.review-hourglass>.disclosure-mark{display:none}
+.review-hourglass:hover,.brand-drop[open]>.review-hourglass{color:var(--ink)}
+.place-contributors{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+@media(max-width:760px){#mapFooter{left:max(12px,env(safe-area-inset-left))}}
+@media(max-width:520px){.contribution-navigation{bottom:calc(max(var(--dock-bottom),env(safe-area-inset-bottom)) + 52px)}}

@@ -6,7 +6,7 @@ Use Node.js 22.13 or newer. Install with `npm run install:ci` and run locally wi
 
 To try contributing and reviewing on your own machine, run `npm run local` and open http://127.0.0.1:8790. Sign in from the map's Sign in button with a testing account; the password for both is `haunted-local-only`:
 
-- `contributor@local.test` submits places and sees their own work.
+- `contributor@local.test` submits places and reviews the other testing account’s submitted work.
 - `reviewer@local.test` can also review and publish.
 
 The local server runs the real contribution service on SQLite in `.local/` (gitignored); `npm run local -- --fresh` starts over. Registration, password resets and image uploads need production services and are off locally.
@@ -25,7 +25,7 @@ Deploy that prepared release only when deployment is authorized:
 npx wrangler deploy --config dist/server/wrangler.live.json
 ```
 
-The public map is already approved and live at https://hauntologies-nyc.ailab-452.workers.dev, with standalone event registration at `/register`. Release preparation preserves its public `workers.dev` route and keeps preview URLs disabled. Map accounts use verified email and a password chosen after verification. Signed-in contributors can save and read their own proposals and private images. Review, publishing and attendee-dashboard permissions require separate explicit grants. Account implementation and release steps are documented in [Contribution access](docs/contribution-access.md).
+The public map is already approved and live at https://hauntologies-nyc.ailab-452.workers.dev, with standalone event registration at `/register`. Release preparation preserves its public `workers.dev` route and keeps preview URLs disabled. Map accounts use verified email and a password chosen after verification. Signed-in contributors can save and read their own proposals and private images. Open review lets every verified map account review and publish others’ submitted work; unpublished hosted data and raw release snapshots retain privileged access. Approval, staging and map/list verification are separate steps. Attendee-dashboard access remains blocked. Account implementation and release steps are documented in [Contribution access](docs/contribution-access.md).
 
 The existing D1 binding is `DB`. Schema migrations contain no participant rows. Registration tests use synthetic local SQLite fixtures; no attendee or submission data is included. Do not use production data in repository issues, tests, or fixtures.
 

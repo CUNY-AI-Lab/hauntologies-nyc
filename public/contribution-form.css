@@ -286,3 +286,23 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .pending-place:focus-visible { outline:2px solid #ffd39e; outline-offset:3px; }
 .pending-place-popup p { margin:4px 0; overflow-wrap:anywhere; }
 .pending-place-popup .pending-place-status { margin:0 0 4px; color:#8a63c9; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+
+/* Record content follows the existing Places reading column, type and spacing. */
+.place-record-content{color:var(--ink);font:400 13px/1.5 Arial,Helvetica,sans-serif;min-width:0}
+.place-record-content .place-record-title{font:600 16px/1.35 Arial,Helvetica,sans-serif;margin:4px 0 8px}
+.place-record-content>p,.place-record-content figure{margin:0 0 12px}
+.place-record-content .place-record-description,.place-record-content .place-record-citation,.place-record-content .place-record-source-note{white-space:pre-wrap}
+.place-record-content .place-record-credit,.place-record-content figcaption{color:var(--muted);font-size:12px;line-height:1.5}
+.place-record-content figcaption{margin-top:6px}
+.place-record-metadata{display:grid;gap:8px;margin:0 0 12px}
+.place-record-metadata>div{display:grid;grid-template-columns:minmax(80px,.65fr) minmax(0,1.35fr);gap:4px 12px}
+.place-record-metadata dt{font-size:12px;color:var(--muted)}
+.place-record-metadata dd{min-width:0;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.place-record-content>h4{font:600 13px/1.4 Arial,Helvetica,sans-serif;margin:16px 0 8px}
+.place-record-sources{list-style:none;margin:0;padding:0}
+.place-record-sources>li{min-width:0;border-top:1px solid var(--line);padding:8px 0}
+.place-record-content a{display:inline-flex;align-items:center;min-height:44px;max-width:100%;color:var(--sun);font-size:12px;overflow-wrap:anywhere;text-underline-offset:4px}
+.place-record-content a:hover{color:var(--ink)}
+.place-record-sources p{margin:0 0 8px}
+.place-record-sources .place-record-metadata{margin-bottom:8px}
+@media(max-width:380px){.place-record-metadata>div{grid-template-columns:minmax(0,1fr);gap:2px}}
