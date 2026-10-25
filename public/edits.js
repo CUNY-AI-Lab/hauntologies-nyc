@@ -3,16 +3,22 @@
   const byId=id=>document.getElementById(id),dialog=byId('ownEditsDialog');
   if(!dialog)return;
   const list=byId('ownEditsList'),status=byId('ownEditsStatus'),back=byId('returnToEdits');
-  const labels={draft:'Draft',submitted:'Pending review',changes_requested:'Changes requested',approved:'Approved',merged:'Published',withheld:'Withheld'};
+  const labels={draft:'Draft',submitted:'Submitted for review',changes_requested:'Submitted for review · revision requested',approved:'Approved',merged:'Published',withheld:'Withdrawn'};
   const node=(tag,text)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;return el;};
   const button=(label,action)=>{const el=node('button',label);el.type='button';el.className='outline';el.addEventListener('click',action);return el;};
   const date=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
   let page=1,totalPages=1,loaded=false,generation=0,scroll=0,returnFocus=null,actor=null;
   async function get(path){const response=await fetch(path,{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error(response.status===401?'Sign in to view your edits.':'Edits are temporarily unavailable.');return response.json();}
+  async function post(path,body){const response=await fetch(path,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',...(actor?{'X-Hauntologies-Actor':actor}:{})},body:JSON.stringify(body)});let data={};try{data=await response.json();}catch{}if(!response.ok)throw new Error(response.status===401?'Sign in to change your edits.':response.status===409?'This edit changed. Reload and try again.':'That edit could not be removed right now.');return data;}
+  // Removes an unpublished edit for good; a published one stays with the map.
+  async function remove(item,control){if(!window.confirm('Delete "'+(item.title||'this edit')+'"? It will be gone for good.'))return;control.disabled=true;status.textContent='Deleting…';
+    try{await post('/api/contributions/delete',{idempotency_key:crypto.randomUUID(),submission_id:item.id,expected_revision:item.revision});window.dispatchEvent(new CustomEvent('contributions-edit-deleted',{detail:{submissionId:item.id}}));await load(page);}
+    catch(error){status.textContent=error.message;control.disabled=false;}}
   async function identity(){const value=await get('/api/auth/session');if(value.password_required||typeof value.actor_id!=='string')throw new Error('Sign in to view your edits.');return value.actor_id;}
   function leave(action,focus){scroll=dialog.scrollTop;returnFocus=focus;dialog.close();back.hidden=false;action();}
   function showItem(item){
     const row=node('li'),title=button(item.title||'Edit',()=>leave(()=>window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:item.id}})),title));title.className='edit-title';row.append(title,node('p',(labels[item.status]||'Saved')+' · '+date(item.updated_at)));
+    if(item.status!=='merged'){const del=button('Delete',()=>remove(item,del));del.className='textbutton edit-delete';del.setAttribute('aria-label','Delete '+(item.title||'edit'));row.append(del);}
     const targets=node('div');targets.className='edit-targets';
     for(const target of item.targets||[]){const open=button(target.title||'View place',()=>leave(()=>window.dispatchEvent(new CustomEvent('edits-place-requested',{detail:{recordId:target.record_id}})),open));open.setAttribute('aria-label','Show '+(target.title||'place')+' on map');targets.append(open);}
     row.append(targets);return row;

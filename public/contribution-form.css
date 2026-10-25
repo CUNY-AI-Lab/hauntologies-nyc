@@ -69,6 +69,8 @@
 #ownEditsList p, #publishedEditsList p { font-size:12px; color:var(--muted); margin:4px 0; }
 .edit-title { display:block; width:100%; text-align:left; padding:8px 0; background:none; border:0; color:var(--ink); min-height:44px; overflow-wrap:anywhere; }
 .edit-targets, .edits-pagination { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.edit-delete { font-size:12px; color:#d9a28a; min-height:44px; padding:0 4px; }
+.contribution-place-hint { margin:8px 0 0; color:#bdb5aa; line-height:1.5; }
 .edit-targets button, .edits-pagination button { min-height:44px; padding:8px 12px; }
 .edits-pagination { justify-content:space-between; margin-top:16px; }
 .return-to-edits { min-height:44px; padding:8px 12px; margin-left:auto; background:var(--paper); }
