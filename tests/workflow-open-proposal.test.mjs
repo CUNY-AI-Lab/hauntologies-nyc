@@ -333,3 +333,24 @@ test('open review: any map account approves and publishes another person\'s plac
   // Accounts that are not map accounts get no review role from open review.
   const outsider = await call(h, 'review', review(h, queued.body.submission), as('access_' + 'a'.repeat(64))); assert.ok([403, 404, 409].includes(outsider.status));
 });
+
+test('a preview saved under an earlier operator is approved and published as the current one, without proposal_changed', async t => {
+  const A = 'map_00000000-0000-4000-8000-00000000000a', B = 'map_00000000-0000-4000-8000-00000000000b';
+  const { reviewAuthorization } = await import('../server/review-authorization.mjs');
+  const h = harness({ authorization: reviewAuthorization(undefined, undefined, undefined, 'true') }); t.after(() => h.db.close());
+  const sent = await call(h, 'submit', { idempotency_key: key(h, 'submit'), submission_json: JSON.stringify(envelope({ geometry: point() }, { title: 'Older preview place' }), null, 2) }, { actor: A }); status(sent, 201);
+  const id = sent.body.submission.id, fresh = h.db.native.prepare('SELECT diff_hash,preview_json FROM workflow_revisions WHERE submission_id=?').get(id);
+  // As an older operator saved it: a different diff hash and a review-only application.
+  const old = { ...JSON.parse(fresh.preview_json), diff_hash: 'f'.repeat(64), application: { applicable: false, reason: 'open_proposal_review_only', operations: [] } };
+  h.db.native.prepare('UPDATE workflow_revisions SET diff_hash=?,preview_json=? WHERE submission_id=?').run(old.diff_hash, JSON.stringify(old), id);
+  const shown = (await call(h, 'submission?id=' + id, undefined, { actor: B })).body.submission;
+  assert.equal(shown.diff_hash, old.diff_hash);
+  const approved = await call(h, 'review', review(h, shown), { actor: B }); status(approved, 200);
+  assert.equal(approved.body.submission.diff_hash, fresh.diff_hash); assert.equal(approved.body.submission.application.applicable, true);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, { actor: B }); status(staged, 201);
+  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }, { actor: B }), 200);
+  assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Older preview place']);
+  // Changed content is still refused.
+  const other = await call(h, 'submit', { idempotency_key: key(h, 'submit'), submission_json: JSON.stringify(envelope({ geometry: point() }, { title: 'Second place' }), null, 2) }, { actor: A });
+  const changed = await call(h, 'review', review(h, { ...other.body.submission, payload_hash: 'e'.repeat(64) }), { actor: B }); status(changed, 409); assert.equal(changed.body.error, 'proposal_changed');
+});

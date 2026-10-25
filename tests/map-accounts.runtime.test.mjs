@@ -6,7 +6,7 @@ import {harness,password,replacement} from './fixtures/map-accounts-harness.mjs'
 import {MAP_ORIGIN} from '../deployment/map-accounts.mjs';
 import {CHECKS} from '../server/workflow-core.mjs';
 
-test('email proof, password sign-in, one-hour cookie, own contribution and sign-out in Workers/D1', async t=>{
+test('email proof, password sign-in, one-week cookie, own contribution and sign-out in Workers/D1', async t=>{
   const h=await harness(t), email='first@example.test';
   const before=await h.call('/api/auth/register',{email});assert.equal(before.status,200);
   assert.equal((await h.db.prepare('SELECT count(*) n FROM hny_auth_user').first()).n,0);
@@ -14,7 +14,7 @@ test('email proof, password sign-in, one-hour cookie, own contribution and sign-
   const token=await h.token(email);assert.ok(token);
   const stored=await h.db.prepare('SELECT identifier,value FROM hny_auth_verification').all();assert.ok(!JSON.stringify(stored.results).includes(token));
   const verified=await h.call('/api/auth/verify',{token,password});assert.equal(verified.status,200,JSON.stringify(verified.body));
-  const cookies=verified.headers.getSetCookie().join(';');assert.match(cookies,/^__Host-hauntologies-session=/);assert.match(cookies,/HttpOnly/i);assert.match(cookies,/; Secure(?:;|$)/i);assert.match(cookies,/SameSite=Lax/i);assert.match(cookies,/Max-Age=3600/i);assert.doesNotMatch(cookies,/Domain=/i);
+  const cookies=verified.headers.getSetCookie().join(';');assert.match(cookies,/^__Host-hauntologies-session=/);assert.match(cookies,/HttpOnly/i);assert.match(cookies,/; Secure(?:;|$)/i);assert.match(cookies,/SameSite=Lax/i);assert.match(cookies,/Max-Age=604800/i);assert.doesNotMatch(cookies,/Domain=/i);
   assert.equal((await h.call('/api/auth/verify',{token,password})).status,400);
   const signed=await h.call('/api/auth/sign-in',{email,password});assert.equal(signed.status,200);assert.deepEqual(signed.body,{status:'signed_in'});
   const session=await h.call('/api/auth/session',undefined,signed.cookie);assert.match(session.body.actor_id,/^map_/);assert.equal(session.body.email,email);
@@ -268,4 +268,26 @@ test('anonymous public projections exclude private proposals and owner edit page
  assert.equal((await h.call('/api/contributions/submit',{idempotency_key:crypto.randomUUID(),submission_json:JSON.stringify(raw)},cookie)).status,201);
  for(const path of ['/api/published-edits','/api/published-records']){const result=await h.call(path);assert.equal(result.status,200);assert.deepEqual(result.body,path==='/api/published-records'?{records:[],next_cursor:null}:{items:[]});assert.equal((await h.call(path,{})).status,401);}
  assert.equal((await h.call('/api/contributions/edits')).status,401);const own=await h.call('/api/contributions/edits?page=1',undefined,cookie);assert.equal(own.status,200);assert.equal(own.body.total,1);assert.equal(own.body.items[0].title,'PRIVATE TITLE');
+});
+
+test('a sign-in lasts a week and renews when the map checks it, at most once a day', async t => {
+  const h = await harness(t), email = 'renew@example.test';
+  await h.call('/api/auth/register', { email }); const token = await h.token(email);
+  assert.equal((await h.call('/api/auth/verify', { token, password })).status, 200);
+  const signed = await h.call('/api/auth/sign-in', { email, password }); assert.equal(signed.status, 200);
+  const expiry = async () => { const v = (await h.db.prepare('SELECT expiresAt FROM hny_auth_session ORDER BY createdAt DESC LIMIT 1').first()).expiresAt; return typeof v === 'number' ? v : Date.parse(v); };
+  const week = 7 * 24 * 3600 * 1000, first = await expiry();
+  assert.ok(Math.abs(first - Date.now() - week) < 60000);
+  // A fresh sign-in is not rewritten on every check.
+  const fresh = await h.call('/api/auth/session', undefined, signed.cookie); assert.equal(fresh.status, 200);
+  assert.equal(fresh.headers.getSetCookie().length, 0); assert.equal(await expiry(), first);
+  // Two days in, checking renews it to a full week and sends the renewed cookie.
+  const aged = new Date(Date.now() + week - 2 * 86400000);
+  await h.db.prepare('UPDATE hny_auth_session SET expiresAt=?').bind(typeof (await h.db.prepare('SELECT expiresAt FROM hny_auth_session LIMIT 1').first()).expiresAt === 'number' ? aged.getTime() : aged.toISOString()).run();
+  // Other routes read the session without renewing it.
+  assert.equal((await h.call('/api/contributions/session', undefined, signed.cookie)).status, 200);
+  assert.ok(Math.abs(await expiry() - aged.getTime()) < 1000);
+  const renewed = await h.call('/api/auth/session', undefined, signed.cookie); assert.equal(renewed.status, 200);
+  assert.match(renewed.headers.getSetCookie().join(';'), /Max-Age=604800/i);
+  assert.ok(Math.abs(await expiry() - Date.now() - week) < 60000);
 });
