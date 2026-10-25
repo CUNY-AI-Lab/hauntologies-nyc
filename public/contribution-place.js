@@ -84,8 +84,8 @@
     if (!row || row.disabled) return;
     if (row.action === 'pick') { input.blur(); window.dispatchEvent(new CustomEvent('contributions-place-pick-requested')); return; }
     if (row.action === 'streets') { searchStreets(); return; }
-    if (row.record) chooseRecord(row.record);
-    else choosePoint(row);
+    // A place that could not be set keeps the typed text, so it can be tried again.
+    if (!(row.record ? chooseRecord(row.record) : choosePoint(row))) return;
     input.value = ''; state.active = -1; state.quiet = true; state.nyc = {query: '', rows: []}; state.osm = {query: '', rows: [], busy: false, note: ''};
     render();
   }
@@ -94,8 +94,9 @@
     const search = $('existingPlaceSearch'), select = $('freeformPlaceSelect');
     search.value = ''; search.dispatchEvent(new Event('input', {bubbles: true}));
     select.value = record.id;
-    if (select.value !== record.id) { say('That place cannot take contributions yet.'); return; }
+    if (select.value !== record.id) { say('That place cannot take contributions yet.'); return false; }
     select.dispatchEvent(new Event('change', {bubbles: true}));
+    return true;
   }
 
   function choosePoint(row) {
@@ -108,7 +109,9 @@
     if (!window.ContributionPoint.request({latitude: row.latitude, longitude: row.longitude}, {replace: true})) {
       state.named = null;
       say(inBoroughs(row.latitude, row.longitude) ? 'The form is busy. Try again when the upload finishes.' : 'New places must be in New York City.');
+      return false;
     }
+    return true;
   }
 
   // ---- Remote lookups ------------------------------------------------------------
@@ -135,20 +138,20 @@
     render();
     try {
       const {rows} = await engine().resolve(query);
-      if (input.value.trim() !== query) return;
+      // Results stay filed under their own query even if the field has moved on.
       state.osm = {query, rows: rows.slice(0, 6), busy: false, note: rows.length ? '' : 'Nothing found in New York City. Try an address, or Pin it on the map.'};
     } catch (error) {
       state.osm = {query, rows: [], busy: false, note: error.message === 'busy' ? 'The street search is busy. Try again in a moment.' : 'The street search is unavailable. Pin it on the map instead.'};
     }
     render();
     const usable = state.osm.rows.filter(row => inBoroughs(row.latitude, row.longitude));
-    if (usable.length === 1 && M.parseOsmReference(query)) activate(pointRow(usable[0], usable[0].kind));
+    if (usable.length === 1 && M.parseOsmReference(query) && input.value.trim() === query) activate(pointRow(usable[0], usable[0].kind));
   }
 
   // ---- The pinned point's plate ---------------------------------------------------
 
   const same = (a, b) => a && b && Math.abs(a.latitude - b.latitude) < 1e-6 && Math.abs(a.longitude - b.longitude) < 1e-6;
-  let reverseTimer = 0, reverseFor = null;
+  let reverseTimer = 0, reverseFor = null, naming = Promise.resolve();
   function showPlate(point) {
     clear.hidden = !point;
     // The last name is kept, so returning to the same pin (after Change) shows it again.
@@ -158,12 +161,16 @@
       nameNode.textContent = '';
       if (engine()?.reverse && !same(point, reverseFor)) {
         clearTimeout(reverseTimer); reverseFor = point;
-        reverseTimer = setTimeout(async () => {
-          try {
-            const row = await engine().reverse(point.latitude, point.longitude);
-            if (row && same(point, reverseFor) && same(window.ContributionPoint.get(), point)) { state.named = {...point, name: row.title}; nameNode.textContent = row.title; }
-          } catch {}
-        }, 400);
+        // Preview waits on this, so a quick submit still carries the place's name.
+        naming = new Promise(resolve => {
+          reverseTimer = setTimeout(async () => {
+            try {
+              const row = await engine().reverse(point.latitude, point.longitude);
+              if (row && same(point, reverseFor) && same(window.ContributionPoint.get(), point)) { state.named = {...point, name: row.title}; nameNode.textContent = row.title; }
+            } catch {}
+            resolve();
+          }, 400);
+        });
       }
     }
     // A restored draft has a point but no confirmation yet.
@@ -181,6 +188,8 @@
     choosePoint({latitude, longitude, title: name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`, kind: 'Plotted'});
   });
   clear.addEventListener('click', () => { $('cancelContributionPoint').click(); input.focus(); });
+  // The pinned point's name, once looked up; never waits longer than `ms`.
+  window.ContributionPlace = Object.freeze({named: (ms = 2500) => Promise.race([naming, new Promise(resolve => setTimeout(resolve, ms))])});
   // contributions.js restores a draft before this script loads.
   showPlate(window.ContributionPoint.get());
 

@@ -564,7 +564,8 @@
     // A pinned point keeps the name shown on its plate (an address, intersection or cross streets),
     // so the map and reviewers can say where it is without coordinates.
     const placeText=payload.geometry?text(byId('contributionPlaceName')?.textContent).trim().slice(0,300):placeTyped();if(!prior&&placeText&&!openTargets.length&&!openRequestedRecordId)payload.location_text=placeText;
-    const title=byId('contributionObjectTitle').value.trim()||prior?.title||'Contribution';
+    // Title is shown for new places only; a title typed before choosing an existing place is not sent.
+    const title=(byId('freeformTitle')?.hidden?'':byId('contributionObjectTitle').value.trim())||prior?.title||'Contribution';
     return prior?{...prior,title,summary:explanation,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title,summary:explanation,public_credit:{consent:false,label:''},sources:[],attachments:[],targets:structuredClone(openTargets),payload};
   }
   function buildEnvelope(){
@@ -703,6 +704,7 @@
     const locationError=pointError();if(locationError)errors.push(locationError);
     for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
     if(errors.length){renderErrors(errors);return;}
+    if(pointForm()&&readPoint())await window.ContributionPlace?.named();
     // A place chosen while signed out, or before a dropped connection, failed to load. Ask again
     // rather than stopping at a local preview: signing in afterwards does not reload it.
     const lookupGeneration=identityGeneration,lookupOwner=privateActor;

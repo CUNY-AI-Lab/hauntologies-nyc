@@ -165,7 +165,7 @@
     try {
       let rows;
       ({ref, rows} = await lookupStreets(query));
-      if (input.value.trim() !== query) return;
+      // Results stay filed under their own query even if the field has moved on.
       const {center, radius} = view();
       rows.forEach((row, rank) => { row.distance = M.distanceMeters(center, [row.latitude, row.longitude]); row.score = (row.first ? 10 : 1) * M.attenuation(row.distance, radius) / (1 + rank * .25); });
       state.osm = {query, rows: rows.sort((x, y) => y.score - x.score), busy: false,
@@ -174,7 +174,7 @@
       state.osm = {query, rows: [], busy: false, note: error.message === 'busy' ? 'The street search is busy. Try again in a moment.' : 'The street search is unavailable right now.'};
     }
     render();
-    if (state.osm.rows.length === 1 && ref) activate(state.osm.rows[0]);
+    if (state.osm.rows.length === 1 && ref && input.value.trim() === query) activate(state.osm.rows[0]);
   }
 
   // ---- Results -----------------------------------------------------------------
