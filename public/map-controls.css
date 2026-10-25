@@ -2,7 +2,7 @@
    Loaded last so it settles the size across the layouts in style.css. */
 .header-tools .outline,.contribution-navigation .outline,.recenter-map,.contributors-footer button{min-height:48px;font-size:13px}
 .header-tools button{min-height:48px}
-#mapToolsButton,#mapControlsButton,#toolsButton,#accountButton,#recenterMap{font-size:16px}
+#mapToolsButton,#mapControlsButton,#toolsButton,#accountButton,#recenterMap{font-size:14px}
 /* Two 48px buttons side by side (zoom, plot and search) set the column's width for every row. */
 .header-tools{min-width:98px}
 .map-tool-tray{width:100%;min-width:0}
@@ -31,6 +31,8 @@
 .brand-drop>summary:hover::before,.brand-drop[open]:not([data-closing])>summary::before{background:#27231c;border-color:#c1a47d}
 #publishedEditsFeed{margin-top:0}
 .brand-panel>.program-credits{margin:0}
+#eventDetails .brand-panel{right:auto;width:max-content;min-width:100%;max-width:calc(100vw - 24px)}
+.program-credits span{white-space:nowrap}
 #pendingPlacesList{padding:0;margin:0;list-style:none;max-height:min(300px,45dvh);overflow:auto;overscroll-behavior:contain}
 #pendingPlacesList>li{border-top:1px solid var(--line);padding:4px 0}
 #pendingPlacesList button{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:0;background:none;color:var(--ink)}
@@ -70,4 +72,8 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 .review-hourglass:hover,.brand-drop[open]>.review-hourglass{color:var(--ink)}
 .place-contributors{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 @media(max-width:760px){#mapFooter{left:max(12px,env(safe-area-inset-left))}}
-@media(max-width:520px){.contribution-navigation{bottom:calc(max(var(--dock-bottom),env(safe-area-inset-bottom)) + 52px)}}
+#mapFooter,.contribution-navigation{bottom:max(var(--dock-bottom),env(safe-area-inset-bottom))}
+:root{--panel-bottom:calc(var(--attribution-height,24px) + 60px)}
+#mapFooter button,.contribution-navigation button{height:48px}
+@media(max-width:400px){.contribution-navigation{gap:4px}.contribution-navigation button{min-width:76px;padding-inline:8px}.recenter-map{min-width:72px}}
+@media(max-width:300px){#eventDetails .program-credits{font-size:9px}.contribution-navigation button{min-width:60px}}
