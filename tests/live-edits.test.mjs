@@ -268,11 +268,26 @@ test('an admin approves a new place and it is on the map at its point', async t 
   assert.equal(ok(await call(h, 'submission?id=' + s.id, undefined, 'admin'), 200).submission.status, 'merged');
 });
 
-test('new places without a point, or attached to an existing place, are not published by approval', async t => {
+test('a new place without a point is not published by approval; a note on an existing place publishes as that place with the note appended', async t => {
   const h = harness(t);
   assert.equal((await submit(h, proposal({ geometry: null }))).application.applicable, false);
-  const attached = proposal({}, { targets: [{ record_id: place.id, expected_version: 1, expected_hash: (await target(h)).expected_hash }] });
-  assert.equal((await submit(h, attached, 'author2')).application.applicable, false);
+  const attached = proposal({ geometry: null, attributes: [{ name: 'Floor', value: 'Upper' }] }, { targets: [{ record_id: place.id, expected_version: 1, expected_hash: (await target(h)).expected_hash }] });
+  const { s, verified } = await publish(h, attached, 'author2');
+  assert.equal(s.application.applicable, true);
+  assert.equal(s.application.operations[0].operation, 'update_record');
+  ok(verified, 200);
+  const [record] = await publishedRecords(h.db);
+  assert.equal(record.id, place.id);
+  assert.equal(record.title, place.title, 'the place keeps its own title');
+  assert.equal(record.description, 'Original description.\n\nContributor note: Footsteps on the upper floor.\nFloor: Upper\nSources: Brooklyn Daily Eagle, 1911.');
+  for (const kept of ['location_text', 'latitude', 'longitude', 'category']) assert.deepEqual(record[kept], place[kept], 'kept ' + kept);
+  assert.deepEqual(record.sources, place.sources);
+  assert.equal((await publishedEdits(h.db))[0].credit, 'A. Contributor');
+  // A second note lands after the first; an uncredited one names nobody.
+  const again = proposal({ geometry: null, sources_text: null, explanation: 'A later memory.' }, { summary: 'A later memory.', public_credit: { consent: false, label: '' }, targets: [{ record_id: place.id, expected_version: 2, expected_hash: (await target(h)).expected_hash }] });
+  ok((await publish(h, again, 'author3')).verified, 200);
+  assert.equal((await publishedRecords(h.db))[0].description, record.description + '\n\nContributor note: A later memory.');
+  assert.equal(Object.hasOwn((await publishedEdits(h.db))[0], 'credit'), false);
 });
 
 test('a new place approved before approval meant publication cannot be published with that approval', async t => {
@@ -320,4 +335,21 @@ test('open peers keep typed public record edits and safe staged projections afte
  const resolved=ok(await call(h,'target?id='+place.id,undefined,B),200).target;
  await release(edit(resolved,{title:'Peer later edit'}),B,A);
  assert.equal((await publishedRecords(h.db))[0].title,'Peer later edit');
+});
+
+
+test('published notes preserve exact text and respect later public-credit opt-outs',async t=>{
+ const h=harness(t),user='00000000-0000-4000-8000-000000000019',actor='map_'+user;
+ const explanation='  Original note with spacing.\nSecond line.  ',sources='  Original citation  ';
+ const value=proposal({geometry:null,explanation,sources_text:sources,attributes:[{name:' Original fact ',value:' Original value '}]},{summary:explanation,sources:[{citation:'  Exact extra citation  ',url:'https://example.test/note-source'}],public_credit:{consent:true,label:'Synthetic Note Author'},targets:[{record_id:place.id,expected_version:1,expected_hash:(await target(h)).expected_hash}]});
+ ok((await publish(h,value,actor)).verified,200);
+ const record=(await publishedRecords(h.db))[0];
+ assert.equal(record.description,place.description+'\n\nContributor note: '+explanation+'\n Original fact :  Original value '+'\nSources: '+sources);
+ assert.deepEqual(record.contributors,['Synthetic Note Author']);
+ assert.deepEqual(record.sources,[...place.sources,...value.sources]);
+ assert.equal(record.description.includes('Synthetic Note Author'),false,'credit must remain suppressible');
+ h.db.native.prepare('INSERT INTO hny_auth_user(id,name,email,emailVerified,createdAt,updatedAt) VALUES(?,?,?,?,?,?)').run(user,'Private name','synthetic-note@example.test',1,'2026-10-25','2026-10-25');
+ h.db.native.prepare('INSERT INTO contributor_roster_hidden VALUES(?,?)').run(user,'2026-10-25');
+ assert.deepEqual((await publishedRecords(h.db))[0].contributors||[],[]);
+ assert.equal((await publishedRecords(h.db))[0].description,record.description);
 });
