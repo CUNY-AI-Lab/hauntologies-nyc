@@ -1034,3 +1034,14 @@ test('public record pages traverse more than 1000 verified records without dropp
  const records=[];let cursor='',pages=0;do{const page=await publishedRecordPage(h.db,cursor);assert.ok(page.records.length<=500);records.push(...page.records);cursor=page.next_cursor;pages++;}while(cursor);
  assert.equal(pages,3);assert.equal(records.length,1002);assert.equal(new Set(records.map(r=>r.id)).size,1002);
 });
+
+test('contributor credits count live consented releases per name and keep identity private',async t=>{
+  const {contributorCredits}=await import('../server/published-edits.mjs');const h=harness();t.after(()=>h.db.close());
+  assert.deepEqual(await contributorCredits(h.db),{contributors:[],total:0});
+  let n=0;const publish=async credit=>{const id='CREDIT-00'+(++n),record=entry(id),payload=envelope({public_credit:credit,payload:{Entries:[record],Sources:[source(id)],SearchLog:[]}});payload.payload.Entries[0].contributor=credit.consent?credit.label:'Uncredited contributor';const created=await submit(h,payload);const staged=await stage(h,await approve(h,created.submission));assertStatus(await verify(h,staged.job),200);return staged;};
+  await publish({consent:true,label:'Fixture Credit'});const staged=await publish({consent:true,label:' fixture   credit '});await publish({consent:false,label:''});
+  const credits=await contributorCredits(h.db);
+  assert.deepEqual(credits,{contributors:[{name:'Fixture Credit',count:2}],total:3});assert(!/@|owner|actor|map_/.test(JSON.stringify(credits)));
+  assertStatus(await call(h,'/api/contributions/rollback',{idempotency_key:nextKey(h,'credit-rollback'),job_id:staged.job.id,rationale:'Synthetic rollback.'},{actor:'publisher'}),200);
+  assert.deepEqual(await contributorCredits(h.db),{contributors:[{name:'Fixture Credit',count:1}],total:2});
+});

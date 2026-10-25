@@ -121,3 +121,12 @@
     bottom: max(calc(var(--dock-bottom, 32px) + 44px), calc(env(safe-area-inset-bottom) + 44px));
   }
 }
+
+#contributorsDialog .contributors-section { padding: 14px 16px 0; }
+#contributorsDialog .contributors-section:last-child { padding-bottom: 16px; }
+#contributorsDialog .contributors-section .contributors-list { padding: 0; }
+#contributorsDialog .contributors-section h3 { margin: 0 0 8px; color: #dbb78c; font: 600 11px/1.4 Arial, Helvetica, sans-serif; letter-spacing: 1.3px; text-transform: uppercase; }
+#contributorsDialog .contributors-status { margin: 8px 0 0; color: #bdb5aa; font: 400 12px/1.5 Arial, Helvetica, sans-serif; }
+#contributorsDialog .contributors-status:empty { display: none; }
+#contributorsDialog .contributors-counts li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+#contributorsDialog .contributors-count { flex: none; min-width: 22px; padding: 0 5px; background: #e9caa1; color: #17130e; font-size: 11px; line-height: 1.6; text-align: center; }
