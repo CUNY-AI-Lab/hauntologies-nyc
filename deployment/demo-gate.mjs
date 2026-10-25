@@ -2,8 +2,8 @@ import { registrationRestricted } from '../server/registration-eligibility.mjs';
 // Public map with account-derived identity for private contribution routes.
 // Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
-import { handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
-import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
+import { MAP_ORIGIN, handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
+import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage, setRosterListing } from '../server/published-edits.mjs';
 import { pendingPlaces } from '../server/pending-places.mjs';
 const privateJson = (value, status = 200) => Response.json(value, { status, headers: {
   'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer'
@@ -36,14 +36,22 @@ export function createDemoWorker(handler, registration, authenticate = authentic
           return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
         } catch { return privateJson({error:'feed_unavailable'},503); }
       }
-      // Registrant names are for signed-in map accounts only.
-      if (rawPath === '/api/contributor-roster' && ['GET','HEAD'].includes(request.method)) {
+      // Registrant names are for signed-in map accounts only; POST is the viewer leaving or rejoining the list.
+      if (rawPath === '/api/contributor-roster' && ['GET','HEAD','POST'].includes(request.method)) {
         if (new URL(request.url).search) return privateJson({error:'invalid_page'},400);
         let viewer;
         try { viewer = mapEnabled ? await mapSession(request, env) : null; } catch { return privateJson({error:'account_unavailable'},503); }
         if (!viewer) return privateJson({error:'sign_in_required'},401);
+        if (request.method === 'POST') {
+          if (request.headers.get('origin') !== MAP_ORIGIN || (request.headers.get('sec-fetch-site') || 'same-origin') !== 'same-origin') return privateJson({error:'same_origin_required'},403);
+          if (!(request.headers.get('content-type') || '').startsWith('application/json')) return privateJson({error:'json_required'},415);
+          let listed;
+          try { const text = await request.text(); if (text.length > 64) throw 0; listed = JSON.parse(text).listed; } catch { return privateJson({error:'invalid_request'},400); }
+          if (typeof listed !== 'boolean') return privateJson({error:'invalid_request'},400);
+          try { return privateJson(await setRosterListing(env.DB, viewer.actor_id, listed)); } catch { return privateJson({error:'feed_unavailable'},503); }
+        }
         try {
-          const data = await contributorRoster(env.DB);
+          const data = await contributorRoster(env.DB, viewer.actor_id);
           return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'private, no-store'}}) : Response.json(data, {headers:{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
         } catch { return privateJson({error:'feed_unavailable'},503); }
       }

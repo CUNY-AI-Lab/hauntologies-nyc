@@ -44,7 +44,14 @@
     creditedStatus.setAttribute('role', 'status');
     const creditedList = document.createElement('ol');
     creditedList.className = 'contributors-list contributors-counts';
-    credited.append(creditedTitle, creditedList, creditedStatus);
+    // A signed-in registrant can take their own name off the roster, and put it back.
+    const listing = document.createElement('label');
+    listing.className = 'contributors-listing';
+    listing.hidden = true;
+    const listed = document.createElement('input');
+    listed.type = 'checkbox';
+    listing.append(listed, document.createTextNode(' Show my name in this list'));
+    credited.append(creditedTitle, creditedList, creditedStatus, listing);
 
     const collaborators = document.createElement('section');
     collaborators.className = 'contributors-section';
@@ -99,6 +106,8 @@
         let roster = null;
         try { roster = await getJson('/api/contributor-roster'); } catch (error) { if (error.status !== 401) throw error; }
         if (version !== loading) return;
+        listing.hidden = !roster?.you;
+        if (roster?.you && !listed.disabled) listed.checked = roster.you.listed;
         if (roster) {
           const people = roster.registrants || [];
           creditedList.replaceChildren(...people.map(p => row(p.name, p.contributions,
@@ -116,9 +125,24 @@
         if (version === loading && !creditedList.childElementCount) creditedStatus.textContent = 'Contribution counts are unavailable right now.';
       }
     }
+    listed.addEventListener('change', async () => {
+      const want = listed.checked;
+      listed.disabled = true;
+      try {
+        const response = await fetch('/api/contributor-roster', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }) });
+        if (!response.ok) throw new Error('unavailable');
+        listed.disabled = false;
+        loadCredits();
+      } catch {
+        listed.checked = !want;
+        listed.disabled = false;
+        creditedStatus.textContent = 'That did not save. Try again in a moment.';
+      }
+    });
     // Signing in or out changes which list applies.
     for (const type of ['contributions-session-started', 'contributions-session-ended']) {
-      window.addEventListener(type, () => { creditedList.replaceChildren(); if (dialog.open) loadCredits(); });
+      window.addEventListener(type, () => { creditedList.replaceChildren(); listing.hidden = true; if (dialog.open) loadCredits(); });
     }
 
     dialog.append(header, credited, collaborators, built);
@@ -143,9 +167,11 @@
     });
     dialog.addEventListener('keydown', event => {
       if (event.key === 'Tab') {
-        // The close button is the only interactive element in this dialog.
+        // Focus cycles between the close button and, when shown, the name switch.
         event.preventDefault();
-        close.focus({ preventScroll: true });
+        const stops = [close, ...(listing.hidden ? [] : [listed])];
+        const at = stops.indexOf(document.activeElement);
+        stops[(at + (event.shiftKey ? stops.length - 1 : 1)) % stops.length].focus({ preventScroll: true });
       }
       event.stopPropagation();
     });
