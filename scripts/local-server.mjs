@@ -21,12 +21,11 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const port = Number(args[args.indexOf('--port') + 1]) || 8790;
 const PASSWORD = 'haunted-local-only';
-// Contributor: submits and sees their own work. Reviewer: also reviews and publishes.
+// Open review, as in production: each account reviews and publishes the other's work, not its own.
 const ACCOUNTS = [
-  { email: 'contributor@local.test', actor_id: 'map_local-contributor' },
-  { email: 'reviewer@local.test', actor_id: 'map_local-reviewer' },
+  { email: 'contributor@local.test', actor_id: 'map_00000000-0000-4000-8000-000000000001' },
+  { email: 'reviewer@local.test', actor_id: 'map_00000000-0000-4000-8000-000000000002' },
 ];
-const reviewer = ACCOUNTS[1].actor_id;
 
 const dir = path.join(repo, '.local'), file = path.join(dir, 'hauntologies-local.sqlite');
 mkdirSync(dir, { recursive: true });
@@ -53,7 +52,7 @@ const service = createWorkflowService({
   taskSeeds: JSON.parse(read('public/data/contribution-tasks.json')),
   geography: { boundaries: JSON.parse(read('public/data/nyc-borough-boundaries.geojson')), gazetteer: JSON.parse(read('server/gazetteer.json')) },
   staticRecords: parseStaticRecords(read('public/inventory.js'), read('public/pilot.js')),
-  authorization: { reviewers: [reviewer], publishers: [reviewer] },
+  authorization: { reviewers: [], publishers: [], everyone: true },
 });
 
 const sessions = new Map(), COOKIE = 'hny_local';
@@ -131,5 +130,5 @@ http.createServer(async (req, res) => {
 }).listen(port, '127.0.0.1', () => {
   console.log(`Hauntologies local map: http://127.0.0.1:${port}  (data: ${path.relative(repo, file)}${fresh ? ', new' : ''})`);
   console.log(`Sign in with ${ACCOUNTS.map(a => a.email).join(' or ')}, password ${PASSWORD}`);
-  console.log('The reviewer account can also review and publish. Registration and password resets need email and are off here.');
+  console.log('Each account can review and publish the other\'s work. Registration and password resets need email and are off here.');
 });

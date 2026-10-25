@@ -297,3 +297,28 @@ test('an admin place approved before approval could publish reaches the map afte
   status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }), 200);
   assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Thomas Shoe Factory']);
 });
+
+test('open review: any map account approves and publishes another person\'s place, never its own', async t => {
+  const { reviewAuthorization } = await import('../server/review-authorization.mjs');
+  const A = 'map_00000000-0000-4000-8000-00000000000a', B = 'map_00000000-0000-4000-8000-00000000000b';
+  const h = harness({ authorization: reviewAuthorization(undefined, undefined, JSON.stringify([A]), 'true') }); t.after(() => h.db.close());
+  const as = actor => ({ actor });
+  const sent = await call(h, 'submit', { idempotency_key: key(h, 'submit'), submission_json: JSON.stringify(envelope({ geometry: point() }, { title: 'Open review place' }), null, 2) }, as(A)); status(sent, 201);
+  const s = sent.body.submission;
+  // Even an admin cannot approve their own work under open review.
+  const caps = (await call(h, 'dashboard', undefined, as(A))).body.capabilities;
+  assert.equal(caps.can_self_approve, false); assert.equal(caps.can_review, true); assert.equal(caps.can_apply, true);
+  const own = await call(h, 'review', review(h, s), as(A)); status(own, 403); assert.equal(own.body.error, 'self_approval_forbidden');
+  // Another account sends it back; the owner revises and sends it for review again.
+  status(await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 1, action: 'request_information', rationale: 'Add the year.' }, as(B)), 200);
+  const revised = await call(h, 'revise', { idempotency_key: key(h, 'revise'), submission_id: s.id, expected_revision: 1, submission_json: sent.request?.submission_json ?? JSON.stringify(envelope({ geometry: point() }, { title: 'Open review place' }), null, 2) }, as(A)); status(revised, 200);
+  const queued = await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: s.id, expected_revision: 2, action: 'ready_for_review', rationale: 'Revision ready for review.' }, as(A)); status(queued, 200);
+  // B approves, and the approval can publish: B applies and verifies.
+  const approved = await call(h, 'review', review(h, queued.body.submission), as(B)); status(approved, 200);
+  assert.equal(approved.body.submission.approval.independent, true); assert.equal(approved.body.submission.application.applicable, true);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: s.id, expected_revision: 2, approval_hash: approved.body.submission.approval.approval_hash }, as(B)); status(staged, 201);
+  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }, as(B)), 200);
+  assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Open review place']);
+  // Accounts that are not map accounts get no review role from open review.
+  const outsider = await call(h, 'review', review(h, queued.body.submission), as('access_' + 'a'.repeat(64))); assert.ok([403, 404, 409].includes(outsider.status));
+});
