@@ -9,7 +9,7 @@
 
   function mark(summary) {
     // Re-marked when a script resets the summary's text.
-    if (summary.hidden || summary.querySelector(':scope > .disclosure-mark')) return;
+    if (summary.hidden || summary.classList.contains('review-hourglass') || summary.querySelector(':scope > .disclosure-mark')) return;
     summary.dataset.disclosure = 'true';
     const icon = document.createElement('span'); icon.className = 'disclosure-mark'; icon.setAttribute('aria-hidden', 'true');
     summary.append(icon);

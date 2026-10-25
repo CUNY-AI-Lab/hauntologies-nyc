@@ -10,7 +10,11 @@ export function publicCredit(raw) {
 
 export async function recordCredits(db, recordIds) {
   if (!recordIds.length) return new Map();
-  const { results = [] } = await db.prepare(`SELECT t.value AS target_json,r.raw_json
+  const results=[];
+  // D1 bounds parameters per statement; a public page can contain 500 records.
+  for(let offset=0;offset<recordIds.length;offset+=80){
+    const ids=recordIds.slice(offset,offset+80);
+    const page=await db.prepare(`SELECT t.value AS target_json,r.raw_json
     FROM workflow_jobs j
     JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_submissions s ON s.id=j.submission_id
@@ -18,8 +22,10 @@ export async function recordCredits(db, recordIds) {
     JOIN json_each(j.manifest_json,'$.targets') t
     WHERE j.status='verified' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)
       AND NOT EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id)
-      AND json_extract(t.value,'$.record_id') IN (${recordIds.map(() => '?').join(',')})
-    ORDER BY j.created_at,j.id`).bind(...recordIds).all();
+      AND json_extract(t.value,'$.record_id') IN (${ids.map(() => '?').join(',')})
+    ORDER BY j.created_at,j.id`).bind(...ids).all();
+    results.push(...(page.results||[]));
+  }
   const credits = new Map();
   for (const row of results) {
     const label = publicCredit(row.raw_json);

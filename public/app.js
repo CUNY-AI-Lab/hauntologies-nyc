@@ -93,7 +93,7 @@ window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.deta
 // A contribution to a mapped place sits as a badge beside that place's marker.
 let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;const pendingMarkers=new Map();
 // An approved note on a mapped place stays a note; only a new point is published on approval.
-const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, publishing soon'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
+const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, awaiting publication'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
 // Where a pending place is: the contributor's own words, the place it adds to, or its cross streets.
 function pendingWhere(place,record){
  if(record)return 'Adds to '+(record.title||'a mapped place')+' · '+whereLabel(record);
@@ -137,7 +137,7 @@ function bringUpPending(place){
 function renderPendingList(records,own){
  const feed=$('pendingPlacesFeed');if(!feed)return;
  const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
- feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} contributions`);
+ feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
  $('pendingPlacesList').replaceChildren(...shown.map(place=>{
   const row=document.createElement('li'),button=document.createElement('button'),record=place.record_id?records.get(place.record_id):null;button.type='button';
   const title=document.createElement('strong');title.textContent=place.title;const meta=document.createElement('span');

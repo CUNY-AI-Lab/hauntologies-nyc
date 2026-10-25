@@ -307,3 +307,17 @@ test('record credits retain later consented contributors and exclude uncredited,
   ok(await call(h,'rollback',{idempotency_key:key(),job_id:release.job.id,rationale:'Synthetic rollback'} ,'publisher'),200);
   assert.deepEqual((await publishedRecords(h.db))[0].contributors,['Synthetic Alice']);
 });
+
+test('open peers keep typed public record edits and safe staged projections after the private snapshot repair',async t=>{
+ const A='map_00000000-0000-4000-8000-000000000001',B='map_00000000-0000-4000-8000-000000000002';
+ const h=harness(t,{everyone:true,reviewers:[],publishers:[]});
+ async function release(value,author,reviewer){
+  const s=await submit(h,value,author),approved=ok(await approve(h,s,reviewer),200).submission,staged=ok(await apply(h,approved,reviewer),201);
+  const target=staged.job.manifest.targets[0];assert.equal(Object.hasOwn(target,'after'),false);assert.equal(target.after_record.id,place.id);
+  ok(await verify(h,staged.job,reviewer),200);
+ }
+ await release(edit(await target(h),{title:'Peer first edit'}),A,B);
+ const resolved=ok(await call(h,'target?id='+place.id,undefined,B),200).target;
+ await release(edit(resolved,{title:'Peer later edit'}),B,A);
+ assert.equal((await publishedRecords(h.db))[0].title,'Peer later edit');
+});
