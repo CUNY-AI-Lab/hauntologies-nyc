@@ -16,17 +16,18 @@
 .masthead .header-tools .plot-place-toggle[aria-pressed=true]::before{border-color:#e9caa1;background:#2a251d}
 .map-tool-tray .map-find-row{min-width:96px}
 
-/* Event details, Published edits and Under review sit side by side in the title card. */
+/* Event details, Published edits and Under review sit side by side in the title card and
+   never move: one opens at a time (name="brand-drop"), its panel hanging below the card. */
+.brand{position:relative}
 .brand-drops{display:flex;flex-wrap:wrap;gap:0 8px;margin-top:6px}
-.brand-drop{pointer-events:auto;font:12px/1.4 Arial,Helvetica,sans-serif}
-.brand-drops>.brand-drop:not([open]){flex:0 0 auto}
-.brand-drops>.brand-drop[open]{flex:1 0 100%}
+.brand-drop{flex:0 0 auto;pointer-events:auto;font:12px/1.4 Arial,Helvetica,sans-serif}
+.brand-panel{position:absolute;left:-2px;right:0;top:100%;z-index:1;margin:0;padding:4px 16px 12px;border-left:2px solid var(--orange);background:#0b0c0b;box-shadow:0 10px 18px rgba(0,0,0,.35)}
 .brand-drop>summary{position:relative;isolation:isolate;display:flex;align-items:center;gap:6px;width:fit-content;min-height:44px;padding:6px 10px;color:var(--ink)}
 .brand-drop>summary::before{content:'';position:absolute;z-index:-1;inset:6px 0;border:1px solid #827563;background:#11110f;pointer-events:none}
 .brand-drop>summary::after{content:'';position:absolute;right:0;top:6px;width:9px;height:9px;background:linear-gradient(45deg,#746652 0 43%,#bba78a 44% 54%,#080908 55%);pointer-events:none}
 .brand-drop>summary:hover::before,.brand-drop[open]:not([data-closing])>summary::before{background:#27231c;border-color:#c1a47d}
 #publishedEditsFeed{margin-top:0}
-.brand-drop .program-credits{margin:8px 0 4px}
+.brand-panel>.program-credits{margin:0}
 #pendingPlacesList{padding:0;margin:0;list-style:none;max-height:min(300px,45dvh);overflow:auto;overscroll-behavior:contain}
 #pendingPlacesList>li{border-top:1px solid var(--line);padding:4px 0}
 #pendingPlacesList button{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:0;background:none;color:var(--ink)}
