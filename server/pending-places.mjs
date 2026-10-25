@@ -1,7 +1,8 @@
 // Public projection of places sent for review but not yet published, so the map can
 // show them as their own "under review" layer. Only the words a contributor wrote for
 // the map and where it is: never an owner, account, email, source, image or fact list.
-// A withheld, superseded or published submission drops out of this list.
+// A withheld, superseded or published submission drops out of this list, and so does an older
+// attempt at a place the same contributor has since sent again under the same title.
 export const PENDING_STATES = Object.freeze(['submitted', 'changes_requested', 'approved']);
 const LIMIT = 500;
 const RECORD_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/;
@@ -26,9 +27,13 @@ export function pendingPlace(row) {
 }
 
 export async function pendingPlaces(db) {
-  const { results = [] } = await db.prepare(`SELECT s.id,s.review_state,s.created_at,r.raw_json,r.preview_json
+  const { results = [] } = await db.prepare(`SELECT s.id,s.owner_id,s.review_state,s.created_at,r.raw_json,r.preview_json
     FROM workflow_submissions s JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision
     WHERE s.review_state IN (${PENDING_STATES.map(() => '?').join(',')})
     ORDER BY s.updated_at DESC,s.id ASC LIMIT ${LIMIT}`).bind(...PENDING_STATES).all();
-  return { places: results.flatMap(pendingPlace) };
+  // The owner is only compared here, never returned. Places left with the default title are never merged.
+  const keyOf = row => { try { const title = clip(JSON.parse(row.raw_json)?.title, 300).toLocaleLowerCase('en-US'); return title && title !== 'contribution' ? row.owner_id + '\n' + title : null; } catch { return null; } };
+  const newest = new Map();
+  for (const row of results) { const key = keyOf(row); if (key && !(newest.get(key)?.created_at > row.created_at)) newest.set(key, row); }
+  return { places: results.filter(row => { const key = keyOf(row); return !key || newest.get(key) === row; }).flatMap(pendingPlace) };
 }

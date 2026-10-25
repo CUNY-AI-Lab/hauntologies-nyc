@@ -33,12 +33,12 @@
     close.append(closeSymbol);
     header.append(title, close);
 
-    // Map contributors come from published releases whose authors opted into public credit,
-    // counted per name; the people who built the map follow under their own heading.
+    // Contributions come from published releases whose authors opted into public credit, counted
+    // per name; collaborators and the builder follow under their own headings.
     const credited = document.createElement('section');
     credited.className = 'contributors-section';
     const creditedTitle = document.createElement('h3');
-    creditedTitle.textContent = 'Map contributions';
+    creditedTitle.textContent = 'Contributions';
     const creditedStatus = document.createElement('p');
     creditedStatus.className = 'contributors-status';
     creditedStatus.setAttribute('role', 'status');
@@ -46,14 +46,13 @@
     creditedList.className = 'contributors-list contributors-counts';
     credited.append(creditedTitle, creditedList, creditedStatus);
 
-    const built = document.createElement('section');
-    built.className = 'contributors-section';
-    const builtTitle = document.createElement('h3');
-    builtTitle.textContent = 'Built by';
+    const collaborators = document.createElement('section');
+    collaborators.className = 'contributors-section';
+    const collaboratorsTitle = document.createElement('h3');
+    collaboratorsTitle.textContent = 'Collaborators';
     const list = document.createElement('ul');
     list.className = 'contributors-list';
     for (const name of [
-      'Zach Muhlbauer',
       "Sam O'Hana Grainger",
       'Zachary Lloyd',
       'Jason Nielsen',
@@ -64,28 +63,52 @@
       item.textContent = name;
       list.append(item);
     }
-    built.append(builtTitle, list);
+    collaborators.append(collaboratorsTitle, list);
+
+    const built = document.createElement('p');
+    built.className = 'contributors-builder';
+    built.textContent = 'Built by Zach Muhlbauer';
 
     let loading = 0;
+    const row = (name, count, note) => {
+      const item = document.createElement('li');
+      const who = document.createElement('span');
+      who.textContent = name;
+      if (note) {
+        const small = document.createElement('small');
+        small.textContent = note;
+        who.append(small);
+      }
+      const tally = document.createElement('span');
+      tally.className = 'contributors-count';
+      tally.textContent = String(count);
+      tally.setAttribute('aria-label', count === 1 ? '1 contribution' : count + ' contributions');
+      item.append(who, tally);
+      return item;
+    };
+    const getJson = async path => {
+      const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin' });
+      if (!response.ok) throw Object.assign(new Error('unavailable'), { status: response.status });
+      return response.json();
+    };
+    // Signed in: every event registrant with what they have sent. Signed out: opted-in credit names only.
     async function loadCredits() {
       const version = ++loading;
       if (!creditedList.childElementCount) creditedStatus.textContent = 'Loading…';
       try {
-        const response = await fetch('/api/contributor-credits', { cache: 'no-store' });
-        if (!response.ok) throw new Error('unavailable');
-        const { contributors = [], total = 0 } = await response.json();
+        let roster = null;
+        try { roster = await getJson('/api/contributor-roster'); } catch (error) { if (error.status !== 401) throw error; }
         if (version !== loading) return;
-        creditedList.replaceChildren(...contributors.map(({ name, count }) => {
-          const item = document.createElement('li');
-          const who = document.createElement('span');
-          who.textContent = name;
-          const tally = document.createElement('span');
-          tally.className = 'contributors-count';
-          tally.textContent = String(count);
-          tally.setAttribute('aria-label', count === 1 ? '1 contribution' : count + ' contributions');
-          item.append(who, tally);
-          return item;
-        }));
+        if (roster) {
+          const people = roster.registrants || [];
+          creditedList.replaceChildren(...people.map(p => row(p.name, p.contributions,
+            !p.account ? 'no map account yet' : p.published ? p.published + ' published' : '')));
+          creditedStatus.textContent = people.length ? '' : 'No one has registered yet.';
+          return;
+        }
+        const { contributors = [], total = 0 } = await getJson('/api/contributor-credits');
+        if (version !== loading) return;
+        creditedList.replaceChildren(...contributors.map(c => row(c.name, c.count)));
         const uncredited = total - contributors.reduce((sum, c) => sum + c.count, 0);
         creditedStatus.textContent = !total ? 'No published contributions yet.'
           : uncredited ? (uncredited === 1 ? '1 more published without credit.' : uncredited + ' more published without credit.') : '';
@@ -93,15 +116,25 @@
         if (version === loading && !creditedList.childElementCount) creditedStatus.textContent = 'Contribution counts are unavailable right now.';
       }
     }
-    dialog.append(header, credited, built);
+    // Signing in or out changes which list applies.
+    for (const type of ['contributions-session-started', 'contributions-session-ended']) {
+      window.addEventListener(type, () => { creditedList.replaceChildren(); if (dialog.open) loadCredits(); });
+    }
+
+    dialog.append(header, credited, collaborators, built);
     document.body.append(footer, dialog);
 
     button.addEventListener('click', () => {
       if (typeof window.closeTools === 'function') window.closeTools();
       if (!dialog.open) dialog.showModal();
       loadCredits();
+      clearInterval(refresh);
+      refresh = setInterval(() => { if (dialog.open && document.visibilityState === 'visible') loadCredits(); }, 30000);
       close.focus({ preventScroll: true });
     });
+    // Counts keep up while the dialog is open.
+    let refresh = 0;
+    dialog.addEventListener('close', () => clearInterval(refresh));
     close.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
       if (button.isConnected && button.getClientRects().length) {
