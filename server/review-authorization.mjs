@@ -22,11 +22,13 @@ function actorList(raw) {
 // leaves reviewers as configured.
 // Admins (CONTRIBUTIONS_ADMIN_IDS) hold both roles and alone may approve their own work; each
 // such approval is marked in its binding so the history shows it skipped independent review.
-export function reviewAuthorization(rawReviewers, rawPublishers, rawAdmins) {
-  const admins = actorList(rawAdmins) || EMPTY, listed = actorList(rawReviewers);
-  if (!listed && !admins.length) return DISABLED;
+// Open review (CONTRIBUTIONS_OPEN_REVIEW=true) adds every verified map account as a reviewer and
+// publisher of other people's work; no one, admins included, may then approve their own.
+export function reviewAuthorization(rawReviewers, rawPublishers, rawAdmins, openReview) {
+  const admins = actorList(rawAdmins) || EMPTY, listed = actorList(rawReviewers), everyone = openReview === 'true';
+  if (!listed && !admins.length) return everyone ? Object.freeze({ reviewers: EMPTY, publishers: EMPTY, stewards: EMPTY, everyone }) : DISABLED;
   const unique = ids => Object.freeze([...new Set(ids)]);
   const reviewers = unique([...(listed || EMPTY), ...admins]);
   const publishers = unique([...reviewers, ...((listed?.length && actorList(rawPublishers)) || EMPTY)]);
-  return Object.freeze({ reviewers, publishers, stewards: EMPTY, ...(admins.length ? { admins } : {}) });
+  return Object.freeze({ reviewers, publishers, stewards: EMPTY, ...(admins.length ? { admins } : {}), ...(everyone ? { everyone } : {}) });
 }
