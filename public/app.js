@@ -449,14 +449,7 @@ function placeFacts(r){
 }
 
 function appendPlaceRecord(card,r){
- const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('div');details.className='place-record';summary.textContent='Record';body.className='place-record-content';details.append(summary,body);
- const text=(tag,value)=>{const el=document.createElement(tag);el.textContent=String(value);return el;};
- body.append(text('h3',r.title));const description=PlaceSummary.view(r).description;if(description)body.append(text('p',description));
- const p=PlaceSummary.view(r);if(p.latitude!==null)body.append(text('p',p.latitude+', '+p.longitude));
- const photo=r.image||{},url=photo.localUrl&&/^assets\/[A-Za-z0-9_./-]+$/.test(photo.localUrl)?photo.localUrl:safeUrl(photo.url||r.image_url);
- if(url){const figure=document.createElement('figure'),image=document.createElement('img');image.src=url;image.alt=photo.alt||photo.caption||r.image_caption||r.title;image.loading='lazy';figure.append(image);if(photo.caption||r.image_caption)figure.append(text('figcaption',photo.caption||r.image_caption));if(photo.creator||photo.license)figure.append(text('p',[photo.creator,photo.license].filter(Boolean).join(' · ')));body.append(figure);}
- const sources=Array.isArray(r.sources)?r.sources:[];if(sources.length||r.source_url){body.append(text('h4','Sources'));const list=document.createElement('ul');for(const source of sources.length?sources:[{url:r.source_url,title:r.source_title}]){const row=document.createElement('li'),url=safeUrl(source.url);if(url){const a=text('a',source.title||source.citation||source.source_ref||'Source');a.href=url;a.target='_blank';a.rel='noopener noreferrer';row.append(a);}else row.append(text('span',source.citation||source.title||'Source'));if(source.evidence_note)row.append(text('p',source.evidence_note));list.append(row);}body.append(list);}
- const metadata=[['Location',r.location_text||r.place_original],['Borough',r.borough],['Dates',r.time_original||r.event_date_start],['Date basis',r.time_basis],['Location basis',r.geo_basis||r.location_precision],['Uncertainty',r.uncertainty_note],['Rights',r.rights_or_license]];const dl=document.createElement('dl');for(const[label,value]of metadata)if(value!==undefined&&value!==null&&value!==''){dl.append(text('dt',label),text('dd',value));}if(dl.children.length)body.append(dl);card.append(details);
+ return window.PlaceRecordView.append(card,r,{summary:PlaceSummary.view(r),safeUrl});
 }
 
 function renderDetail(r){
