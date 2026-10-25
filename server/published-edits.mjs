@@ -61,12 +61,23 @@ export async function contributorRoster(db, actorId = '') {
   // Leaving the list hides the name, including any other sign-up under that same name.
   const people=new Map(),hiddenNames=new Set();
   for (const row of results) {
-    const name=typeof row.name==='string'?row.name.trim().replace(/\s+/g,' ').slice(0,120):'';
-    if(!name||name.includes('@'))continue;
+    const name=rosterName(row.name);
+    if(!name)continue;
     const key=name.toLocaleLowerCase('en-US');
     if(row.hidden){hiddenNames.add(key);continue;}
     const entry=people.get(key)||{name,contributions:0,published:0,account:false};
     entry.contributions+=Number(row.sent)||0;entry.published+=Number(row.published)||0;entry.account||=Boolean(row.account);people.set(key,entry);
+  }
+  // A bare first name signed up again in full ("Zarin", then "Zarin Syed") is one person, and
+  // leaving the list under either form hides both.
+  const keys=new Set([...people.keys(),...hiddenNames]);
+  for(const key of keys){
+    if(key.includes(' '))continue;
+    const full=[...keys].filter(other=>other.startsWith(key+' '));
+    if(full.length!==1)continue;
+    const whole=people.get(full[0]),entry=people.get(key);
+    if(hiddenNames.has(key)||hiddenNames.has(full[0])){hiddenNames.add(key);hiddenNames.add(full[0]);continue;}
+    if(whole&&entry){whole.contributions+=entry.contributions;whole.published+=entry.published;whole.account||=entry.account;people.delete(key);}
   }
   for(const key of hiddenNames)people.delete(key);
   const registrants=[...people.values()].sort((a,b)=>b.contributions-a.contributions||a.name.localeCompare(b.name,'en-US'));
@@ -74,6 +85,16 @@ export async function contributorRoster(db, actorId = '') {
   if(!userId)return {registrants};
   const hidden=await db.prepare('SELECT 1 AS hidden FROM contributor_roster_hidden WHERE user_id=?').bind(userId).first();
   return {registrants,you:{listed:!hidden}};
+}
+
+// Registration names as people typed them: test sign-ups are dropped and a handle such as
+// "first.last" reads as a name. Anything that looks like an email never leaves the server.
+const placeholderName=/^(test(ing|er)?|asdf+|placeholder|example|name|n\/?a|none|x+)\d*$/i;
+function rosterName(value){
+  let name=typeof value==='string'?value.trim().replace(/\s+/g,' ').slice(0,120):'';
+  if(!name||name.includes('@')||placeholderName.test(name))return '';
+  if(/^[a-z]+(?:[._][a-z]+)+$/i.test(name))name=name.split(/[._]/).map(part=>part[0].toUpperCase()+part.slice(1).toLowerCase()).join(' ');
+  return name;
 }
 
 // The signed-in account's own choice to appear on the roster, or not.

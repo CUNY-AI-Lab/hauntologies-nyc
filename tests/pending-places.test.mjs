@@ -174,3 +174,25 @@ test('leaving the roster needs a signed-in account', async () => {
   const response = await worker.fetch(new Request('https://map.test/api/contributor-roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"listed":false}' }), { DB: {} }, {});
   assert.equal(response.status, 401);
 });
+
+test('the roster leaves out placeholder sign-ups and reads handles as names', async t => {
+  const { contributorRoster } = await import('../server/published-edits.mjs');
+  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
+  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
+  register('Test', 't@example.test'); register('testing2', 't2@example.test');
+  register('Zarin', 'z1@example.test'); register('Zarin Syed', 'z2@example.test');
+  register('ada.lovelace', 'ada@example.test'); register('Bo', 'bo@example.test');
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'z1@example.test', 1, '2026-10-22', '2026-10-22');
+  const roster = await contributorRoster(h.db);
+  assert.deepEqual(roster.registrants.map(p => [p.name, p.account]), [['Ada Lovelace', false], ['Bo', false], ['Zarin Syed', true]]);
+});
+
+test('leaving the roster under a full name also hides the bare first-name sign-up', async t => {
+  const { contributorRoster, setRosterListing } = await import('../server/published-edits.mjs');
+  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
+  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
+  register('Zarin', 'z1@example.test'); register('Zarin Syed', 'z2@example.test'); register('Bo Example', 'bo@example.test');
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u2', '', 'z2@example.test', 1, '2026-10-22', '2026-10-22');
+  await setRosterListing(h.db, 'map_u2', false);
+  assert.deepEqual((await contributorRoster(h.db)).registrants.map(p => p.name), ['Bo Example']);
+});
