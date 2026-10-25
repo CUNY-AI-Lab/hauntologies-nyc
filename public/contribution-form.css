@@ -308,3 +308,11 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .place-record-sources p{margin:0 0 8px}
 .place-record-sources .place-record-metadata{margin-bottom:8px}
 @media(max-width:380px){.place-record-metadata>div{grid-template-columns:minmax(0,1fr);gap:2px}}
+
+/* Password creation leads with the new credential; guest admission is a separate disclosure. */
+#accountFormHost .account-password-hint { margin:-8px 0 12px; }
+#accountFormHost .account-guest-access { display:block; border-top:1px solid var(--line); padding-top:4px; }
+#accountFormHost .account-guest-access[hidden] { display:none; }
+#accountFormHost .account-guest-access > summary { min-height:44px; padding:12px 0; cursor:pointer; font-size:13px; }
+#accountFormHost .account-guest-access[open] > .registration-admission-notice { margin:0 0 12px; }
+#accountFormHost .account-guest-access[open] > label { margin-bottom:12px; }

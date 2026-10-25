@@ -17,15 +17,17 @@
     return domain.toLowerCase() === 'cuny.edu' || domain.toLowerCase().endsWith('.cuny.edu');
   }
   function attach({ form, email, anchor, deferred = false }) {
-    const group = document.createElement('div'); group.className = 'registration-admission'; group.hidden = true;
+    const completion = !email;
+    const group = document.createElement(completion ? 'details' : 'div'); group.className = 'registration-admission' + (completion ? ' account-guest-access' : ''); group.hidden = true;
+    if (completion) { const summary = document.createElement('summary'); summary.textContent = 'Using a guest email?'; group.append(summary); }
     const label = document.createElement('label'), input = document.createElement('input'), hint = document.createElement('p');
-    input.id = (email?.id || 'account-completion') + '-access-code'; input.name = 'access_code'; input.type = 'password';
+    input.id = (email?.id || 'account-completion') + '-access-code'; input.name = 'access_code'; input.type = completion ? 'text' : 'password';
+    input.spellcheck = false; input.setAttribute('autocapitalize', 'off');
     input.autocomplete = 'off'; input.maxLength = 256; input.disabled = true;
-    label.htmlFor = input.id; label.textContent = 'Access code'; label.append(input);
-    hint.id = input.id + '-notice'; hint.className = 'registration-admission-notice'; hint.textContent = notice;
+    label.htmlFor = input.id; label.textContent = completion ? 'Guest access code' : 'Access code'; label.append(input);
+    hint.id = input.id + '-notice'; hint.className = 'registration-admission-notice'; hint.textContent = completion ? 'For a non-CUNY email, enter the guest access code you received. CUNY accounts can go straight to creating a password.' : notice;
     group.append(hint, label);
-    if (!email) { const optional = document.createElement('p'); optional.className = 'registration-admission-notice'; optional.textContent = 'Leave blank for a CUNY email.'; group.append(optional); }
-    if (anchor) anchor.after(group); else form.prepend(group);
+    if (anchor) anchor.after(group); else form.append(group);
     let restricted = false;
     function describe(field, enabled) {
       if (!field) return;
@@ -49,7 +51,7 @@
       payload: () => input.disabled || !input.value ? {} : { access_code: input.value },
       lock: value => { input.readOnly = value; },
       clear: () => { input.value = ''; sync(); },
-      reject: () => { restricted = true; sync(); if (!input.disabled) input.focus(); },
+      reject: () => { restricted = true; sync(); if (completion) group.open = true; if (!input.disabled) input.focus(); },
     };
   }
   window.HauntologiesAdmission = Object.freeze({ notice, attach });
