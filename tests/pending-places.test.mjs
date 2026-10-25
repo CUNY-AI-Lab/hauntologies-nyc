@@ -119,6 +119,12 @@ test('an older attempt at a place the same contributor sent again drops out; oth
   const ids = (await pendingPlaces(h.db)).places.map(p => p.id);
   assert.ok(!ids.includes(first.id), 'older same-title attempt hidden');
   for (const id of [second.id, other.id, untitledA.id, untitledB.id]) assert.ok(ids.includes(id), id);
+  // The newer attempt leaving review (a draft again, or published) does not bring the older one back.
+  for (const state of ['draft', 'merged']) {
+    h.db.native.prepare('UPDATE workflow_submissions SET review_state=? WHERE id=?').run(state, second.id);
+    const now = (await pendingPlaces(h.db)).places.map(p => p.id);
+    assert.ok(!now.includes(first.id) && !now.includes(second.id), state);
+  }
 });
 
 test('the signed-in roster names every registrant with their counts and never an email', async t => {
@@ -128,8 +134,10 @@ test('the signed-in roster names every registrant with their counts and never an
   register('Ada Example', 'ada@example.test'); register('Ada Example', 'ADA.alt@example.test'); register('Bo Example', 'bo@example.test');
   run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'Ada@Example.test', 1, '2026-10-22', '2026-10-22');
   await submit(h, proposal({ title: 'One' }), 'map_u1'); await submit(h, proposal({ title: 'Two' }), 'map_u1');
+  // The same place sent again counts once; two untitled contributions stay two.
+  await submit(h, proposal({ title: 'two ' }), 'map_u1'); await submit(h, proposal({ title: 'Contribution' }), 'map_u1'); await submit(h, proposal({ title: 'Contribution' }), 'map_u1');
   const roster = await contributorRoster(h.db);
-  assert.deepEqual(roster, { registrants: [{ name: 'Ada Example', contributions: 2, published: 0, account: true }, { name: 'Bo Example', contributions: 0, published: 0, account: false }] });
+  assert.deepEqual(roster, { registrants: [{ name: 'Ada Example', contributions: 4, published: 0, account: true }, { name: 'Bo Example', contributions: 0, published: 0, account: false }] });
   assert.ok(!JSON.stringify(roster).includes('@'));
 });
 

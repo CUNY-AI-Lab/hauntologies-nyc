@@ -86,7 +86,8 @@ window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.deta
 // Everyone sees places sent for review as their own layer, before a reviewer decides.
 // A contribution to a mapped place sits as a badge beside that place's marker.
 let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;const pendingMarkers=new Map();
-const pendingLabel=status=>status==='approved'?'Approved, publishing soon':status==='changes_requested'?'Under review: more information requested':'Under review';
+// An approved note on a mapped place stays a note; only a new point is published on approval.
+const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, publishing soon'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
 // Where a pending place is: the contributor's own words, the place it adds to, or its cross streets.
 function pendingWhere(place,record){
  if(record)return 'Adds to '+(record.title||'a mapped place')+' · '+whereLabel(record);
@@ -94,7 +95,7 @@ function pendingWhere(place,record){
 }
 function pendingPopup(place,record){
  const root=document.createElement('div');root.className='pending-place-popup';
- const status=document.createElement('p');status.className='pending-place-status';status.textContent=pendingLabel(place.status);
+ const status=document.createElement('p');status.className='pending-place-status';status.textContent=pendingLabel(place);
  const title=document.createElement('strong');title.textContent=place.title;root.append(status,title);
  const where=document.createElement('p');where.className='pending-place-where';where.textContent=pendingWhere(place,record);root.append(where);
  if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)where.textContent=v.label;}).catch(()=>{});
@@ -108,7 +109,7 @@ function renderPendingPlaces(){
  for(const place of pendingPlaces){
   if(own.has(place.id))continue;
   const at=pendingPoint(place,records);if(!at)continue;const {record,lat,lon}=at;
-  const label=pendingLabel(place.status);
+  const label=pendingLabel(place);
   const marker=L.marker([lat,lon],{pane:'researchPoints',zIndexOffset:650,keyboard:true,title:place.title+', '+label,icon:L.divIcon({className:'pending-place'+(record?' attached':''),html:'<span aria-hidden="true">?</span>',iconSize:record?[18,18]:[24,24],iconAnchor:record?[-4,22]:[12,12]})});
   marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
   // Contributor text is untrusted: Leaflet renders a string tooltip as HTML, so pass a text node.
@@ -134,7 +135,7 @@ function renderPendingList(records,own){
  $('pendingPlacesList').replaceChildren(...shown.map(place=>{
   const row=document.createElement('li'),button=document.createElement('button'),record=place.record_id?records.get(place.record_id):null;button.type='button';
   const title=document.createElement('strong');title.textContent=place.title;const meta=document.createElement('span');
-  meta.textContent=[own.has(place.id)?'Yours':'',pendingLabel(place.status),pendingWhere(place,record)].filter(Boolean).join(' · ');
+  meta.textContent=[own.has(place.id)?'Yours':'',pendingLabel(place),pendingWhere(place,record)].filter(Boolean).join(' · ');
   if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)meta.textContent+=' · '+v.label;}).catch(()=>{});
   button.append(title,meta);button.addEventListener('click',()=>bringUpPending(place));row.append(button);return row;
  }));

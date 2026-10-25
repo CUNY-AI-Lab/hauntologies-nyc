@@ -4,7 +4,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createWorkflowStore } from '../server/workflow-store.mjs';
 import { createWorkflowService } from '../server/workflow-service.mjs';
-import { buildPreview, hash, LIMITS } from '../server/workflow-core.mjs';
+import { buildPreview, hash, stable, LIMITS } from '../server/workflow-core.mjs';
+import { publishedRecords } from '../server/published-edits.mjs';
 
 // Local, synthetic fixtures only. This suite never contacts a hosted service.
 const boundaries = JSON.parse(readFileSync(new URL('../public/data/nyc-borough-boundaries.geojson', import.meta.url)));
@@ -275,4 +276,24 @@ test('a revised approved proposal cannot inherit its earlier approval', async t 
   const attempt = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 2, approval_hash: approved.body.submission.approval.approval_hash }, { actor: 'publisher' });
   status(attempt, 409); assert.equal(attempt.body.error, 'approval_required');
   assert.equal(count(h, 'workflow_jobs'), 0);
+});
+
+test('an admin place approved before approval could publish reaches the map after revise, Start review and approve', async t => {
+  const admin = 'contributor', h = harness({ authorization: { reviewers: [admin], publishers: [admin], admins: [admin] } }); t.after(() => h.db.close());
+  const created = await submit(h, envelope({ geometry: point() }, { title: 'Thomas Shoe Factory' }));
+  status(await call(h, 'review', review(h, created.submission)), 200);
+  // The approval as an earlier operator recorded it: review-only, so it can never publish.
+  const row = h.db.native.prepare('SELECT id,binding_json FROM workflow_approvals').get(), binding = { ...JSON.parse(row.binding_json), application_applicable: false };
+  h.db.native.prepare('UPDATE workflow_approvals SET binding_json=?,approval_hash=? WHERE id=?').run(JSON.stringify(binding), await hash(stable(binding)), row.id);
+  const stuck = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 1, approval_hash: await hash(stable(binding)) });
+  status(stuck, 409); assert.equal(stuck.body.error, 'approval_predates_application');
+  const revised = await call(h, 'revise', { idempotency_key: key(h, 'revise'), submission_id: created.submission.id, expected_revision: 1, submission_json: created.request.submission_json }); status(revised, 200);
+  assert.equal(revised.body.submission.status, 'draft');
+  const queued = await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: created.submission.id, expected_revision: 2, action: 'ready_for_review', rationale: 'Revision ready for review.' }); status(queued, 200);
+  assert.equal(queued.body.submission.status, 'submitted');
+  const approved = await call(h, 'review', review(h, queued.body.submission)); status(approved, 200);
+  assert.equal(approved.body.submission.application.applicable, true);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 2, approval_hash: approved.body.submission.approval.approval_hash }); status(staged, 201);
+  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }), 200);
+  assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Thomas Shoe Factory']);
 });
