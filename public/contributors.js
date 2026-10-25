@@ -2,8 +2,8 @@
   function mountContributors() {
     if (document.getElementById('contributorsButton')) return;
 
-    const footer = document.getElementById('mapFooter') || document.createElement('footer');
-    footer.className = 'contributors-footer';
+    const menu = document.getElementById('toolsMenu');
+    if (!menu) return;
     const button = document.createElement('button');
     button.id = 'contributorsButton';
     button.className = 'outline';
@@ -11,7 +11,7 @@
     button.textContent = 'Contributors';
     button.setAttribute('aria-haspopup', 'dialog');
     button.setAttribute('aria-controls', 'contributorsDialog');
-    footer.append(button);
+    menu.append(button);
 
     const dialog = document.createElement('dialog');
     dialog.id = 'contributorsDialog';
@@ -146,7 +146,7 @@
     }
 
     dialog.append(header, credited, collaborators, built);
-    document.body.append(footer, dialog);
+    document.body.append(dialog);
 
     button.addEventListener('click', () => {
       if (typeof window.closeTools === 'function') window.closeTools();
@@ -161,9 +161,7 @@
     dialog.addEventListener('close', () => clearInterval(refresh));
     close.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
-      if (button.isConnected && button.getClientRects().length) {
-        button.focus({ preventScroll: true });
-      }
+      document.getElementById('toolsButton')?.focus({ preventScroll: true });
     });
     dialog.addEventListener('keydown', event => {
       if (event.key === 'Tab') {

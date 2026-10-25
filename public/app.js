@@ -180,7 +180,7 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contributio
 const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'Demolition list':['haunting','reported_haunting'].includes(r.category)?'Ghost story':r.category==='archival_gap'?'Archival gap':r.category==='vanished_place'?'Vanished place':r.category==='pending'?'Pending review':r.category==='submitted'?'Submitted record':'Place';
 function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&String(lat).trim()!==''&&String(lon).trim()!==''&&Number(lat)>=40.45&&Number(lat)<=40.98&&Number(lon)>=-74.30&&Number(lon)<=-73.65}
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
-let toolOpener='toolsButton',placeLayout=null;
+let toolOpener='toolsButton',placeLayout=null,editRequest=0;
 const toolPanels=['toolsMenu','layersPanel','filtersPanel','researchSidecar'];
 let sidecarModalState=null;
 function setSidecarModal(active){
@@ -205,6 +205,7 @@ function setSidecarModal(active){
  if(!sidecar.contains(document.activeElement))$('sidecarTitle').focus({preventScroll:true});
 }
 function closeTools(focus=false){
+ ++editRequest;
  clearProposedPoint();stopContributionPicking();
  setSidecarModal(false);
  for(const id of toolPanels)$(id).hidden=true;
@@ -225,7 +226,31 @@ function switchPanel(id){
  setSidecarModal(id==='draftPanel');
  if(id==='draftPanel')window.ContributionPoint?.show();
 }
-$('toolsButton').addEventListener('click',async()=>{if($('toolsButton').disabled)return;$('toolsButton').disabled=true;try{const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'});if(response.status===401){try{sessionStorage.setItem('hauntologies-return-edit','true');}catch{}location.assign('/register?return=edit');return;}if(!response.ok){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}const session=await response.json();if(session.password_required){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}}catch{window.dispatchEvent(new CustomEvent('account-open-requested'));return;}finally{$('toolsButton').disabled=false;}const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';$('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));if(open)$('submitTool').focus()});
+async function requireEditAccount(button, action){
+ if(button.disabled)return;
+ const request=++editRequest;
+ const current=()=>request===editRequest&&!$('toolsMenu').hidden&&!document.querySelector('dialog[open]');
+ button.disabled=true;
+ try{
+  const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'});
+  if(!current())return;
+  if(response.status===401){
+   try{sessionStorage.setItem('hauntologies-return-edit','true');}catch{}
+   location.assign('/register?return=edit');return;
+  }
+  if(!response.ok){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
+  const session=await response.json();
+  if(!current())return;
+  if(session.password_required){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
+  action();
+ }catch{if(current())window.dispatchEvent(new CustomEvent('account-open-requested'));}
+ finally{button.disabled=false;}
+}
+$('toolsButton').addEventListener('click',()=>{
+ const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';
+ $('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));
+ if(open)$('submitTool').focus();
+});
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
 document.addEventListener('pointerdown',e=>{
  if(document.querySelector('dialog[open]')||e.target.closest('.header-tools'))return;
@@ -237,7 +262,7 @@ $('mapToolsButton').addEventListener('click',()=>{
  switchPanel('casePanel');revealPlaceCard([...$('casePanel').querySelectorAll('.place-card')].find(card=>card.dataset.placeId===selected));$('sidecarTitle').focus({preventScroll:true});
 });
 $('layersButton').addEventListener('click',()=>{const open=$('layersPanel').hidden;closeTools();toolOpener='layersButton';$('layersPanel').hidden=!open;$('layersButton').setAttribute('aria-expanded',String(open));if(open)$('layersTitle').focus()});
-for(const [button,view,title] of [['submitTool','submissionView','Contribute'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()});
+for(const [button,view,title] of [['submitTool','submissionView','Contribute'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>requireEditAccount($(button),()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()}));
 $('openResearch').addEventListener('click',()=>switchPanel('casePanel'));
 for(const id of ['closeResearch','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
