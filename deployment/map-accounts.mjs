@@ -5,6 +5,7 @@ import { getIP } from '@better-auth/core/utils/ip';
 
 export const MAP_ORIGIN = 'https://hauntologies-nyc.ailab-452.workers.dev';
 const COOKIE = '__Host-hauntologies-session';
+const SESSION_SECONDS = 7 * 24 * 60 * 60;
 const cache = new WeakMap();
 const tokenPattern = /^[A-Za-z0-9_-]{24,128}$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,7 +44,8 @@ export function accountOptions(env) {
     secret: env.MAP_AUTH_SECRET, database: env.DB, trustedOrigins: [MAP_ORIGIN],
     user: { modelName: 'hny_auth_user' },
     account: { modelName: 'hny_auth_account', accountLinking: { enabled: false } },
-    session: { modelName: 'hny_auth_session', expiresIn: 3600, disableSessionRefresh: true, cookieCache: { enabled: false } },
+    // A sign-in lasts a week and renews, at most daily, when the map checks it on load.
+    session: { modelName: 'hny_auth_session', expiresIn: SESSION_SECONDS, updateAge: 86400, cookieCache: { enabled: false } },
     // Setup links remain stored until used or 30 days old. The wrapper cleans
     // both kinds separately so Better Auth's 30-minute expiresAt cannot remove an
     // unused setup link.
@@ -61,7 +63,7 @@ export function accountOptions(env) {
       // __Host- name below keeps its browser-enforced host-only semantics.
       // Secure remains mandatory for every cookie through these attributes.
       useSecureCookies: false, defaultCookieAttributes: { secure: true }, database: { generateId: 'uuid' },
-      cookies: { session_token: { name: COOKIE, attributes: { path: '/', secure: true, httpOnly: true, sameSite: 'lax', maxAge: 3600 } } },
+      cookies: { session_token: { name: COOKIE, attributes: { path: '/', secure: true, httpOnly: true, sameSite: 'lax', maxAge: SESSION_SECONDS } } },
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
     },
     logger: { disabled: true }, telemetry: { enabled: false },
@@ -85,12 +87,16 @@ async function clearSetupLinks(env, email) {
   await env.DB.prepare("DELETE FROM hny_auth_verification WHERE json_valid(value) AND json_extract(value, '$.type') = 'magic-link' AND lower(json_extract(value, '$.email')) = ?").bind(email.toLowerCase()).run();
 }
 
-export async function mapSession(request, env, requirePassword = true) {
+// Only the account session route renews a sign-in (and returns its cookie); every other check reads it.
+export async function mapSession(request, env, requirePassword = true, renew = null) {
   if (!mapAccountsReady(env)) return null;
-  const session = await authFor(env).api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
+  const query = { disableCookieCache: true, ...(renew ? {} : { disableRefresh: true }) };
+  const result = await authFor(env).api.getSession({ headers: request.headers, query, returnHeaders: Boolean(renew) });
+  const session = renew ? result?.response : result;
   if (!session?.user?.emailVerified || new Date(session.session.expiresAt).getTime() <= Date.now()) return null;
   const hasPassword = Boolean(await credential(env, session.user.id));
   if (requirePassword && !hasPassword) return null;
+  if (renew) for (const cookie of result.headers?.getSetCookie?.() || []) renew.append('Set-Cookie', cookie);
   return { actor_id: 'map_' + session.user.id, email: session.user.email, password_required: !hasPassword };
 }
 
@@ -175,8 +181,9 @@ export async function handleMapAccount(request, env) {
   if (url.origin !== MAP_ORIGIN || url.search || url.pathname !== '/api/auth/' + action) return privateJson({ error: 'invalid_request' }, 400);
   try {
     if (action === 'session' && request.method === 'GET') {
-      const session = await mapSession(request, env, false);
-      return session ? privateJson(session) : privateJson({ error: 'sign_in_required' }, 401);
+      const renewed = new Headers(), session = await mapSession(request, env, false, renewed);
+      if (!session) return privateJson({ error: 'sign_in_required' }, 401);
+      return privateJson(session, 200, renewed.getSetCookie());
     }
     if (!Object.hasOwn(fields, action)) return privateJson({ error: 'not_found' }, 404);
     if (request.method !== 'POST') return privateJson({ error: 'method_not_allowed' }, 405);
