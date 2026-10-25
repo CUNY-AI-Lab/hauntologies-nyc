@@ -39,9 +39,9 @@ test('both registration routes enforce CUNY or code without storing codes, creat
   const saved=await rsvp('guest@example.test',guestCode);assert.equal(saved.status,201);
   const register=await h.call('/api/auth/register',{email:'guest@example.test',access_code:guestCode});assert.deepEqual(register.body,{status:'check_email'});
   const token=await h.token('guest@example.test');assert.ok(token);assert.equal(await total(h,'hny_auth_user'),0);
-  denied(await h.call('/api/auth/register',{email:'guest@example.test',access_code:'wrong'}));assert.equal(await total(h,'hny_test_mail'),1);
-  denied(await h.call('/api/auth/verify',{token,password}));assert.equal(await total(h,'hny_auth_user'),0);assert.equal(await total(h,'hny_auth_session'),0);
-  const verified=await h.call('/api/auth/verify',{token,password,access_code:guestCode});assert.equal(verified.status,200,JSON.stringify(verified.body));
+  assert.equal(await total(h,'hny_test_mail'),1);
+  assert.equal(await total(h,'hny_auth_user'),0);assert.equal(await total(h,'hny_auth_session'),0);
+  const verified=await h.call('/api/auth/verify',{token,password});assert.equal(verified.status,200,JSON.stringify(verified.body));
   assert.equal((await h.call('/api/auth/verify',{token,password,access_code:guestCode})).status,400);
   const dashboard=await h.call('/api/contributions/dashboard',undefined,verified.cookie);assert.equal(dashboard.status,200);assert.equal(dashboard.body.capabilities.can_review,false);assert.equal(dashboard.body.capabilities.can_apply,false);
   assert.equal((await h.call('/api/admin/registrations',undefined,verified.cookie)).status,401);
@@ -53,7 +53,7 @@ test('both registration routes enforce CUNY or code without storing codes, creat
   assert.equal((await h.call('/api/contributions/submission?id='+submitted.body.submission.id,undefined,verified.cookie)).status,200);
 
   assert.deepEqual((await h.call('/api/auth/register',{email:'guest@example.test',access_code:guestCode})).body,register.body);
-  for (const table of ['event_registrations','hny_auth_user','hny_auth_account','hny_auth_session','hny_auth_verification','hny_auth_limits','hny_test_mail']) assert.ok(!JSON.stringify((await h.db.prepare('SELECT * FROM '+table).all()).results).includes(guestCode),table);
+  for (const table of ['event_registrations','hny_auth_user','hny_auth_account','hny_auth_session','hny_auth_verification','hny_auth_limits','hny_guest_admissions','hny_test_mail']) assert.ok(!JSON.stringify((await h.db.prepare('SELECT * FROM '+table).all()).results).includes(guestCode),table);
   assert.equal((await h.call('/api/auth/register',{email:'MixedCase@GC.CUNY.EDU'})).status,200);assert.ok(await h.token('mixedcase@gc.cuny.edu'));
 });
 
@@ -137,4 +137,32 @@ test('simultaneous guest verification with admission consumes one token and crea
   const results=await Promise.all([h.call('/api/auth/verify',{token,password,access_code:guestCode}),h.call('/api/auth/verify',{token,password,access_code:guestCode})]);
   assert.deepEqual(results.map(x=>x.status).sort(),[200,400]);
   assert.equal(await total(h,'hny_auth_user'),1);assert.equal(await total(h,'hny_auth_account'),1);
+});
+
+
+test('one guest code check carries from event registration through email verification and password creation', async t => {
+  const h=await harness(t,{eligibilityEnabled:true,guestCode}), email='once@example.test';
+  const saved=await h.call('/api/register',{name:'Synthetic guest',email,access_code:guestCode},'',{'Idempotency-Key':crypto.randomUUID()});
+  assert.equal(saved.status,201);
+  assert.equal((await h.call('/api/auth/register',{email})).status,200);
+  const token=await h.token(email);
+  // The admission decision survives a new Worker instance and a code rotation.
+  await h.configureEligibility(true,'changed-local-code');
+  const completed=await h.call('/api/auth/verify',{token,password});
+  assert.equal(completed.status,200,JSON.stringify(completed.body));
+  assert.equal((await h.call('/api/auth/session',undefined,completed.cookie)).status,200);
+  assert.equal((await h.call('/api/auth/verify',{token,password})).status,400);
+  assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,200);
+  denied(await h.call('/api/auth/register',{email:'another@example.test'}));
+  const stored=(await h.db.prepare('SELECT * FROM hny_guest_admissions').all()).results;
+  assert.equal(stored.length,1); assert.match(stored[0].email_hash,/^[a-f0-9]{64}$/);
+  assert.ok(!JSON.stringify(stored).includes(email));assert.ok(!JSON.stringify(stored).includes(guestCode));
+});
+
+test('a remembered guest admission supports finishing a passwordless session without another code', async t => {
+  const h=await harness(t,{eligibilityEnabled:true,guestCode}), email='resume@example.test';
+  const cookie=await h.register(email,guestCode);
+  await h.db.prepare('DELETE FROM hny_auth_account').run();
+  assert.equal((await h.call('/api/auth/set-password',{password},cookie)).status,200);
+  assert.equal((await h.call('/api/auth/sign-in',{email,password})).status,200);
 });

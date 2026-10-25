@@ -1,4 +1,4 @@
-import { normalizeRegistrationEmail, registrationAllowed, registrationAttemptAllowed, registrationRestricted } from './registration-eligibility.mjs';
+import { hasGuestAdmission, rememberGuestAdmission, normalizeRegistrationEmail, registrationAllowed, registrationAttemptAllowed, registrationRestricted } from './registration-eligibility.mjs';
 // Public event intake only. No attendee reads, identity claims, email sends or map writes.
 export const REGISTRATION_EVENT = Object.freeze({
   id: 'hauntologies-2026-10-30', date: '2026-10-30', start_time: '15:00', end_time: '18:30',
@@ -63,7 +63,8 @@ export async function handleRegistration(request, env) {
     if (existing) return receipt(existing, payloadHash, 200);
     if (registrationRestricted(env)) {
       if (!await registrationAttemptAllowed(request, env)) return reject(429, 'rate_limited', { 'Retry-After': '900' });
-      if (!await registrationAllowed(canonicalEmail, body.access_code, env)) return reject(403, 'registration_restricted');
+      if (!await hasGuestAdmission(env, canonicalEmail) && !await registrationAllowed(canonicalEmail, body.access_code, env)) return reject(403, 'registration_restricted');
+      await rememberGuestAdmission(env, canonicalEmail);
     }
     const now = Date.now(), seconds = Math.floor(now / 1000), windowStart = Math.floor(seconds / REGISTRATION_LIMITS.window_seconds) * REGISTRATION_LIMITS.window_seconds;
     // Cloudflare overwrites this header on its public edge. It is a rate hint, never an identity.

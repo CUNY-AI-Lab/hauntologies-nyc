@@ -57,7 +57,7 @@
         field(form, 'Confirm password', 'confirmation', 'password', 'new-password');
       }
     }
-    const admission = ['register', 'verify', 'set-password', 'reset'].includes(mode) ? window.HauntologiesAdmission?.attach({ form, email, anchor: email?.parentElement, deferred: mode === 'reset' }) : null;
+    const admission = mode === 'register' ? window.HauntologiesAdmission?.attach({ form, email, anchor: email?.parentElement }) : null;
     if (mode === 'register') form.append(node('p', 'Verify your email, then choose a password for Hauntologies. Your verification link stays usable until you create your password and can be used once. Event registration is separate.'));
     const submit = node('button', mode === 'sign-in' ? 'Sign in' : mode === 'register' ? 'Send verification email' : mode === 'request-reset' ? 'Send reset email' : mode === 'reset' ? 'Save new password' : 'Create password and sign in'); submit.type = 'submit'; submit.className = 'primary'; form.append(submit); formHost.append(form);
     form.addEventListener('submit', async event => {
@@ -74,10 +74,11 @@
       try {
         await api('/api/auth/' + operation, payload);
         if (operation === 'register' || operation === 'request-reset') {
+          if (operation === 'register') window.HauntologiesAdmission?.remember(values.email);
           renderForm('sign-in', operation === 'register' ? 'Check your email for a verification link. If you already have an account, sign in or reset your password.' : 'If this address has an account, a reset link will arrive by email.');
         } else if (operation === 'reset') { challenge = null; identity(null); renderForm('sign-in', 'Password updated. Sign in with your new password.'); }
         else { challenge = null; await reconcile(); }
-      } catch (error) { if (error.code === 'registration_restricted') admission?.reject(); status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.code === 'invalid_token' && operation === 'verify' ? 'This verification link has already been used or is invalid. Request a new link.' : error.code === 'registration_restricted' && !email ? 'Enter the guest access code for the email you verified.' : error.message; }
+      } catch (error) { if (error.code === 'registration_restricted') admission?.reject(); status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.code === 'invalid_token' && operation === 'verify' ? 'This verification link has already been used or is invalid. Request a new link.' : error.code === 'registration_restricted' && !email ? 'Complete guest registration first, then reopen your verification email.' : error.message; }
       finally { busy = false; submit.disabled = false; }
     });
     if (mode === 'sign-in') { button('Reset password', () => renderForm('request-reset')); button("Don't have an account? Register here.", () => renderForm('register')); }

@@ -92,6 +92,7 @@
         return;
       }
       if(data?.ok!==true||!uuid(data.receipt_id)||data.event?.id!==eventId)throw new Error('missing_receipt');
+      window.HauntologiesAdmission?.remember(JSON.parse(exact.body).email);
       savedReceipt={event_id:eventId,receipt_id:data.receipt_id};
       try{localStorage.setItem(receiptKey,JSON.stringify(savedReceipt));}catch{}
       request=null;clearPending();renderReceipt();window.dispatchEvent(new CustomEvent('registration-confirmed'));

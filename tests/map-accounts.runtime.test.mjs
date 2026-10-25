@@ -242,6 +242,8 @@ test('guest-code checks spend durable attempts per account and per network addre
   for(let i=0;i<11;i++) assert.equal((await h.call('/api/auth/register',{email,access_code:'wrong-'+i})).status,403);
   assert.equal((await h.call('/api/auth/register',{email,access_code:code})).status,200);
   const token=await h.token(email);
+  // Model a historical invitation issued before guest approval was recorded.
+  await h.db.prepare('DELETE FROM hny_guest_admissions').run();
   for(let i=0;i<10;i++) assert.equal((await h.call('/api/auth/verify',{token,password,access_code:'wrong-'+i})).status,403);
   const limited=await h.call('/api/auth/verify',{token,password,access_code:code});
   assert.equal(limited.status,429);assert.equal(limited.cookie,'');

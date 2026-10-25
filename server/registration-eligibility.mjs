@@ -49,3 +49,14 @@ export async function registrationAttemptAllowed(request, env) {
   }
   return true;
 }
+
+// A durable admission decision is separate from email verification and account roles.
+const guestEmailKey = async email => Array.from(await hash(normalizeRegistrationEmail(email, true)), byte => byte.toString(16).padStart(2, '0')).join('');
+export async function hasGuestAdmission(env, email) {
+  if (!normalizeRegistrationEmail(email) || !env.DB?.prepare) return false;
+  return Boolean(await env.DB.prepare('SELECT email_hash FROM hny_guest_admissions WHERE email_hash = ?').bind(await guestEmailKey(email)).first());
+}
+export async function rememberGuestAdmission(env, email) {
+  if (!registrationRestricted(env) || isCunyEmail(email)) return;
+  await env.DB.prepare('INSERT INTO hny_guest_admissions (email_hash, approved_at) VALUES (?, ?) ON CONFLICT(email_hash) DO NOTHING').bind(await guestEmailKey(email), new Date().toISOString()).run();
+}

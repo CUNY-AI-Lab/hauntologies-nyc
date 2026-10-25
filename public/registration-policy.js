@@ -17,18 +17,16 @@
     return domain.toLowerCase() === 'cuny.edu' || domain.toLowerCase().endsWith('.cuny.edu');
   }
   function attach({ form, email, anchor, deferred = false }) {
-    const completion = !email;
-    const group = document.createElement(completion ? 'details' : 'div'); group.className = 'registration-admission' + (completion ? ' account-guest-access' : ''); group.hidden = true;
-    if (completion) { const summary = document.createElement('summary'); summary.textContent = 'Using a guest email?'; group.append(summary); }
+    const group = document.createElement('div'); group.className = 'registration-admission'; group.hidden = true;
     const label = document.createElement('label'), input = document.createElement('input'), hint = document.createElement('p');
-    input.id = (email?.id || 'account-completion') + '-access-code'; input.name = 'access_code'; input.type = completion ? 'text' : 'password';
+    input.id = email.id + '-access-code'; input.name = 'access_code'; input.type = 'text';
     input.spellcheck = false; input.setAttribute('autocapitalize', 'off');
     input.autocomplete = 'off'; input.maxLength = 256; input.disabled = true;
-    label.htmlFor = input.id; label.textContent = completion ? 'Guest access code' : 'Access code'; label.append(input);
-    hint.id = input.id + '-notice'; hint.className = 'registration-admission-notice'; hint.textContent = completion ? 'For a non-CUNY email, enter the guest access code you received. CUNY accounts can go straight to creating a password.' : notice;
+    label.htmlFor = input.id; label.textContent = 'Access code'; label.append(input);
+    hint.id = input.id + '-notice'; hint.className = 'registration-admission-notice'; hint.textContent = notice;
     group.append(hint, label);
     if (anchor) anchor.after(group); else form.append(group);
-    let restricted = false;
+    let restricted = false, rejected = false;
     function describe(field, enabled) {
       if (!field) return;
       const current = field.getAttribute('aria-describedby');
@@ -39,20 +37,25 @@
       else if (!value && current !== null) field.removeAttribute('aria-describedby');
     }
     function sync() {
-      const shown = restricted && (!email || !!email.value.trim() && !isCunyEmail(email.value));
+      const approved = !rejected && remembered(email.value);
+      const shown = restricted && !!email.value.trim() && !isCunyEmail(email.value) && !approved;
+      hint.textContent = approved && !isCunyEmail(email.value) ? 'Guest access confirmed for this email.' : notice;
       group.hidden = !restricted; label.hidden = !shown; input.disabled = !shown; input.required = shown && !!email;
       describe(email, restricted); describe(input, shown);
       if (!shown) input.value = '';
     }
-    email?.addEventListener('input', sync);
+    email.addEventListener('input', () => { rejected = false; sync(); });
     const ready = policy.then(value => { restricted = value && !deferred; sync(); });
     return {
       ready,
       payload: () => input.disabled || !input.value ? {} : { access_code: input.value },
       lock: value => { input.readOnly = value; },
       clear: () => { input.value = ''; sync(); },
-      reject: () => { restricted = true; sync(); if (completion) group.open = true; if (!input.disabled) input.focus(); },
+      reject: () => { restricted = true; rejected = true; sync(); if (!input.disabled) input.focus(); },
     };
   }
-  window.HauntologiesAdmission = Object.freeze({ notice, attach });
+  const admissionKey = 'hauntologies-admitted-emails';
+  function remembered(email) { try { return JSON.parse(sessionStorage.getItem(admissionKey) || '[]').includes(email.trim().toLowerCase()); } catch { return false; } }
+  function remember(email) { try { const emails = JSON.parse(sessionStorage.getItem(admissionKey) || '[]'); sessionStorage.setItem(admissionKey, JSON.stringify([...new Set([...emails, email.trim().toLowerCase()])].slice(-10))); } catch {} }
+  window.HauntologiesAdmission = Object.freeze({ notice, attach, remember });
 })();

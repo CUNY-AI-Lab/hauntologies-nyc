@@ -1,4 +1,4 @@
-import { isCunyEmail, normalizeRegistrationEmail, registrationAllowed, registrationRestricted } from '../server/registration-eligibility.mjs';
+import { hasGuestAdmission, rememberGuestAdmission, isCunyEmail, normalizeRegistrationEmail, registrationAllowed, registrationRestricted } from '../server/registration-eligibility.mjs';
 import { betterAuth } from 'better-auth';
 import { magicLink } from 'better-auth/plugins/magic-link';
 import { getIP } from '@better-auth/core/utils/ip';
@@ -135,11 +135,14 @@ async function exhausted(env, key, limit, windowSeconds) {
 // never spends the account budget, because anyone can name any address there.
 // CUNY addresses need no code and spend nothing.
 async function admitted(env, email, code, ip, perAccount) {
+  if (registrationRestricted(env) && !isCunyEmail(email) && await hasGuestAdmission(env, email)) return true;
   if (registrationRestricted(env) && !isCunyEmail(email)) {
     await rate(env, 'code-ip:' + ip, 60, 900);
     if (perAccount) await rate(env, 'code:' + email.toLowerCase(), 10, 3600);
   }
-  return registrationAllowed(email, code, env);
+  const allowed = await registrationAllowed(email, code, env);
+  if (allowed) await rememberGuestAdmission(env, email);
+  return allowed;
 }
 
 async function bodyOf(request, allowed) {
@@ -292,7 +295,7 @@ export async function handleMapAccount(request, env) {
     if (!session) throw failure('sign_in_required', 401);
     if (!session.password_required) return privateJson({ error: 'password_already_set' }, 409);
     // Verify already spent an attempt for this account above.
-    if (!await (action === 'verify' ? registrationAllowed(session.email, body.access_code, env) : admitted(env, session.email, body.access_code, ip, true))) throw failure('registration_restricted', 403);
+    if (action !== 'verify' && !await admitted(env, session.email, body.access_code, ip, true)) throw failure('registration_restricted', 403);
     await auth.api.setPassword({ headers: verifiedRequest.headers, body: { newPassword: body.password } });
     await clearSetupLinks(env, session.email);
     return privateJson({ status: 'signed_in' }, 200, cookies);
