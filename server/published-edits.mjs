@@ -46,24 +46,44 @@ export async function contributorCredits(db) {
 
 // Signed-in roster: every event registrant by name, with what their map account has sent and
 // what is published. Emails only join registration to account here and never leave the server.
-export async function contributorRoster(db) {
+// An account can leave the list; `you` tells the signed-in viewer whether they are on it.
+export async function contributorRoster(db, actorId = '') {
   // A place sent again under the same title counts once, as in Under review; the default title never merges.
   const place=`count(DISTINCT CASE WHEN lower(trim(coalesce(json_extract(r.raw_json,'$.title'),''))) IN ('','contribution') THEN s.id ELSE lower(trim(json_extract(r.raw_json,'$.title'))) END)`;
   const mine=`FROM workflow_submissions s JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision WHERE s.owner_id='map_'||u.id`;
   const {results = []} = await db.prepare(`SELECT g.name,
       (SELECT ${place} ${mine} AND s.review_state IN ('submitted','changes_requested','approved','merged')) AS sent,
       (SELECT ${place} ${mine} AND s.review_state='merged') AS published,
-      u.id IS NOT NULL AS account
+      u.id IS NOT NULL AS account,
+      u.id IN (SELECT user_id FROM contributor_roster_hidden) AS hidden
     FROM (SELECT lower(trim(email)) AS email, name, max(created_at) AS at FROM event_registrations GROUP BY lower(trim(email))) g
     LEFT JOIN hny_auth_user u ON lower(u.email)=g.email`).all();
-  const people=new Map();
+  // Leaving the list hides the name, including any other sign-up under that same name.
+  const people=new Map(),hiddenNames=new Set();
   for (const row of results) {
     const name=typeof row.name==='string'?row.name.trim().replace(/\s+/g,' ').slice(0,120):'';
     if(!name||name.includes('@'))continue;
-    const key=name.toLocaleLowerCase('en-US'),entry=people.get(key)||{name,contributions:0,published:0,account:false};
+    const key=name.toLocaleLowerCase('en-US');
+    if(row.hidden){hiddenNames.add(key);continue;}
+    const entry=people.get(key)||{name,contributions:0,published:0,account:false};
     entry.contributions+=Number(row.sent)||0;entry.published+=Number(row.published)||0;entry.account||=Boolean(row.account);people.set(key,entry);
   }
-  return {registrants:[...people.values()].sort((a,b)=>b.contributions-a.contributions||a.name.localeCompare(b.name,'en-US'))};
+  for(const key of hiddenNames)people.delete(key);
+  const registrants=[...people.values()].sort((a,b)=>b.contributions-a.contributions||a.name.localeCompare(b.name,'en-US'));
+  const userId=String(actorId).startsWith('map_')?String(actorId).slice(4):'';
+  if(!userId)return {registrants};
+  const hidden=await db.prepare('SELECT 1 AS hidden FROM contributor_roster_hidden WHERE user_id=?').bind(userId).first();
+  return {registrants,you:{listed:!hidden}};
+}
+
+// The signed-in account's own choice to appear on the roster, or not.
+export async function setRosterListing(db, actorId, listed) {
+  const userId=String(actorId).startsWith('map_')?String(actorId).slice(4):'';
+  if(!userId)throw new Error('account_required');
+  await (listed
+    ?db.prepare('DELETE FROM contributor_roster_hidden WHERE user_id=?').bind(userId)
+    :db.prepare('INSERT INTO contributor_roster_hidden (user_id,created_at) SELECT id,? FROM hny_auth_user WHERE id=? ON CONFLICT(user_id) DO NOTHING').bind(new Date().toISOString(),userId)).run();
+  return {listed:Boolean(listed)};
 }
 
 const placeFields=['entry_id','group_id','category','title','claim_text','place_original','place_normalized','place_type','place_types','related_entry_id','time_original','time_start_year','time_end_year','time_precision','time_basis','geo_status','geo_method','geo_basis','geo_source_ref','latitude','longitude','borough','uncertainty_m','uncertainty_basis','gap_question','gap_scope','gap_limitations','image_url','image_caption'];

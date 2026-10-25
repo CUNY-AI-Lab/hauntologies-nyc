@@ -146,3 +146,31 @@ test('the roster endpoint is for signed-in accounts only', async () => {
   const response = await worker.fetch(new Request('https://map.test/api/contributor-roster'), { DB: {} }, {});
   assert.equal(response.status, 401);
 });
+
+test('a signed-in account can leave the roster and rejoin it', async t => {
+  const { contributorRoster, setRosterListing } = await import('../server/published-edits.mjs');
+  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
+  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
+  // A second sign-up under the same name, with no account, is hidden along with the account's.
+  register('Ada Example', 'ada@example.test'); register('Ada Example', 'ada.alt@example.test'); register('Bo Example', 'bo@example.test');
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'ada@example.test', 1, '2026-10-22', '2026-10-22');
+  const names = roster => roster.registrants.map(p => p.name);
+  assert.deepEqual((await contributorRoster(h.db, 'map_u1')).you, { listed: true });
+  assert.deepEqual(await setRosterListing(h.db, 'map_u1', false), { listed: false });
+  await setRosterListing(h.db, 'map_u1', false);
+  const hidden = await contributorRoster(h.db, 'map_u1');
+  assert.deepEqual(names(hidden), ['Bo Example']); assert.deepEqual(hidden.you, { listed: false });
+  assert.deepEqual(names(await contributorRoster(h.db)), ['Bo Example']);
+  await setRosterListing(h.db, 'map_u1', true);
+  assert.deepEqual(names(await contributorRoster(h.db, 'map_u1')), ['Ada Example', 'Bo Example']);
+  // Only real accounts can be recorded, and only the caller's own.
+  await setRosterListing(h.db, 'map_nobody', false);
+  assert.equal(h.db.native.prepare('SELECT COUNT(*) AS n FROM contributor_roster_hidden').get().n, 0);
+  await assert.rejects(setRosterListing(h.db, '', false));
+});
+
+test('leaving the roster needs a signed-in account', async () => {
+  const worker = createDemoWorker({ fetch: async () => new Response('app') });
+  const response = await worker.fetch(new Request('https://map.test/api/contributor-roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"listed":false}' }), { DB: {} }, {});
+  assert.equal(response.status, 401);
+});
