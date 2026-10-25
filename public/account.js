@@ -29,6 +29,9 @@
     if (started) window.dispatchEvent(new CustomEvent('contributions-session-started')); trigger.disabled = false; trigger.textContent = value && !value.password_required ? 'Account' : 'Sign in';
     trigger.setAttribute('aria-label', trigger.textContent);
     byId('accountRegistrationSection').hidden = !(value && !value.password_required);
+    // Published edits is for signed-in contributors; it closes before hiding so it can't reopen stale.
+    const feed = byId('publishedEditsFeed'), signedIn = Boolean(value && !value.password_required);
+    if (feed) { if (!signedIn) feed.open = false; feed.hidden = !signedIn; }
     const saved = window.HauntologiesRegistration?.receipt(); registration.textContent = saved ? 'Receipt: ' + saved.receipt_id : 'Event registration is available below.';
     byId('accountEventLink').hidden = !!saved;
   }
