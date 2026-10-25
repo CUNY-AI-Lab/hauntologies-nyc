@@ -91,6 +91,7 @@
           <div id="newPlaceLocation" class="contribution-place-pin"><button id="chooseContributionPoint" type="button" class="outline" aria-pressed="false" title="Pin a point on the map">Pin</button></div>
         </div>
         <div id="contributionPlacePlate" class="contribution-place-plate"><span id="contributionPlaceName" class="contribution-place-name"></span><p id="newLocationStatus" role="status"></p><button id="clearContributionPoint" class="textbutton" type="button" hidden>Clear</button></div>
+        <p id="contributionPlaceHint" class="small contribution-place-hint">Pin the place first. The title and description follow once it is on the map.</p>
         <div id="freeformRecordContext" class="contribution-place-plate is-record" hidden><span id="freeformRecordLabel" class="contribution-place-name" role="status"></span><p>Adding to this place</p><button id="removeFreeformRecord" class="textbutton" type="button">Change</button></div>
         <!-- The form logic, drafts and validation read these; the Place field above sets them. -->
         <div class="contribution-place-model" hidden>
@@ -106,6 +107,7 @@
           </details>
         </div>
       </div>
+      <div id="contributionDetails">
       <div id="freeformTitle" class="contribution-title"><label for="contributionObjectTitle">Title<input id="contributionObjectTitle" maxlength="300"></label></div>
       <details id="freeformDescription" class="workflow-details" data-hint="required" open><summary>Description</summary><label for="contributionSummary"><span class="sr-only">Description</span><textarea id="contributionSummary" rows="3" required></textarea></label></details>
       <details id="freeformContext" class="workflow-details" data-hint><summary>Sources</summary>
@@ -119,6 +121,7 @@
       <details id="freeformDetails" class="workflow-details" data-hint><summary>Facts</summary>
         <div id="contributionAttributes"></div><button id="addContributionAttribute" type="button" class="outline">Add fact</button>
       </details>
+      </div>
       <div id="typedCompatibilityFields" hidden inert>
       <label for="contributionFlow">Contribution<select id="contributionFlow"><option value="new">New point or area</option><option value="clarify">Clarify a record</option><option value="other">Other contribution</option></select></label>
       <div id="clarificationTargetGroup" hidden><label for="clarificationTarget">Existing record<select id="clarificationTarget"><option value="">Choose a record</option></select></label><p id="clarificationTargetHelp" class="small" role="status"></p></div>
@@ -135,7 +138,7 @@
       <label for="publicCreditLabel">Optional public credit<input id="publicCreditLabel" placeholder="Leave blank for no public credit" disabled autocomplete="off"></label>
         <button id="exportContribution" class="outline" type="button">Export</button>
       </div>
-      <div class="buttonrow"><button id="previewContribution" class="primary" type="submit">Preview</button><button id="cancelRevision" class="textbutton" type="button" hidden>Cancel</button></div>
+      <div class="buttonrow"><button id="previewContribution" class="primary" type="submit">Submit</button><button id="cancelRevision" class="textbutton" type="button" hidden>Cancel</button></div>
     </form>
     <section id="contributionPreview" class="workflow-preview" aria-labelledby="previewContributionTitle" tabindex="-1" hidden></section>
     <div id="contributionReceipt" class="workflow-receipt" role="status" tabindex="-1" hidden></div>
@@ -179,12 +182,12 @@
     <form id="recordEditorForm" novalidate>
       <label for="recordChangeMessage">Explanation<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
       <div id="recordEditorFields"></div>
-      <button id="previewRecordEdit" class="primary" type="submit">Preview</button>
+      <button id="previewRecordEdit" class="primary" type="submit">Submit</button>
     </form>
     <div id="recordEditorErrors" role="alert" tabindex="-1" hidden></div>
     <section id="recordEditorPreview" aria-labelledby="recordEditorPreviewTitle" tabindex="-1" hidden>
-      <h3 id="recordEditorPreviewTitle">Preview</h3><p id="recordEditorPreviewMode" class="small"></p><div id="recordEditorDiff"></div>
-      <button id="submitRecordEdit" class="primary" type="button" disabled>Contribute</button>
+      <h3 id="recordEditorPreviewTitle">Your changes</h3><p id="recordEditorPreviewMode" class="small"></p><div id="recordEditorDiff"></div>
+      <button id="submitRecordEdit" class="primary" type="button" disabled>Submit</button>
     </section>
     <div id="recordEditorReceipt" role="status" tabindex="-1" hidden></div>
   </div>

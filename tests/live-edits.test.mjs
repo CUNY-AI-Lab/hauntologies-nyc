@@ -268,11 +268,26 @@ test('an admin approves a new place and it is on the map at its point', async t 
   assert.equal(ok(await call(h, 'submission?id=' + s.id, undefined, 'admin'), 200).submission.status, 'merged');
 });
 
-test('new places without a point, or attached to an existing place, are not published by approval', async t => {
+test('a new place without a point is not published by approval; a note on an existing place publishes as that place with the note appended', async t => {
   const h = harness(t);
   assert.equal((await submit(h, proposal({ geometry: null }))).application.applicable, false);
-  const attached = proposal({}, { targets: [{ record_id: place.id, expected_version: 1, expected_hash: (await target(h)).expected_hash }] });
-  assert.equal((await submit(h, attached, 'author2')).application.applicable, false);
+  const attached = proposal({ geometry: null, attributes: [{ name: 'Floor', value: 'Upper' }] }, { targets: [{ record_id: place.id, expected_version: 1, expected_hash: (await target(h)).expected_hash }] });
+  const { s, verified } = await publish(h, attached, 'author2');
+  assert.equal(s.application.applicable, true);
+  assert.equal(s.application.operations[0].operation, 'update_record');
+  ok(verified, 200);
+  const [record] = await publishedRecords(h.db);
+  assert.equal(record.id, place.id);
+  assert.equal(record.title, place.title, 'the place keeps its own title');
+  assert.equal(record.description, 'Original description.\n\nContributor note from A. Contributor: Footsteps on the upper floor.\nFloor: Upper\nSources: Brooklyn Daily Eagle, 1911.');
+  for (const kept of ['location_text', 'latitude', 'longitude', 'category']) assert.deepEqual(record[kept], place[kept], 'kept ' + kept);
+  assert.deepEqual(record.sources, place.sources);
+  assert.equal((await publishedEdits(h.db))[0].credit, 'A. Contributor');
+  // A second note lands after the first; an uncredited one names nobody.
+  const again = proposal({ geometry: null, sources_text: null, explanation: 'A later memory.' }, { summary: 'A later memory.', public_credit: { consent: false, label: '' }, targets: [{ record_id: place.id, expected_version: 2, expected_hash: (await target(h)).expected_hash }] });
+  ok((await publish(h, again, 'author3')).verified, 200);
+  assert.equal((await publishedRecords(h.db))[0].description, record.description + '\n\nContributor note: A later memory.');
+  assert.equal(Object.hasOwn((await publishedEdits(h.db))[0], 'credit'), false);
 });
 
 test('a new place approved before approval meant publication cannot be published with that approval', async t => {

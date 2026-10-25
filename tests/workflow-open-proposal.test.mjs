@@ -248,22 +248,44 @@ test('no reviewer grants or self-approval are introduced for freeform contributi
   assert.equal(count(h, 'workflow_approvals'), 0);
 });
 
-test('an approved new point is publishable; a contribution to an existing place stays review-only', async t => {
+test('an approved new point and an approved note on an existing place are both publishable', async t => {
   const h = harness({ authorization: { reviewers: ['reviewer'], publishers: ['publisher'] } }); t.after(() => h.db.close());
   const selected = await context(h);
   for (const targets of [[], [selected]]) {
-    const created = await submit(h, envelope({ geometry: point() }, { targets }));
+    const created = await submit(h, envelope({ geometry: targets.length ? null : point() }, { targets }));
+    assert.equal(created.submission.application.applicable, true);
     const incomplete = checks(); delete incomplete.privacy_check;
     status(await call(h, 'review', review(h, created.submission, { checks: incomplete }), { actor: 'reviewer' }), 400);
     const approved = await call(h, 'review', review(h, created.submission), { actor: 'reviewer' }); status(approved, 200);
     assert.equal(approved.body.submission.status, 'approved');
     assert.equal(approved.body.submission.proposal.evidence_status, 'unverified');
     const r = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, { actor: 'publisher' });
-    if (targets.length) { status(r, 409); assert.equal(r.body.error, 'open_proposal_review_only'); }
-    else { status(r, 201); assert.equal(r.body.job.status, 'verification_pending'); }
+    status(r, 201); assert.equal(r.body.job.status, 'verification_pending');
   }
-  assert.equal(count(h, 'workflow_jobs'), 1);
+  assert.equal(count(h, 'workflow_jobs'), 2);
   assert.equal(count(h, 'approved_records'), 0, 'nothing public before verify');
+});
+
+test('a contributor deletes an unpublished contribution outright; published ones and other people\'s stay', async t => {
+  const h = harness({ authorization: { reviewers: ['reviewer'], publishers: ['publisher'] } }); t.after(() => h.db.close());
+  const own = await submit(h, envelope({ geometry: point() }));
+  const other = await submit(h, envelope({ geometry: point() }));
+  const del = s => ({ idempotency_key: key(h, 'delete'), submission_id: s.id, expected_revision: s.revision });
+  status(await call(h, 'delete', del(own.submission), { actor: 'someone-else' }), 404);
+  status(await call(h, 'delete', { ...del(own.submission), expected_revision: 2 }), 409);
+  const gone = await call(h, 'delete', del(own.submission)); status(gone, 200);
+  assert.equal(gone.body.receipt.result.deleted_submission_id, own.submission.id);
+  assert.equal(Object.hasOwn(gone.body, 'submission'), false);
+  status(await call(h, 'submission?id=' + own.submission.id), 404);
+  assert.equal(count(h, 'workflow_submissions'), 1); assert.equal(count(h, 'workflow_revisions'), 1); assert.equal(count(h, 'workflow_events'), 1);
+  const edits = await call(h, 'edits'); status(edits, 200); assert.deepEqual(edits.body.items.map(i => i.id), [other.submission.id]);
+  // A listed reviewer may remove someone else's unpublished contribution; a published one cannot go.
+  const approved = await call(h, 'review', review(h, other.submission), { actor: 'reviewer' }); status(approved, 200);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: other.submission.id, expected_revision: 1, approval_hash: approved.body.submission.approval.approval_hash }, { actor: 'publisher' }); status(staged, 201);
+  status(await call(h, 'delete', del(approved.body.submission), { actor: 'reviewer' }), 409);
+  const third = await submit(h, envelope({ geometry: point() }));
+  status(await call(h, 'delete', del(third.submission), { actor: 'reviewer' }), 200);
+  assert.equal(count(h, 'workflow_submissions'), 1);
 });
 
 test('a revised approved proposal cannot inherit its earlier approval', async t => {

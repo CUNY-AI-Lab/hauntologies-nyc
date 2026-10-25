@@ -115,7 +115,7 @@
     for(const key of ['submission_id','job_id','task_id'])if(request.body[key]&&result[key]!==request.body[key])throw uncertain();
     return response;
   }
-  const statusLabel=value=>({submitted:'Awaiting review',changes_requested:'Needs information',in_progress:'In progress',verification_pending:'Verification pending',rolled_back:'Rolled back',ready_for_review:'Ready for review'})[value]||text(value).replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());
+  const statusLabel=value=>({submitted:'Submitted for review',changes_requested:'Revision requested',in_progress:'In progress',verification_pending:'Verification pending',rolled_back:'Rolled back',ready_for_review:'Ready for review'})[value]||text(value).replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());
   function disclosure(title,...content){const details=el('details',undefined,'workflow-details');details.append(el('summary',title),...content);return details;}
 
   const getPath = (object, path) => path.split('.').reduce((v,k) => v?.[k], object);
@@ -318,7 +318,11 @@
     if(!readPoint())return {field:'payload.geometry',message:'Choose a point in New York City'};
     return null;
   }
-  function showPoint(){const point=pointForm()?readPoint():null;byId('cancelContributionPoint').disabled=!pointFields().latitude&&!pointFields().longitude&&!byId('contributionLatitude').validity.badInput&&!byId('contributionLongitude').validity.badInput;window.dispatchEvent(new CustomEvent('contributions-point-changed',{detail:{point:point?{...point}:null}}));return point;}
+  function showPoint(){const point=pointForm()?readPoint():null;byId('cancelContributionPoint').disabled=!pointFields().latitude&&!pointFields().longitude&&!byId('contributionLatitude').validity.badInput&&!byId('contributionLongitude').validity.badInput;window.dispatchEvent(new CustomEvent('contributions-point-changed',{detail:{point:point?{...point}:null}}));showDetails(point);return point;}
+  // A new place is pinned before it is titled and described; a chosen place or a revision opens the rest at once.
+  function showDetails(point=pointForm()?readPoint():null){const fresh=isOpenForm()&&!revisionOf&&!revisionOriginal&&!draftRevisionBlocked,chosen=!!openRequestedRecordId||openTargets.length>0;const gated=fresh&&(pointForm()?!point:!chosen);byId('contributionDetails').hidden=gated;byId('contributionPlaceHint').hidden=!gated;byId('previewContribution').closest('.buttonrow').hidden=gated;}
+  // Typed coordinates inside the city pin the place and bring it into view, as a chosen address does.
+  function pinTypedPoint(){const point=showPoint();if(!point)return;const borough=window.NycGeometry?.findBorough(point.latitude,point.longitude);locationStatus('Pinned at '+point.latitude.toFixed(5)+', '+point.longitude.toFixed(5)+(borough?' in '+borough:''),'success');if(typeof map!=='undefined'&&map)map.setView([point.latitude,point.longitude],Math.max(map.getZoom(),17),{animate:false});requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('contributions-point-pinned')));}
   function setPointFields(point){byId('contributionLatitude').value=point?.latitude??'';byId('contributionLongitude').value=point?.longitude??'';}
   function locationStatus(text,state=''){const status=byId('newLocationStatus');status.textContent=text;if(state)status.dataset.state=state;else delete status.dataset.state;}
   function canRequestPoint(){return pointForm()&&!pendingWrite&&!busy&&!imageBatch&&!imageBusy&&!imageProcessing;}
@@ -669,7 +673,7 @@
   function intakeText(value){const node=el('p',value);node.style.whiteSpace='pre-wrap';return node;}
   function locationDetails(payload){const coordinates=payload?.geometry?.type==='Point'?payload.geometry.coordinates:null;return Array.isArray(coordinates)&&coordinates.length===2?metadata([['Proposed latitude',coordinates[1]],['Proposed longitude',coordinates[0]]]):null;}
   function renderPreview(envelope,result,raw){
-    const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3','Preview'));root.firstChild.id='previewContributionTitle';
+    const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3',result.local?'Almost there':'Not submitted yet'));root.firstChild.id='previewContributionTitle';
     if(envelope.type==='open_proposal'){
       root.append(intakeText(envelope.payload.explanation));if(result.local)root.append(el('p','Local preview','small'));
       const location=locationDetails(envelope.payload);if(location)root.append(location);if(envelope.payload.location_text)root.append(metadata([['Place',envelope.payload.location_text]]));
@@ -685,14 +689,14 @@
     }
     // A preview the server could not check says why, and offers the step that gets it saved.
     if(result.local){
-      const why={'sign-in':'Sign in to save this place. Your draft stays on this device while you do.',unavailable:'Saving is unavailable right now. Your draft stays on this device.',pending:'Still loading the place this changes. Try Preview again in a moment.'}[result.reason]||'This preview has not been checked yet.';
+      const why={'sign-in':'Sign in to save this place. Your draft stays on this device while you do.',unavailable:'Saving is unavailable right now. Your draft stays on this device.',pending:'Still loading the place this changes. Submit again in a moment.'}[result.reason]||'This preview has not been checked yet.';
       root.append(el('p',why,'preview-next-step'));
       if(result.reason==='sign-in')root.append(button('Sign in to contribute',()=>{resumePreviewAfterSignIn=true;window.dispatchEvent(new CustomEvent('account-open-requested'));},'primary'));
       else root.append(button('Try again',()=>byId('previewContribution').click(),'primary'));
       root.focus();return;
     }
     if(!caps().can_submit)root.append(el('p','This account cannot submit contributions.','preview-next-step'));
-    const send=button(revisionOf?'Revise':'Contribute',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
+    const send=button(revisionOf?'Submit revision':'Submit',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
   }
   async function previewForm(event){
     event.preventDefault();if(imageProcessing||imageBusy)return;if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
@@ -717,7 +721,10 @@
     if(openTargetFailed){local(openTargetStatus===401?'sign-in':'unavailable');return;}
     if(openTargetPending||draftRevisionBlocked){local();return;}
     const generation=identityGeneration,owner=privateActor;byId('previewContribution').disabled=true;
-    try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});const confirmedActor=await sessionActor();if(generation!==identityGeneration||owner!==privateActor||confirmedActor!==owner)return;preview={raw,envelope,result:result.preview};renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
+    try{const result=await api('/preview',{submission_json:raw,...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})});const confirmedActor=await sessionActor();if(generation!==identityGeneration||owner!==privateActor||confirmedActor!==owner)return;preview={raw,envelope,result:result.preview};
+      // One step: a contribution the server accepts is submitted straight away; otherwise it says what to fix.
+      if(result.preview.validation?.valid&&caps().can_submit){byId('previewContribution').disabled=false;await submitPreview();return;}
+      renderPreview(envelope,result.preview,raw);if(!result.preview.validation?.valid)renderErrors(result.preview.validation?.errors||[]);}
     catch(error){
       // A 401 ends the private view, which changes identityGeneration. Signed out from the start,
       // the preview still says how to save; after an expired session the draft notice says it.
@@ -731,12 +738,12 @@
     if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
     if(!preview||!caps().can_submit||busy||imageProcessing||imageBusy||imageBatch||draftRevisionBlocked)return;
     const exact=preview;
-    if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw){invalidatePreview();renderErrors(['Form changed. Preview again.']);return;}
-    const generation=identityGeneration,owner=privateActor;busy=true;byId('confirmContribution').disabled=true;let request=null;
+    if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw){invalidatePreview();renderErrors(['Form changed. Submit again.']);return;}
+    const generation=identityGeneration,owner=privateActor;busy=true;const confirmButton=byId('confirmContribution');if(confirmButton)confirmButton.disabled=true;byId('previewContribution').disabled=true;let request=null;
     try{
       const actor_id=await sessionActor();if(generation!==identityGeneration||actor_id!==owner||privateActor!==owner)return;
       if(pendingWrite)throw Object.assign(new Error('Previous save unresolved; check the queue'),{status:409});
-      if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw)throw Object.assign(new Error('Form changed. Preview again.'),{status:400});
+      if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw)throw Object.assign(new Error('Form changed. Submit again.'),{status:400});
       request=revisionOf?{actor_id,path:'/revise',body:{idempotency_key:crypto.randomUUID(),submission_id:revisionOf.id,expected_revision:revisionOf.revision,submission_json:exact.raw}}:{actor_id,path:'/submit',body:{idempotency_key:crypto.randomUUID(),submission_json:exact.raw}};
       retainWrite(request);const response=requireReceipt(await api(request.path,request.body),request);
       await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;await beginImages(response.submission,request);await loadDashboard();
@@ -744,16 +751,16 @@
       if(generation!==identityGeneration||privateActor!==owner)return;const uncertain=!!request&&(error.uncertain||!error.status||error.status>=500);
       if(uncertain)renderErrors([]);else if(error.status===400)renderErrors([error.message]);else serviceFailure(error);
       if(!uncertain){if(request)retainWrite(null);}else showReconciliation();
-    }finally{busy=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}
+    }finally{busy=false;byId('previewContribution').disabled=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}
   }
-  function showSavedReadback(submission){const root=byId('contributionReceipt');root.replaceChildren(el('h3','Current saved contribution'),metadata([['Submission',submission.id],['Revision',submission.revision],['Status',statusLabel(submission.status)]]),button('Review',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.hidden=false;}
+  function showSavedReadback(submission){const root=byId('contributionReceipt');root.replaceChildren(el('h3','Current saved contribution'),metadata([['Revision',submission.revision],['Status',statusLabel(submission.status)]]),button('Check review status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.hidden=false;}
   // Where a submission stands, in the order a contributor experiences it.
   const progressSteps=['Saved','In review','Approved','On the map'];
   const progressStage=status=>({draft:0,submitted:1,changes_requested:1,approved:2,merged:3})[status]??1;
   const whenText=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';};
   function nextStep(s){
     if(s.status==='approved')return s.type==='open_proposal'?'Approved. Waiting for a publisher to add it to the map.':'Approved. Waiting to be published.';
-    return({draft:'Draft. Submit it when it is ready.',submitted:'Waiting for a reviewer.',changes_requested:'Sent back. Revise it and submit again.',merged:'On the public map.',withheld:'Withdrawn.'})[s.status]||'';
+    return({draft:'Draft. Submit it when it is ready.',submitted:'Submitted. A reviewer approves it next.',changes_requested:'A reviewer asked for a revision. Revise it and submit again.',merged:'On the public map.',withheld:'Withdrawn.'})[s.status]||'';
   }
   function submissionProgress(s){
     const wrap=el('div',undefined,'submission-state'),list=el('ol',undefined,'submission-progress'),stage=progressStage(s.status);list.setAttribute('aria-label','Progress');
@@ -774,10 +781,10 @@
   }
   function showReceipt(submission,response){
     const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;root.dataset.submissionId=submission.id;const revision=response.receipt.result.revision??submission.revision;
-    root.append(el('h3',revision>1?'Revision sent for review':'Sent for review'));
+    root.append(el('h3',revision>1?'Revision submitted for review':'Submitted for review'));
     if(submission.title)root.append(el('p',submission.title,'submission-title'));
     root.append(submissionProgress({...submission,revision}));
-    if(submission.id)root.append(button('View status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'textbutton'),el('p','Reference '+submission.id,'submission-ref'));
+    if(submission.id)root.append(button('Check review status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));
     watchSubmission(submission.id,root,submission.status);root.focus();
   }
 
@@ -793,7 +800,7 @@
     openSourcesInitial=value.type==='open_proposal'?value.payload.sources_text??'':'';byId('freeformSources').value=openSourcesInitial;openSourcesDisplayInitial=byId('freeformSources').value;
     for(const attribute of value.payload.attributes||[])addAttribute(attribute);
     for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
-    byId('revisionContext').replaceChildren(el('span','Revision '+submission.revision),el('br'),el('span','Submission: '+submission.id));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
+    byId('revisionContext').replaceChildren(el('span','Revising '+(submission.title||'this contribution')+', revision '+submission.revision));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   }
 
   function renderQueue(){const items=dashboard?.submissions||[],visible=items;byId('queueSummary').textContent='';const root=byId('contributionQueue');root.replaceChildren();if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'No matches':'No submissions');return;}visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');const status=el('span',statusLabel(s.status),'queue-status');status.dataset.status=s.status;const when=whenText(s.updated_at||s.created_at);b.append(el('strong',s.title||'Untitled contribution'),status,...(when?[el('small','Updated '+when)]:[]));root.append(b);});}
@@ -823,9 +830,10 @@
       if(actions.children.length)root.append(actions);
     }
     renderReviewControls(root,s);
-    root.append(el('p','Reference '+s.id+(s.revision>1?', revision '+s.revision:''),'submission-ref'));
+    if(s.revision>1)root.append(el('p','Revision '+s.revision,'submission-ref'));
   }
-  function renderJobs(){const root=byId('applicationJobs'),jobs=dashboard?.jobs||[];root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;if(!jobs.length)return;jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
+  // Release jobs are an administrator's view; contributors follow their submission's status instead.
+  function renderJobs(){const root=byId('applicationJobs'),jobs=caps().is_admin?dashboard?.jobs||[]:[];root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;if(!jobs.length)return;jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
   function showReconciliation(ready=false){
     if(!pendingWrite||pendingWrite.actor_id!==privateActor)return;
     const root=byId('workflowConnection');root.querySelector('[data-reconciliation]')?.remove();
@@ -927,6 +935,7 @@
   byId('contributionPlaceMode').addEventListener('change',()=>{if(byId('contributionPlaceMode').value==='new'){++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;}showOpenReference();invalidatePreview();});
   byId('freeformPlaceSelect').addEventListener('change',()=>{const select=byId('freeformPlaceSelect');if(select.value)chooseOpenReference(select.value,select.selectedOptions[0].textContent);else{++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;showOpenReference();invalidatePreview();}});
   byId('addContributionAttribute').addEventListener('click',()=>{addAttribute()?.focus();invalidatePreview();saveDraft();});
+  for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('change',()=>{invalidatePreview();saveDraft();pinTypedPoint();});
   for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('input',()=>{invalidatePreview();saveDraft();showPoint();});
   byId('chooseContributionPoint').addEventListener('click',()=>{if(byId('chooseContributionPoint').getAttribute('aria-pressed')==='true'){window.dispatchEvent(new CustomEvent('contributions-point-pick-cancelled'));return;}if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
   byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);locationStatus('');invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
@@ -945,6 +954,7 @@
     if(event.detail?.signedOut&&accountKey){forgetDraft(accountKey);draftNotice('');}});
   // Signing in from a preview carries straight on to the checked preview.
   let resumePreviewAfterSignIn=false;
+  window.addEventListener('contributions-edit-deleted',()=>{if(privateActor)loadDashboard();});
   window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(data&&openRequestedRecordId&&openTargetFailed&&!draftRevisionBlocked)await chooseOpenReference(openRequestedRecordId,openTargetLabel);if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
   // Returning to the tab picks up review decisions made elsewhere.
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&privateActor&&Date.now()-dashboardLoadedAt>30000)loadDashboard();});

@@ -84,7 +84,7 @@
     const add=byId('recordAddSource');if(add)add.disabled=disabled||current.additions.length>=model.maxSourceAdditions;
     byId('reloadRecordEditor').disabled=disabled;form.setAttribute('aria-busy',String(!!current.busy));
     submit.disabled=!!current.busy||!!current.saved||(!current.pending&&!current.preview?.serverValid);
-    submit.textContent=current.pending?'Confirm save':current.revisionOf?'Revise':'Contribute';
+    submit.textContent=current.pending?'Confirm save':'Submit';
   }
   function makeControl(field,state){
     const wrap=node('div'),label=node('label',field.label),control=node(field.type==='textarea'?'textarea':field.options?'select':'input');
@@ -235,18 +235,20 @@
         if(issues.some(issue=>['stale_target','forged_before','update_target_not_found'].includes(issue.code))){state.target=null;state.stale=true;state.unavailable='Record changed. Reload before submitting';status(state.unavailable);byId('reloadRecordEditor').hidden=false;}
         errors(issues);
       }
-      else{state.stale=false;status('');renderPreview(state,changes,true);previewRoot.focus();}
+      // One step: a change the server accepts is sent straight away.
+      else{state.stale=false;status('');renderPreview(state,changes,true);state.sendNext=true;}
     }catch(error){state.target=null;state.unavailable=serviceError(error);if(current===state)serviceStatus(state,error);}
     finally{state.busy=false;if(current===state)lock();}
+    if(state.sendNext){state.sendNext=false;if(current===state)await send();}
   }
   // Says what happens next in plain terms; the identifiers stay available for support.
   function renderReceipt(data){
     const root=byId('recordEditorReceipt'),saved=data.submission,revision=data.receipt.result.revision;
     const next=saved.status==='changes_requested'?'Sent back. Revise it and submit again.':saved.status==='approved'?'Approved. It replaces the place on the map once a publisher verifies it.':'Waiting for a reviewer. Once approved and published, your edit replaces the place on the map.';
-    const view=node('button','View status');view.type='button';view.className='textbutton';
+    const view=node('button','Check review status');view.type='button';view.className='outline';
     view.addEventListener('click',()=>{dialog?.close?.();window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:saved.id}}));});
-    root.replaceChildren();const reference=node('p','Reference '+saved.id+(revision>1?', revision '+revision:''));reference.className='submission-ref';
-    root.append(node('h3',revision>1?'Revision sent for review':'Sent for review'),node('p',next),view,reference);
+    root.replaceChildren();
+    root.append(node('h3',revision>1?'Revision submitted for review':'Submitted for review'),node('p',next),view);
     root.hidden=false;
   }
   async function send(){
@@ -258,7 +260,7 @@
       if(typeof actor!=='string'||!actor||actor.length>200)throw new Error('Invalid session');
     }catch(error){state.busy=false;if(current===state){serviceStatus(state,error);lock();}return;}
     if(current!==state||state.actor_id!==actor||state.pending&&state.pending.actor_id!==actor){state.busy=false;if(current===state){status('Original account required');lock();}return;}
-    if(!state.pending){const now=JSON.stringify(envelope(state,proposedChanges(state)),null,2);if(now!==state.preview.raw){state.busy=false;changed();lock();status('Changes updated. Preview again');return;}
+    if(!state.pending){const now=JSON.stringify(envelope(state,proposedChanges(state)),null,2);if(now!==state.preview.raw){state.busy=false;changed();lock();status('Changes updated. Submit again');return;}
       const body={idempotency_key:crypto.randomUUID(),submission_json:state.preview.raw};if(state.revisionOf)Object.assign(body,{submission_id:state.revisionOf.id,expected_revision:state.revisionOf.revision});
       state.pending={path:state.revisionOf?'/revise':'/submit',body,actor_id:actor};
       try{persistPending(state);}catch{clearPending(state);state.busy=false;lock();status('Request not sent. Browser recovery storage is unavailable');return;}
