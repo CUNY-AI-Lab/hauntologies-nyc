@@ -21,7 +21,9 @@ export function pendingPlace(row) {
     return [{
       id: row.id, status: row.review_state, submitted_at: row.created_at,
       title: clip(raw.title, 300) || 'Contribution', description: clip(payload.explanation, 2000),
-      location_text: clip(payload.location_text, 300), ...(point || {}), ...(point ? {} : { record_id: target })
+      location_text: clip(payload.location_text, 300), ...(point || {}), ...(point ? {} : { record_id: target }),
+      // A note on a mapped place is reviewed but never published as a place of its own.
+      ...(target ? { note: true } : {})
     }];
   } catch { return []; }
 }
@@ -29,11 +31,11 @@ export function pendingPlace(row) {
 export async function pendingPlaces(db) {
   const { results = [] } = await db.prepare(`SELECT s.id,s.owner_id,s.review_state,s.created_at,r.raw_json,r.preview_json
     FROM workflow_submissions s JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision
-    WHERE s.review_state IN (${PENDING_STATES.map(() => '?').join(',')})
-    ORDER BY s.updated_at DESC,s.id ASC LIMIT ${LIMIT}`).bind(...PENDING_STATES).all();
+    ORDER BY s.updated_at DESC,s.id ASC LIMIT ${LIMIT * 4}`).all();
   // The owner is only compared here, never returned. Places left with the default title are never merged.
+  // A newer attempt counts in any state, so an older one stays hidden while the newer is a draft or published.
   const keyOf = row => { try { const title = clip(JSON.parse(row.raw_json)?.title, 300).toLocaleLowerCase('en-US'); return title && title !== 'contribution' ? row.owner_id + '\n' + title : null; } catch { return null; } };
   const newest = new Map();
   for (const row of results) { const key = keyOf(row); if (key && !(newest.get(key)?.created_at > row.created_at)) newest.set(key, row); }
-  return { places: results.filter(row => { const key = keyOf(row); return !key || newest.get(key) === row; }).flatMap(pendingPlace) };
+  return { places: results.filter(row => { const key = keyOf(row); return PENDING_STATES.includes(row.review_state) && (!key || newest.get(key) === row); }).slice(0, LIMIT).flatMap(pendingPlace) };
 }

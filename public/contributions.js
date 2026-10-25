@@ -886,7 +886,7 @@
     }else if(publishable(s)){
       const go=button('Publish',async()=>{go.disabled=true;out.textContent='Publishing…';try{await publish(s);await refresh();}catch(error){out.textContent=error.message;go.disabled=false;}},'primary');
       root.append(go,out);
-    }else if(!s.is_own&&caps().can_triage&&s.status==='draft'){
+    }else if((!s.is_own||!!caps().can_self_approve)&&caps().can_triage&&s.status==='draft'){
       const start=button('Start review',async()=>{start.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'ready_for_review',rationale:'Revision ready for review.'});await refresh();}catch(error){out.textContent=error.message;start.disabled=false;}},'outline');
       root.append(start,out);
     }

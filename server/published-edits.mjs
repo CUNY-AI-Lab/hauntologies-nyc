@@ -47,9 +47,12 @@ export async function contributorCredits(db) {
 // Signed-in roster: every event registrant by name, with what their map account has sent and
 // what is published. Emails only join registration to account here and never leave the server.
 export async function contributorRoster(db) {
+  // A place sent again under the same title counts once, as in Under review; the default title never merges.
+  const place=`count(DISTINCT CASE WHEN lower(trim(coalesce(json_extract(r.raw_json,'$.title'),''))) IN ('','contribution') THEN s.id ELSE lower(trim(json_extract(r.raw_json,'$.title'))) END)`;
+  const mine=`FROM workflow_submissions s JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision WHERE s.owner_id='map_'||u.id`;
   const {results = []} = await db.prepare(`SELECT g.name,
-      (SELECT count(*) FROM workflow_submissions s WHERE s.owner_id='map_'||u.id AND s.review_state IN ('submitted','changes_requested','approved','merged')) AS sent,
-      (SELECT count(*) FROM workflow_submissions s WHERE s.owner_id='map_'||u.id AND s.review_state='merged') AS published,
+      (SELECT ${place} ${mine} AND s.review_state IN ('submitted','changes_requested','approved','merged')) AS sent,
+      (SELECT ${place} ${mine} AND s.review_state='merged') AS published,
       u.id IS NOT NULL AS account
     FROM (SELECT lower(trim(email)) AS email, name, max(created_at) AS at FROM event_registrations GROUP BY lower(trim(email))) g
     LEFT JOIN hny_auth_user u ON lower(u.email)=g.email`).all();
