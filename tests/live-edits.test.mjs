@@ -284,3 +284,26 @@ test('a new place approved before approval meant publication cannot be published
   assert.equal(refused.status, 409);
   assert.equal(refused.body.error, 'approval_predates_application');
 });
+
+test('record credits retain later consented contributors and exclude uncredited, hidden and rolled-back releases', async t => {
+  const h=harness(t), first=edit(await target(h),{title:'First credited edit'});
+  first.public_credit={consent:true,label:'Synthetic Alice'};
+  ok((await publish(h,first,'map_00000000-0000-4000-8000-000000000001')).verified,200);
+  let resolved=ok(await call(h,'target?id='+place.id),200).target;
+  const second=edit(resolved,{title:'Second credited edit'});second.public_credit={consent:true,label:'Synthetic Bob'};
+  ok((await publish(h,second,'map_00000000-0000-4000-8000-000000000002')).verified,200);
+  assert.deepEqual((await publishedRecords(h.db))[0].contributors,['Synthetic Alice','Synthetic Bob']);
+  resolved=ok(await call(h,'target?id='+place.id),200).target;
+  ok((await publish(h,edit(resolved,{title:'No credit edit'}),'uncredited-author')).verified,200);
+  assert.deepEqual((await publishedRecords(h.db))[0].contributors,['Synthetic Alice','Synthetic Bob']);
+  const user='00000000-0000-4000-8000-000000000002';
+  h.db.native.prepare('INSERT INTO hny_auth_user(id,name,email,emailVerified,createdAt,updatedAt) VALUES(?,?,?,?,?,?)').run(user,'Private account name','synthetic@example.test',1,'2026-10-25','2026-10-25');
+  h.db.native.prepare('INSERT INTO contributor_roster_hidden VALUES(?,?)').run(user,'2026-10-25');
+  assert.deepEqual((await publishedRecords(h.db))[0].contributors,['Synthetic Alice']);
+  resolved=ok(await call(h,'target?id='+place.id),200).target;
+  const next=edit(resolved,{title:'Rolled back credit'});next.public_credit={consent:true,label:'Synthetic Carol'};
+  const release=await publish(h,next,'carol');ok(release.verified,200);
+  assert.deepEqual((await publishedRecords(h.db))[0].contributors,['Synthetic Alice','Synthetic Carol']);
+  ok(await call(h,'rollback',{idempotency_key:key(),job_id:release.job.id,rationale:'Synthetic rollback'} ,'publisher'),200);
+  assert.deepEqual((await publishedRecords(h.db))[0].contributors,['Synthetic Alice']);
+});

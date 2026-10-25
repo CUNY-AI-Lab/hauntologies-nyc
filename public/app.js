@@ -137,7 +137,7 @@ function bringUpPending(place){
 function renderPendingList(records,own){
  const feed=$('pendingPlacesFeed');if(!feed)return;
  const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
- feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);
+ feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} contributions`);
  $('pendingPlacesList').replaceChildren(...shown.map(place=>{
   const row=document.createElement('li'),button=document.createElement('button'),record=place.record_id?records.get(place.record_id):null;button.type='button';
   const title=document.createElement('strong');title.textContent=place.title;const meta=document.createElement('span');
@@ -445,7 +445,7 @@ function placeFacts(r){
  const coordinates=p.latitude===null||p.longitude===null
   ? '<p class="place-coordinate-note">Location unresolved</p>'
   : `<dl class="place-coordinates"><dt>Coordinates</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
- return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+ return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
 }
 
 function appendPlaceRecord(card,r){
