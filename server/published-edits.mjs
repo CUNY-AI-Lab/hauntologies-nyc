@@ -1,3 +1,4 @@
+import { recordCredits } from './record-credits.mjs';
 // Public projection of immutable, independently approved and verified releases.
 // Never return a submission DTO, current draft, source text, media or identity.
 export async function publishedEdits(db) {
@@ -115,7 +116,8 @@ export async function publishedRecordPage(db,after=''){
     JOIN workflow_jobs j ON j.id=r.preview_hash AND j.status='verified'
     JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_submissions s ON s.id=j.submission_id WHERE (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1) AND r.id>? ORDER BY r.id LIMIT 501`).bind(after).all();
-  return {records:results.slice(0,500).flatMap(publicRecord),next_cursor:results.length>500?results[499].id:null};
+  const records=results.slice(0,500).flatMap(publicRecord),credits=await recordCredits(db,records.map(record=>record.id));
+  return {records:records.map(record=>{const names=credits.get(record.id);return names?.length||Object.hasOwn(record,'contributors')?{...record,contributors:names||[]}:record;}),next_cursor:results.length>500?results[499].id:null};
 }
 export async function publishedRecords(db){return (await publishedRecordPage(db)).records;}
 export function publicRecord(row){

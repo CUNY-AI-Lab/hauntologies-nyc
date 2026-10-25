@@ -698,8 +698,11 @@
     if(!caps().can_submit)root.append(el('p','This account cannot submit contributions.','preview-next-step'));
     const send=button(revisionOf?'Submit revision':'Submit',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
   }
+  let previewInFlight=false;
   async function previewForm(event){
-    event.preventDefault();if(imageProcessing||imageBusy)return;if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
+    event.preventDefault();if(previewInFlight||busy||imageProcessing||imageBusy)return;
+    previewInFlight=true;
+    try{if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
     renderErrors([]);const errors=[],explanation=byId('contributionSummary').value;
     if(!explanation.trim())errors.push({field:'summary',message:'Describe what you would like to contribute'});
     if(isOpenForm()&&explanation.length>15000)errors.push({field:'summary',message:'Use 15,000 characters or fewer'});
@@ -732,6 +735,7 @@
       if(generation!==identityGeneration||owner!==privateActor)return;local('unavailable');serviceFailure(error,()=>byId('previewContribution').click());}
     // Preview must never stay disabled after a failed check, whatever happened to the session.
     finally{byId('previewContribution').disabled=false;}
+    }finally{previewInFlight=false;}
   }
 
   async function submitPreview(){
@@ -822,6 +826,7 @@
       if(s.type==='record_update'&&s.proposal?.change_message)root.append(intakeText(s.proposal.change_message));
       root.append(diffView(s.diff));
     }
+    if(s.application?.applicable)root.append(disclosure('Publication preview',diffView(s.diff)));
     renderPrivateImages(root,s.attachments);
     if(s.is_own){
       watchSubmission(s.id,root,s.status);
@@ -861,11 +866,11 @@
     const actor_id=await sessionActor();if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
   }
   const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
-  // Publishing is apply then verify; a reviewer who may publish does both as part of approving.
-  async function publish(s){
+  // Approval, staging and map/list verification are separate, observable decisions.
+  async function stageForVerification(s){
     const staged=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});
-    await safeMutation('/verify',{idempotency_key:crypto.randomUUID(),job_id:staged.job.id,map_list_check:{status:'pass',evidence:'Published from Review on approval.'}});
-    window.HauntologiesPublic?.refresh();
+    await loadDashboard();
+    window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:staged.job}));
   }
   const publishable=s=>!!caps().can_apply&&s.status==='approved'&&(s.approval?.independent===true||s.approval?.admin_self_approval===true)&&s.approval?.revision===s.revision&&s.application?.applicable===true;
   // One decision: approve, with an optional comment, or send back to revise, with a required one.
@@ -874,12 +879,12 @@
     const out=el('p',undefined,'small');out.setAttribute('role','status');
     const refresh=async()=>{await loadDashboard();await loadSubmission(s.id);};
     if(canReview){
-      const form=el('div',undefined,'decision-form'),comment=el('textarea'),approve=button('Approve',async()=>{
+      const form=el('div',undefined,'decision-form'),comment=el('textarea'),reviewInputs=new Map(),approve=button('Approve',async()=>{
+        if([...reviewInputs.values()].some(input=>!input.checked)){out.textContent='Confirm each review check before approving.';return;}
         approve.disabled=revise.disabled=true;out.textContent='Approving…';
         try{
-          const result=await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(reviewKeys.map(key=>[key,'pass'])),rationale:comment.value.trim()||'Approved.'});
-          const approved=result.submission||s;
-          if(publishable(approved)){out.textContent='Publishing…';await publish(approved);}
+          const result=await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries([...reviewInputs].map(([key,input])=>[key,input.checked?'pass':'not_tested'])),rationale:comment.value.trim()||'Approved.'});
+          out.textContent='Approved. Publication still requires staging and map/list verification.';
           await refresh();
         }catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
       },'primary'),revise=button('Revise and resubmit',async()=>{
@@ -890,12 +895,15 @@
       },'outline');
       comment.rows=2;comment.placeholder='Comment (optional to approve, required to send back)';comment.setAttribute('aria-label','Comment');
       if(s.is_own)form.append(el('p','You are approving your own contribution as an admin. This is recorded.','small'));
+      const labels={evidence_check:'I checked the evidence and its limits.',geography_check:'I checked the location and uncertainty.',rights_check:'I checked rights and permitted reuse.',duplicate_check:'I checked for duplicate records.',privacy_check:'I checked privacy and public credit consent.'};
+      for(const key of reviewKeys){const label=el('label',undefined,'consent-line'),input=el('input');input.type='checkbox';reviewInputs.set(key,input);label.append(input,document.createTextNode(labels[key]));form.append(label);}
+      form.append(el('p',s.application?.applicable?'Approval permits this displayed change to be staged. It does not publish it.':'This contribution is review-only; approval does not publish it.','small'));
       if(caps().can_apply&&s.application?.applicable!==true)form.append(el('p','Approving records it, but this one cannot go on the map automatically.','small'));
       const actions=el('div',undefined,'decision-actions');actions.append(approve,revise);
       form.append(comment,actions,out);root.append(form);
     }else if(publishable(s)){
-      const go=button('Publish',async()=>{go.disabled=true;out.textContent='Publishing…';try{await publish(s);await refresh();}catch(error){out.textContent=error.message;go.disabled=false;}},'primary');
-      root.append(go,out);
+      const go=button('Stage for verification',async()=>{go.disabled=true;out.textContent='Staging…';try{await stageForVerification(s);await refresh();}catch(error){out.textContent=error.message;go.disabled=false;}},'primary');
+      root.append(el('p','Stage this approved change, inspect its map and list preview, then record verification to publish.','small'),go,out);
     }else if(caps().can_triage&&s.status==='draft'){
       // Sending a revision back to the queue is not a decision on it, so it may be one's own.
       const start=button(s.is_own?'Send for review':'Start review',async()=>{start.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'ready_for_review',rationale:'Revision ready for review.'});await refresh();}catch(error){out.textContent=error.message;start.disabled=false;}},'outline');

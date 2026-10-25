@@ -1,5 +1,5 @@
 'use strict';
-// Plot a place: the pin beside search arms the map. The next click drops a spot, zooms to it
+// Plot a place: the pin beside NYC arms the map. The next click drops a spot, zooms to it
 // and names it by its cross streets and neighbourhood (NYC GeoSearch); a second click on the
 // spot confirms it and opens Contribute with that point and name filled in. A click elsewhere
 // moves the spot; Esc or the pin again cancels.

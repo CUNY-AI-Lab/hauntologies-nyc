@@ -2,7 +2,7 @@
   function mountContributors() {
     if (document.getElementById('contributorsButton')) return;
 
-    const footer = document.createElement('footer');
+    const footer = document.getElementById('mapFooter') || document.createElement('footer');
     footer.className = 'contributors-footer';
     const button = document.createElement('button');
     button.id = 'contributorsButton';
