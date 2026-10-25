@@ -2,7 +2,9 @@
    Loaded last so it settles the size across the layouts in style.css. */
 .header-tools .outline,.contribution-navigation .outline,.recenter-map,.contributors-footer button{min-height:48px;font-size:13px}
 .header-tools button{min-height:48px}
-.header-tools{min-width:84px}
+/* Two 48px buttons side by side (zoom, plot and search) set the column's width for every row. */
+.header-tools{min-width:98px}
+.map-tool-tray{width:100%;min-width:0}
 .contribution-navigation button{min-width:92px}
 .recenter-map{min-width:82px}
 .recenter-map svg{width:18px;height:18px}

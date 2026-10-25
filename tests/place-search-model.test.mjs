@@ -189,3 +189,19 @@ test('names a spot by its two nearest cross streets and neighbourhood, merging P
   assert.equal(M.describeVicinity({ features: [] }), null);
   assert.match(M.reverseGeosearchUrl(40.72917, -74.00119), /^https:\/\/geosearch\.planninglabs\.nyc\/v2\/reverse\?point\.lat=40\.729170&point\.lon=-74\.001190/);
 });
+
+test('names cross streets without merging different streets', () => {
+  const at = (street, distance) => ({properties: {street, distance, neighbourhood: 'Greenwich Village', borough: 'Manhattan'}});
+  const label = (...rows) => M.describeVicinity({features: rows}).near;
+  assert.equal(label(at('WEST 10 STREET', 5), at('WEST 11 STREET', 12), at('WEST 11 STREET', 14), at('6 AVENUE', 20)), 'West 10th St & West 11th St');
+  assert.equal(label(at('AVENUE A', 5), at('AVENUE B', 8), at('EAST 7 STREET', 10)), 'Avenue A & Avenue B');
+  assert.equal(label(at('EAST 4 STREET', 5), at('WEST 4 STREET', 8)), 'East 4th St & West 4th St');
+  // Spelling variants of one street still merge.
+  assert.equal(label(at('BLEEKER STREET', 4), at('BLEECKER STREET', 6), at('BLEECKER STREET', 7), at('MAC DOUGAL STREET', 9), at('MACDOUGAL STREET', 11)), 'Bleecker St & Macdougal St');
+});
+
+test('the model parses in browsers without regex lookbehind', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const source = await readFile(new URL('../public/place-search-model.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\(\?<[=!]/);
+});

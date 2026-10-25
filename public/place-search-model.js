@@ -39,7 +39,8 @@
       .replace(/[′’‘`´]/g, "'").replace(/[″“”]|''/g, '"').replace(/[º˚]/g, '°')
       .replace(/(\d)\s*DEG(?:REES?)?\b/g, '$1°')
       .replace(/\b(?:LAT(?:ITUDE)?|LONG?(?:ITUDE)?|LNG)\s*[:=]?/g, ' ');
-    const list = source.match(/[+-]?\d+(?:\.\d+)?|[°'"]|(?<![A-Z])[NSEW](?![A-Z])|[,;/]|\S/g) || [];
+    // Letters are taken as whole words, so only a lone N, S, E or W reads as a hemisphere.
+    const list = source.match(/[+-]?\d+(?:\.\d+)?|[°'"]|[A-Z]+|[,;/]|\S/g) || [];
     // Anything else (street names, words) means this is not a coordinate.
     return list.every(t => NUMBER.test(t) || /^[°'",;/]$/.test(t) || HEMISPHERE.test(t)) ? list : null;
   }
@@ -340,6 +341,12 @@
 
   const ABBREVIATED = {STREET: 'St', AVENUE: 'Ave', PLACE: 'Pl', BOULEVARD: 'Blvd', ROAD: 'Rd', PARKWAY: 'Pkwy', DRIVE: 'Dr', TERRACE: 'Ter', LANE: 'Ln', COURT: 'Ct', EXPRESSWAY: 'Expy'};
   const streetKey = name => name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Spelling variants of one street share their numbers, directions and single letters:
+  // West 10th is not West 11th, East 4th is not West 4th, Avenue A is not Avenue B.
+  const streetMarks = name => {
+    const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+    return [words.join(' ').replace(/[^0-9 ]/g, '').trim(), ...words.filter(w => w.length === 1 || /^(NORTH|SOUTH|EAST|WEST)$/.test(w))].join('|');
+  };
   function editDistance(a, b) {
     if (Math.abs(a.length - b.length) > 2) return 3;
     let row = Array.from({length: b.length + 1}, (_, i) => i);
@@ -361,9 +368,9 @@
       .sort((a, b) => (Number(a.distance) || 0) - (Number(b.distance) || 0));
     const clusters = [];
     for (const p of rows) {
-      const key = streetKey(p.street);
-      let cluster = clusters.find(c => c.key === key || (key.length > 5 && c.key.length > 5 && editDistance(c.key, key) <= 2));
-      if (!cluster) clusters.push(cluster = {key, spellings: new Map()});
+      const key = streetKey(p.street), marks = streetMarks(p.street);
+      let cluster = clusters.find(c => c.key === key || (c.marks === marks && key.length > 5 && c.key.length > 5 && editDistance(c.key, key) <= 2));
+      if (!cluster) clusters.push(cluster = {key, marks, spellings: new Map()});
       cluster.spellings.set(p.street, (cluster.spellings.get(p.street) || 0) + 1);
     }
     const streets = clusters.slice(0, 2).map(c => streetLabel([...c.spellings].sort((a, b) => b[1] - a[1] || a[0].split(' ').length - b[0].split(' ').length)[0][0]));
