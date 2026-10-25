@@ -108,3 +108,33 @@ test('the deployed gate serves the pending layer to anyone, read-only', async t 
   assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places'), { DB: { prepare() { throw new Error('down'); } } }, {})).status, 503);
   assert.equal(forwarded, 0);
 });
+
+test('an older attempt at a place the same contributor sent again drops out; others stay', async t => {
+  const h = harness(t);
+  const first = await submit(h, proposal({ title: 'Thomas Shoe Factory' }));
+  const second = await submit(h, proposal({ title: 'thomas shoe factory ' }));
+  const other = await submit(h, proposal({ title: 'Thomas Shoe Factory' }), 'someone-else');
+  const untitledA = await submit(h, proposal({ title: 'Contribution' })), untitledB = await submit(h, proposal({ title: 'Contribution' }));
+  h.db.native.prepare('UPDATE workflow_submissions SET created_at=? WHERE id=?').run('2026-01-01T00:00:00.000Z', first.id);
+  const ids = (await pendingPlaces(h.db)).places.map(p => p.id);
+  assert.ok(!ids.includes(first.id), 'older same-title attempt hidden');
+  for (const id of [second.id, other.id, untitledA.id, untitledB.id]) assert.ok(ids.includes(id), id);
+});
+
+test('the signed-in roster names every registrant with their counts and never an email', async t => {
+  const { contributorRoster } = await import('../server/published-edits.mjs');
+  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
+  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
+  register('Ada Example', 'ada@example.test'); register('Ada Example', 'ADA.alt@example.test'); register('Bo Example', 'bo@example.test');
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'Ada@Example.test', 1, '2026-10-22', '2026-10-22');
+  await submit(h, proposal({ title: 'One' }), 'map_u1'); await submit(h, proposal({ title: 'Two' }), 'map_u1');
+  const roster = await contributorRoster(h.db);
+  assert.deepEqual(roster, { registrants: [{ name: 'Ada Example', contributions: 2, published: 0, account: true }, { name: 'Bo Example', contributions: 0, published: 0, account: false }] });
+  assert.ok(!JSON.stringify(roster).includes('@'));
+});
+
+test('the roster endpoint is for signed-in accounts only', async () => {
+  const worker = createDemoWorker({ fetch: async () => new Response('app') });
+  const response = await worker.fetch(new Request('https://map.test/api/contributor-roster'), { DB: {} }, {});
+  assert.equal(response.status, 401);
+});

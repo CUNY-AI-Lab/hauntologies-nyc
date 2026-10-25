@@ -3,7 +3,7 @@ import { registrationRestricted } from '../server/registration-eligibility.mjs';
 // Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
 import { handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
-import { contributorCredits, publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
+import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage } from '../server/published-edits.mjs';
 import { pendingPlaces } from '../server/pending-places.mjs';
 const privateJson = (value, status = 200) => Response.json(value, { status, headers: {
   'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer'
@@ -34,6 +34,17 @@ export function createDemoWorker(handler, registration, authenticate = authentic
         try {
           const data = await contributorCredits(env.DB);
           return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
+        } catch { return privateJson({error:'feed_unavailable'},503); }
+      }
+      // Registrant names are for signed-in map accounts only.
+      if (rawPath === '/api/contributor-roster' && ['GET','HEAD'].includes(request.method)) {
+        if (new URL(request.url).search) return privateJson({error:'invalid_page'},400);
+        let viewer;
+        try { viewer = mapEnabled ? await mapSession(request, env) : null; } catch { return privateJson({error:'account_unavailable'},503); }
+        if (!viewer) return privateJson({error:'sign_in_required'},401);
+        try {
+          const data = await contributorRoster(env.DB);
+          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'private, no-store'}}) : Response.json(data, {headers:{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
         } catch { return privateJson({error:'feed_unavailable'},503); }
       }
       // Places sent for review are public as their own map layer, before any decision.

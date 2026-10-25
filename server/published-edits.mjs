@@ -44,6 +44,25 @@ export async function contributorCredits(db) {
   return {contributors,total};
 }
 
+// Signed-in roster: every event registrant by name, with what their map account has sent and
+// what is published. Emails only join registration to account here and never leave the server.
+export async function contributorRoster(db) {
+  const {results = []} = await db.prepare(`SELECT g.name,
+      (SELECT count(*) FROM workflow_submissions s WHERE s.owner_id='map_'||u.id AND s.review_state IN ('submitted','changes_requested','approved','merged')) AS sent,
+      (SELECT count(*) FROM workflow_submissions s WHERE s.owner_id='map_'||u.id AND s.review_state='merged') AS published,
+      u.id IS NOT NULL AS account
+    FROM (SELECT lower(trim(email)) AS email, name, max(created_at) AS at FROM event_registrations GROUP BY lower(trim(email))) g
+    LEFT JOIN hny_auth_user u ON lower(u.email)=g.email`).all();
+  const people=new Map();
+  for (const row of results) {
+    const name=typeof row.name==='string'?row.name.trim().replace(/\s+/g,' ').slice(0,120):'';
+    if(!name||name.includes('@'))continue;
+    const key=name.toLocaleLowerCase('en-US'),entry=people.get(key)||{name,contributions:0,published:0,account:false};
+    entry.contributions+=Number(row.sent)||0;entry.published+=Number(row.published)||0;entry.account||=Boolean(row.account);people.set(key,entry);
+  }
+  return {registrants:[...people.values()].sort((a,b)=>b.contributions-a.contributions||a.name.localeCompare(b.name,'en-US'))};
+}
+
 const placeFields=['entry_id','group_id','category','title','claim_text','place_original','place_normalized','place_type','place_types','related_entry_id','time_original','time_start_year','time_end_year','time_precision','time_basis','geo_status','geo_method','geo_basis','geo_source_ref','latitude','longitude','borough','uncertainty_m','uncertainty_basis','gap_question','gap_scope','gap_limitations','image_url','image_caption'];
 const sourceFields=['source_ref','entry_id','role','title','citation','url','repository','locator','evidence_note','rights_statement','rights_status'];
 const pick=(value,fields)=>Object.fromEntries(fields.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));

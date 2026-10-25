@@ -139,14 +139,21 @@ function renderPendingList(records,own){
   button.append(title,meta);button.addEventListener('click',()=>bringUpPending(place));row.append(button);return row;
  }));
 }
+let pendingSignature='';
 async function refreshPendingPlaces(){
  const request=++pendingRequest;
  try{const response=await fetch('/api/pending-places',{cache:'no-store'});if(!response.ok)return;const data=await response.json();if(request!==pendingRequest||!Array.isArray(data.places))return;
-  pendingPlaces=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string');renderPendingPlaces();}catch{}
+  const places=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string'),signature=JSON.stringify(places);
+  // Redrawing closes an open popup, so an unchanged list is left alone.
+  if(signature===pendingSignature)return;pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();}catch{}
 }
 window.addEventListener('contributions-records-changed',renderPendingPlaces);
 window.addEventListener('contributions-own-places',refreshPendingPlaces);
 window.addEventListener('focus',refreshPendingPlaces);
+// Places under review and newly published ones keep up on their own while the map is on screen,
+// and catch up as soon as it comes back (iOS rarely sends focus when a tab returns).
+setInterval(()=>{if(document.visibilityState==='visible'){refreshPendingPlaces();refreshPublishedPlaces();}},30000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){refreshPendingPlaces();refreshPublishedPlaces();}});
 // A fresh pin lands with one pulse; redrawing an existing pin does not repeat it.
 window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{
