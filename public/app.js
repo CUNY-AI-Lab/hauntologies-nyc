@@ -1,6 +1,8 @@
 'use strict';
 const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeUrl=window.DraftModel.safeUrl;
+// Recovery assets are enhancements: an interrupted download must not stop map initialization.
+const publicReads=window.HauntologiesPublicReads||{json:async path=>{const response=await fetch(path,{cache:'no-store'});if(!response.ok)throw new Error('Public map read unavailable');return response.json();},singleFlight:task=>task};
 const link=(url,label)=>safeUrl(url)?`<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${esc(label)}</a>`:esc(label);
 const displayLabel=value=>String(value??'').replace(/\s*·\s*/g,', ');
 // Where a place is, by its nearest cross streets and neighbourhood (data/place-vicinity.json,
@@ -25,14 +27,15 @@ const NYC_BOUNDS=[[40.47737324425922,-74.25874745984156],[40.91766180885905,-73.
 const LAYERS=window.HAUNT_LAYERS||[], layerById=new Map(LAYERS.map(layer=>[layer.id,layer]));
 const layerOpacities=new Map();
 const pilot={...window.HAUNT_PILOT};
-let drafts=[],selected=pilot.id,picking=false,selectingContributionPlace=false,map,imagery,pointLayer,baseErrors=0,loadToken=0;
+let drafts=[],selected=pilot.id,picking=false,selectingContributionPlace=false,map,imagery,pointLayer,baseMapHealth,loadToken=0;
 try{drafts=JSON.parse(localStorage.getItem(STORAGE)||'[]').filter(r=>(validCoordinates(r.latitude,r.longitude)||((r.latitude===null||r.latitude==='')&&(r.longitude===null||r.longitude==='')))&&(safeUrl(r.source_url)||r.original_submission||r.sources?.length)).slice(0,500)}catch{}
 const sourceInventory=window.NYC_INVENTORY||{records:[],audits:[]};
 pilot.category='pilot';pilot.borough='Manhattan';
 let hostedRecords=[],publishedPlaces=[];
 const allRecords=()=>[...new Map([...drafts,pilot,...sourceInventory.records,...publishedPlaces].map(record=>[record.id,record])).values()];
 let publishedRequest=0,publishedSignature='';
-async function refreshPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const response=await fetch('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''),{cache:'no-store'});if(!response.ok)return false;const page=await response.json();if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+async function loadPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const page=await publicReads.json('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''));if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+const refreshPublishedPlaces=publicReads.singleFlight(loadPublishedPlaces);
 window.HauntologiesPublic=Object.freeze({refresh:refreshPublishedPlaces});
 window.addEventListener('focus',refreshPublishedPlaces);
 function setHostedRecords(records){hostedRecords=records;populateFacets();renderRecords()}
@@ -147,16 +150,19 @@ function renderPendingList(records,own){
  }));
 }
 let pendingSignature='';
-async function refreshPendingPlaces(){
+async function loadPendingPlaces(){
  const request=++pendingRequest;
- try{const response=await fetch('/api/pending-places',{cache:'no-store'});if(!response.ok)return;const data=await response.json();if(request!==pendingRequest||!Array.isArray(data.places))return;
+ try{const data=await publicReads.json('/api/pending-places');if(request!==pendingRequest||!Array.isArray(data.places))return;
   const places=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string'),signature=JSON.stringify(places);
   // Redrawing closes an open popup, so an unchanged list is left alone.
   if(signature===pendingSignature)return;pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();}catch{}
 }
+const refreshPendingPlaces=publicReads.singleFlight(loadPendingPlaces);
 window.addEventListener('contributions-records-changed',renderPendingPlaces);
 window.addEventListener('contributions-own-places',refreshPendingPlaces);
 window.addEventListener('focus',refreshPendingPlaces);
+window.addEventListener('online',()=>{refreshPendingPlaces();refreshPublishedPlaces();});
+window.addEventListener('pageshow',()=>{refreshPendingPlaces();refreshPublishedPlaces();});
 // Places under review and newly published ones keep up on their own while the map is on screen,
 // and catch up as soon as it comes back (iOS rarely sends focus when a tab returns).
 setInterval(()=>{if(document.visibilityState==='visible'){refreshPendingPlaces();refreshPublishedPlaces();}},30000);
@@ -303,7 +309,7 @@ const loadedTiles=new Set(),failedTiles=new Set();
 function syncTileCounts(){layerLoaded=loadedTiles.size;layerFailed=failedTiles.size}
 function updateLayerStatus(){
  let status='';
- if(!activeLayer)status=baseErrors?'Street map unavailable':'';
+ if(!activeLayer)status=baseMapHealth?.message||'';
  else if(!L.latLngBounds(activeLayer.bounds).intersects(map.getBounds()))status='No imagery here';
  else if(layerFailed)status=layerLoaded?'Some tiles unavailable':'Map unavailable';
  else if(layerSlow)status='Map loading slowly';
@@ -330,7 +336,7 @@ function changeYear(id){
  imagery.on('load',()=>{if(token!==loadToken)return;layerLoading=false;layerSlow=false;updateLayerStatus()});
  imagery.addTo(map);updateLayerStatus();
 }
-if(window.L){map=L.map('map',{zoomControl:false,minZoom:9,maxZoom:20,maxBounds:[[40.43,-74.33],[40.99,-73.61]],maxBoundsViscosity:.8,doubleClickZoom:true,tapHold:false,scrollWheelZoom:true,wheelDebounceTime:80,wheelPxPerZoomLevel:120,zoomSnap:.25,zoomDelta:1,zoomAnimation:!matchMedia('(prefers-reduced-motion: reduce)').matches}).setView([40.71,-73.98],10);const zoom=L.control.zoom({position:'topright'}).addTo(map);$('zoomTools').append(zoom.getContainer());for(const id of toolPanels){L.DomEvent.disableClickPropagation($(id));L.DomEvent.disableScrollPropagation($(id))}map.createPane('history');map.getPane('history').style.zIndex=250;map.createPane('researchPoints');map.getPane('researchPoints').style.zIndex=450;L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{className:'street-basemap',maxNativeZoom:19,maxZoom:20,noWrap:true,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'}).on('tileerror',()=>{baseErrors++;$('mapStatus').textContent='Street map unavailable'}).addTo(map);pointLayer=(L.markerClusterGroup?L.markerClusterGroup({animate:false,clusterPane:'researchPoints',maxClusterRadius:44,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:cluster=>L.divIcon({html:'<span>'+cluster.getChildCount()+'</span>',className:'research-cluster',iconSize:[44,44]})}):L.layerGroup()).addTo(map);uncertaintyLayer=L.layerGroup().addTo(map);map.on('click',e=>{if(!picking)return;const f=$('contributionForm');f.elements.latitude.value=e.latlng.lat.toFixed(6);f.elements.longitude.value=e.latlng.lng.toFixed(6);picking=false;document.body.classList.remove('picking');$('pickPoint').textContent='Choose on map';$('formStatus').textContent='Point selected';switchPanel('draftPanel')});map.on('moveend',updateLayerStatus);changeYear('none');fetch('data/nyc-borough-boundaries.geojson').then(r=>r.json()).then(data=>L.geoJSON(data,{style:{color:'#7c817a',weight:1,fillColor:'#202721',fillOpacity:.13},interactive:false}).addTo(map)).catch(()=>{})}else{$('mapStatus').textContent='Map unavailable'}
+if(window.L){map=L.map('map',{zoomControl:false,minZoom:9,maxZoom:20,maxBounds:[[40.43,-74.33],[40.99,-73.61]],maxBoundsViscosity:.8,doubleClickZoom:true,tapHold:false,scrollWheelZoom:true,wheelDebounceTime:80,wheelPxPerZoomLevel:120,zoomSnap:.25,zoomDelta:1,zoomAnimation:!matchMedia('(prefers-reduced-motion: reduce)').matches}).setView([40.71,-73.98],10);const zoom=L.control.zoom({position:'topright'}).addTo(map);$('zoomTools').append(zoom.getContainer());for(const id of toolPanels){L.DomEvent.disableClickPropagation($(id));L.DomEvent.disableScrollPropagation($(id))}map.createPane('history');map.getPane('history').style.zIndex=250;map.createPane('researchPoints');map.getPane('researchPoints').style.zIndex=450;const streets=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{className:'street-basemap',maxNativeZoom:19,maxZoom:20,noWrap:true,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'});baseMapHealth=window.HauntologiesMapRecovery?.attach(map,streets,updateLayerStatus);streets.addTo(map);pointLayer=(L.markerClusterGroup?L.markerClusterGroup({animate:false,clusterPane:'researchPoints',maxClusterRadius:44,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:cluster=>L.divIcon({html:'<span>'+cluster.getChildCount()+'</span>',className:'research-cluster',iconSize:[44,44]})}):L.layerGroup()).addTo(map);uncertaintyLayer=L.layerGroup().addTo(map);map.on('click',e=>{if(!picking)return;const f=$('contributionForm');f.elements.latitude.value=e.latlng.lat.toFixed(6);f.elements.longitude.value=e.latlng.lng.toFixed(6);picking=false;document.body.classList.remove('picking');$('pickPoint').textContent='Choose on map';$('formStatus').textContent='Point selected';switchPanel('draftPanel')});map.on('moveend',updateLayerStatus);changeYear('none');fetch('data/nyc-borough-boundaries.geojson').then(r=>r.json()).then(data=>L.geoJSON(data,{style:{color:'#7c817a',weight:1,fillColor:'#202721',fillOpacity:.13},interactive:false}).addTo(map)).catch(()=>{})}else{$('mapStatus').textContent='Map unavailable'}
 if(map){
  let lastInteractivePress=null;
  $('map').addEventListener('pointerdown',event=>{

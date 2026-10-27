@@ -624,11 +624,12 @@
     root.append(el('h4','Errors'));const list=el('ul');errors.forEach(err=>{const li=el('li'),message=typeof err==='string'?err:err.message||pretty(err),input=typeof err==='object'?errorControl(err.field):null;if(input){input.setAttribute('aria-invalid','true');const link=el('a',message);link.href='#'+input.id;link.addEventListener('click',event=>{event.preventDefault();let parent=input.parentElement;while(parent){if(parent.tagName==='DETAILS')parent.open=true;parent=parent.parentElement;}input.focus();input.scrollIntoView({block:'center'});});li.append(link);}else li.textContent=message;list.append(li);});root.append(list);root.hidden=false;root.focus();
   }
   async function api(path,body){
+    const generation=identityGeneration,actor=privateActor;
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{
     const response=await fetch(apiRoot+path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json',...(privateActor?{'X-Hauntologies-Actor':privateActor}:{})}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
     let data;try{data=await response.json();}catch{throw Object.assign(new Error('The contribution service returned an unreadable response.'),{status:response.status,uncertain:true});}
-    if(!response.ok){if(response.status===401||response.status===403){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
+    if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&actor===privateActor){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
     }finally{clearTimeout(timeout);}
   }
   function empty(container,message){container.replaceChildren(el('p',message,'empty'));}
@@ -775,12 +776,15 @@
   // Keeps an open receipt or own submission current with the database while it is on screen.
   let statusWatch=null;
   function watchSubmission(id,root,status){
-    clearInterval(statusWatch?.timer);if(['merged','withheld'].includes(status))return;
-    const watch={id,status,timer:setInterval(async()=>{
-      if(!root.isConnected||root.hidden||root.dataset.submissionId!==id||!root.querySelector('.submission-state')){clearInterval(watch.timer);return;}
-      if(document.visibilityState!=='visible')return;
-      try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!s||s.status===watch.status)return;watch.status=s.status;
-        root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','withheld'].includes(s.status))clearInterval(watch.timer);}catch{}
+    clearInterval(statusWatch?.timer);statusWatch=null;if(['merged','withheld'].includes(status))return;
+    const generation=identityGeneration,actor=privateActor;
+    const watch={id,status,loading:false,timer:setInterval(async()=>{
+      const current=()=>statusWatch===watch&&generation===identityGeneration&&actor===privateActor&&root.isConnected&&!root.hidden&&root.dataset.submissionId===id&&root.querySelector('.submission-state');
+      if(!current()){clearInterval(watch.timer);return;}
+      if(document.visibilityState!=='visible'||watch.loading)return;
+      watch.loading=true;
+      try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!current()||!s||s.status===watch.status)return;watch.status=s.status;
+        root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','withheld'].includes(s.status))clearInterval(watch.timer);}catch{}finally{watch.loading=false;}
     },30000)};statusWatch=watch;
   }
   function showReceipt(submission,response){
@@ -863,7 +867,10 @@
   }
   async function safeMutation(path,body){
     if(pendingWrite)throw new Error('Previous save unresolved; check the queue');
-    const actor_id=await sessionActor();if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
+    const generation=identityGeneration,owner=privateActor;
+    const actor_id=await sessionActor();
+    if(generation!==identityGeneration||owner!==privateActor||actor_id!==owner)throw Object.assign(new Error('Account changed; reopen this action.'),{status:409});
+    if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(generation!==identityGeneration||privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(generation!==identityGeneration||owner!==privateActor)throw error;if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
   }
   const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
   // Approval, staging and map/list verification are separate, observable decisions.

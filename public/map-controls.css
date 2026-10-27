@@ -77,3 +77,8 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 #mapFooter button,.contribution-navigation button{height:48px}
 @media(max-width:400px){.contribution-navigation{gap:4px}.contribution-navigation button{min-width:76px;padding-inline:8px}.recenter-map{min-width:72px}}
 @media(max-width:300px){#eventDetails .program-credits{font-size:9px}.contribution-navigation button{min-width:60px}}
+
+/* Failures stay visible without opening Tools; attribution and the bottom dock stay clear. */
+.map-load-notice{position:fixed;z-index:1000;left:50%;bottom:calc(var(--panel-bottom) + 8px);transform:translateX(-50%);display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 24px);padding:8px 12px;border:1px solid #827563;background:#11110f;color:var(--ink);font-size:12px}
+.map-load-notice>span{min-width:0;overflow-wrap:anywhere}
+.map-load-notice>button{flex:none;min-height:44px}
