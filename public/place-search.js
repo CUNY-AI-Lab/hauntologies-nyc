@@ -373,7 +373,7 @@
   function chooseOrigin() {
     state.choosing = 'origin'; state.route = state.route?.line ? state.route : null;
     input.value = ''; input.placeholder = 'Starting point: street, place or lat, lon';
-    open(); input.focus(); render();
+    open(); focusInput(); render();
   }
 
   function useMyLocation() {
@@ -388,7 +388,7 @@
 
   function swap() { [state.origin, state.target] = [state.target, state.origin]; input.value = state.target.title; drawTarget(); updateRoute(); }
   function clearRoute() { routeAbort?.abort(); state.origin = null; state.route = null; state.along = []; routeLayer.clearLayers(); render(); }
-  function clearAll() { clearRoute(); state.target = null; focusLayer.clearLayers(); input.value = ''; render(); input.focus(); }
+  function clearAll() { clearRoute(); state.target = null; focusLayer.clearLayers(); input.value = ''; render(); focusInput(); }
 
   let routeAbort = null;
   async function updateRoute() {
@@ -457,36 +457,55 @@
   const toolPanels = ['toolsMenu', 'layersPanel', 'filtersPanel', 'researchSidecar'];
 
   function layout() {
-    // In a horizontal Tools tray the toggle sits at the tray's left end, so
-    // the field and panel drop below the tray into the popout column. On a
-    // phone they drop below the title card, beside the control column, so
-    // the field never covers the event details.
     const tray = root.closest('#mapToolTray');
     const row = Boolean(tray) && getComputedStyle(tray).flexDirection.startsWith('row');
-    const below = row || narrow();
+    // Do not chase pinch-zoom panning; preserve the user-controlled zoom view.
+    const viewport = window.visualViewport?.scale === 1 ? window.visualViewport : null;
+    // Fixed elements use layout-viewport coordinates; Safari can pan the
+    // visual viewport independently while opening the software keyboard.
+    const left = viewport?.offsetLeft || 0, topEdge = viewport?.offsetTop || 0;
+    const width = viewport?.width || innerWidth, height = viewport?.height || innerHeight;
+    const bottom = topEdge + height;
+    const box = toggle.getBoundingClientRect();
+    const masthead = document.querySelector('.masthead').getBoundingClientRect();
+    const below = row || narrow() || height < innerHeight - 80;
     root.classList.toggle('drops-below', below);
-    if (row) {
-      const top = tray.getBoundingClientRect().bottom + 8, inset = narrow() ? 12 : 20;
-      root.style.setProperty('--search-top', top + 'px');
-      root.style.setProperty('--search-right', inset + 'px');
-      root.style.setProperty('--search-width', Math.min(400, innerWidth - 40) + 'px');
-      root.style.setProperty('--search-panel-max', Math.max(160, innerHeight - top - 50 - 96) + 'px');
-      return;
-    }
-    const box = toggle.getBoundingClientRect(), masthead = document.querySelector('.masthead').getBoundingClientRect();
     if (below) {
       const brand = document.querySelector('.masthead .brand')?.getBoundingClientRect() || masthead;
-      const top = Math.max(brand.bottom, box.bottom) + 8;
+      const preferredTop = (row ? tray.getBoundingClientRect().bottom : Math.max(brand.bottom, box.bottom)) + 8;
+      // Keep the field reachable even when the title or tools extend below
+      // the keyboard. Reserve result space when available, not a forced min-height.
+      const top = Math.max(topEdge + 8, Math.min(preferredTop, bottom - 8 - 50 - Math.min(96, Math.max(0, height - 66))));
+      const availableWidth = Math.max(0, width - 24);
+      const preferredWidth = row ? 400 : box.left - 6 - masthead.left;
+      const fieldWidth = Math.min(availableWidth, Math.max(160, preferredWidth));
+      const preferredLeft = row ? left + width - 12 - fieldWidth : masthead.left;
+      const fieldLeft = Math.max(left + 12, Math.min(preferredLeft, left + width - 12 - fieldWidth));
       root.style.setProperty('--search-top', top + 'px');
-      root.style.setProperty('--search-right', (innerWidth - box.left + 6) + 'px');
-      root.style.setProperty('--search-width', Math.max(160, box.left - 6 - masthead.left) + 'px');
-      root.style.setProperty('--search-panel-max', Math.max(160, innerHeight - top - 50 - 24) + 'px');
+      root.style.setProperty('--search-right', (innerWidth - fieldLeft - fieldWidth) + 'px');
+      root.style.setProperty('--search-width', fieldWidth + 'px');
+      root.style.setProperty('--search-panel-max', Math.max(0, bottom - top - 50 - 8) + 'px');
       return;
     }
-    const room = Math.max(160, Math.min(380, box.left - masthead.left - 6));
+    const room = Math.max(0, Math.min(380, box.left - masthead.left - 6));
     root.style.setProperty('--search-room', room + 'px');
     root.style.setProperty('--search-panel-width', room + 'px');
-    root.style.setProperty('--search-panel-max', Math.max(160, innerHeight - box.bottom - 96) + 'px');
+    root.style.setProperty('--search-panel-max', Math.max(0, bottom - box.bottom - 96) + 'px');
+  }
+
+  let layoutFrame = 0;
+  function scheduleLayout() {
+    if (layoutFrame) return;
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = 0;
+      if (root.classList.contains('is-open') || root.classList.contains('is-peeking')) layout();
+    });
+  }
+  function focusInput() {
+    // Keep focus synchronous with the tap so iOS opens the keyboard, without
+    // asking Safari to scroll the fixed field into view before layout settles.
+    input.focus({preventScroll: true});
+    scheduleLayout();
   }
 
   function syncPanel() {
@@ -529,7 +548,7 @@
   });
   toggle.addEventListener('click', () => {
     if (root.classList.contains('is-open')) { close(); return; }
-    open(); input.focus();
+    open(); focusInput();
   });
   input.addEventListener('focus', open);
   input.addEventListener('input', () => {
@@ -569,11 +588,11 @@
   document.addEventListener('keydown', event => {
     if (event.key !== '/' || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest?.('input,textarea,select,[contenteditable="true"]') || document.querySelector('dialog[open]') || root.closest('[inert]')) return;
-    event.preventDefault(); open(); input.focus();
+    event.preventDefault(); open(); focusInput();
   });
   window.addEventListener('map-search-requested', () => {
     if (root.classList.contains('is-open')) { close(); return; }
-    open(); input.focus();
+    open(); focusInput();
   });
   const described = new Map();
   function describe(latitude, longitude) {
@@ -585,7 +604,7 @@
     return described.get(key);
   }
   window.PlaceSearch = Object.freeze({
-    open: () => { open(); input.focus(); },
+    open: () => { open(); focusInput(); },
     close,
     get isOpen() { return root.classList.contains('is-open'); },
     // The search engine without this control's UI, for other place fields.
@@ -596,6 +615,14 @@
     // Cross streets and neighbourhood at a point, from NYC GeoSearch; remembered per spot.
     describe
   });
-  window.addEventListener('resize', () => { if (root.classList.contains('is-open') || root.classList.contains('is-peeking')) layout(); });
+  window.addEventListener('resize', scheduleLayout);
+  window.visualViewport?.addEventListener('resize', scheduleLayout);
+  window.visualViewport?.addEventListener('scroll', scheduleLayout);
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(scheduleLayout);
+    for (const node of [document.querySelector('.masthead .brand'), root.closest('#mapToolTray')]) {
+      if (node) observer.observe(node);
+    }
+  }
   map.on('moveend', () => { if (!panel.hidden && input.value.trim()) render(); });
 })();
