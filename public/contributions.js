@@ -6,7 +6,7 @@
   const apiRoot = '/api/contributions';
   const removedTaskIds = new Set(['HNY-012','HNY-014','HNY-015']);
   let sharedTasks = null;
-  const taskClient = window.SharedTasks.createClient({request:api, storage:window.sessionStorage});
+  const taskClient = window.SharedTasks.createClient({request:api, storage:window.sessionStorage, identity:()=>({actor:privateActor,generation:identityGeneration})});
   function localTasks(){try{const saved=JSON.parse(localStorage.getItem('hauntologies-created-tasks')||'[]');return Array.isArray(saved)?saved:[];}catch{return [];}}
   function taskCard(t){const card=el('details',undefined,'task-card');card.append(el('summary',t.bounded_task),intakeText(t.description||t.evidence_deliverable||''),metadata([['Status',statusLabel(t.status)],['Section',t.section],['Skill level',statusLabel(t.skill_level)]]));return card;}
   function renderTaskList(){
@@ -20,21 +20,21 @@
   async function loadSharedTasks(){
     const status=byId('sharedTaskStatus'),version=identityGeneration;
     try{const tasks=await taskClient.list();if(version!==identityGeneration)return false;sharedTasks=tasks;status.replaceChildren();renderTaskList();return true;}
-    catch(error){status.replaceChildren(el('span','Shared tasks unavailable'));if(error.status===401)await accessActions(status);return false;}
+    catch(error){if(version!==identityGeneration)return false;status.replaceChildren(el('span','Shared tasks unavailable'));if(error.status===401)await accessActions(status);return false;}
   }
-  function restorePendingTask(){const task=taskClient.pendingTask();if(!task)return;for(const [id,key]of [['newTaskTitle','bounded_task'],['newTaskDescription','description'],['newTaskSection','section'],['newTaskSkill','skill_level'],['newTaskStatus','status']])byId(id).value=task[key];byId('createTaskResult').textContent='A shared save is pending. Retry this task to confirm it.';}
+  function restorePendingTask(){const task=taskClient.pendingTask();if(!task){if(taskClient.hasUnownedPendingTask())byId('createTaskResult').textContent='An older pending task has no confirmed owner. Check the shared list before creating another task; the saved copy has been retained.';return;}for(const [id,key]of [['newTaskTitle','bounded_task'],['newTaskDescription','description'],['newTaskSection','section'],['newTaskSkill','skill_level'],['newTaskStatus','status']])byId(id).value=task[key];byId('createTaskResult').textContent='A shared save is pending. Retry this task to confirm it.';}
   async function createTask(event){
-    event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),out=byId('createTaskResult');
+    event.preventDefault();if(!window.HauntologiesAccount?.canContribute())return;const generation=identityGeneration,owner=privateActor;const current=()=>generation===identityGeneration&&owner===privateActor;const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),out=byId('createTaskResult');
     const task={bounded_task:byId('newTaskTitle').value.trim(),description:byId('newTaskDescription').value.trim(),section:byId('newTaskSection').value,skill_level:byId('newTaskSkill').value,status:byId('newTaskStatus').value};
     if(!task.bounded_task||!task.description)return;
     button.disabled=true;out.textContent='Saving to the shared task list…';
     try{
-      const saved=await taskClient.create(task);
+      const saved=await taskClient.create(task);if(!current())return;
       sharedTasks=[saved,...(sharedTasks||[]).filter(t=>t.task_id!==saved.task_id)];
       out.textContent='Task saved to the shared list.';
       form.reset();renderTaskList();await loadSharedTasks();
-    }catch(error){out.textContent=error.status===401?'Shared tasks unavailable':error.status===403?'Your account needs permission to save shared tasks.':error.message;}
-    finally{button.disabled=false;}
+    }catch(error){if(!current())return;out.textContent=error.status===401?'Shared tasks unavailable':error.status===403?'Your account needs permission to save shared tasks.':error.message;}
+    finally{if(current())button.disabled=false;}
   }
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const pretty = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -54,7 +54,8 @@
   const geoMethods = ['unresolved','historic_map','address_match','gazetteer','contextual_estimate'];
   const boroughs = ['unknown','Bronx','Brooklyn','Manhattan','Queens','Staten Island'];
   let dashboard = null, selectedSubmission = null, revisionOf = null, revisionOriginal = null, preview = null, pendingWrite = readPendingWrite(), busy = false, rowCounter = 0, connectionVersion = 0, privateActor = null, dashboardRequest = 0, detailRequest = 0, identityGeneration = 0;
-  const privateImages=new Map();
+  const privateImages=new Map(),privateTaskDrafts=new Map();
+  const taskFields=['newTaskTitle','newTaskDescription','newTaskSection','newTaskSkill','newTaskStatus'];
   function readPendingWrite(actor){try{const value=JSON.parse(sessionStorage.getItem(actor?'hauntologies-pending-contribution-write:'+actor:'hauntologies-pending-contribution-write')||'null');return value&&/^\/(submit|revise|triage|task|review|apply|verify|rollback)$/.test(value.path)&&typeof value.body?.idempotency_key==='string'?value:null;}catch{return null;}}
   function retainWrite(value){pendingWrite=value;try{if(value)sessionStorage.setItem('hauntologies-pending-contribution-write:'+value.actor_id,JSON.stringify(value));else if(privateActor)sessionStorage.removeItem('hauntologies-pending-contribution-write:'+privateActor);}catch{}}
   const caps = () => dashboard?.capabilities || {};
@@ -75,9 +76,13 @@
 
   }
   async function sessionActor(){
-    const session=await api('/session');
-    if(typeof session?.actor_id!=='string'||!session.actor_id||session.actor_id.length>200)throw Object.assign(new Error('Session unavailable'),{status:503});
-    return session.actor_id;
+    const account=window.HauntologiesAccount?.snapshot();
+    try{
+      const session=await api('/session');
+      if(typeof session?.actor_id!=='string'||!session.actor_id||session.actor_id.length>200)throw Object.assign(new Error('Session unavailable'),{status:503});
+      if(!window.HauntologiesAccount?.isCurrent(account)||session.actor_id!==account.actor)throw Object.assign(new Error('Account changed'),{status:409});
+      return session.actor_id;
+    }catch(error){window.HauntologiesAccount?.invalidate(account);throw error;}
   }
   async function requireOriginalActor(request){
     const actor=await sessionActor();
@@ -87,16 +92,16 @@
   const signedOutMarker=actor=>'hauntologies-signed-out:'+actor;
   const signedOutHere=actor=>{try{return !!localStorage.getItem(signedOutMarker(actor));}catch{return false;}};
   function clearPrivateView(message){
-    // After a sign-out in any tab the account's draft is removed, never saved again.
-    const endedKey=privateActor?draftStorageKey:null,signedOut=privateActor&&signedOutHere(privateActor);
-    if(signedOut)forgetDraft(endedKey);
-    if(privateActor){if(!signedOut)saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
-    dashboard=null;selectedSubmission=null;sharedTasks=null;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
+    // Keep unsent work scoped to its original account; hide it, never reassign it.
+    const endedKey=privateActor?draftStorageKey:null;
+    if(privateActor){privateTaskDrafts.set(privateActor,Object.fromEntries(taskFields.map(id=>[id,byId(id).value])));saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
+    byId('createTaskForm').reset();byId('createTaskForm').querySelector('button[type="submit"]').disabled=false;byId('createTaskResult').textContent='';
+    dashboard=null;selectedSubmission=null;sharedTasks=null;previewInFlight=false;busy=false;imageProcessing=false;imageBusy=false;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
     clearInterval(statusWatch?.timer);statusWatch=null;byId('contributionQueue').hidden=false;
     window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:[]}}));
     byId('workflowConnection').textContent=message;byId('reviewCapabilityNotice').textContent='';
     // Only when a session ended mid-edit; a signed-out page load keeps its own notice.
-    if(endedKey&&!signedOut&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
+    if(endedKey&&readStoredDraft(endedKey))draftNotice('Your draft is saved on this device. Sign in again to continue it.');
     byId('submissionDetail').replaceChildren();byId('submissionDetail').hidden=true;
     byId('contributionReceipt').replaceChildren();byId('contributionReceipt').hidden=true;
     byId('contributionTargetPick').replaceChildren(new Option('No records',''));byId('useContributionTarget').disabled=true;
@@ -325,7 +330,7 @@
   function pinTypedPoint(){const point=showPoint();if(!point)return;const borough=window.NycGeometry?.findBorough(point.latitude,point.longitude);locationStatus('Pinned at '+point.latitude.toFixed(5)+', '+point.longitude.toFixed(5)+(borough?' in '+borough:''),'success');if(typeof map!=='undefined'&&map)map.setView([point.latitude,point.longitude],Math.max(map.getZoom(),17),{animate:false});requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('contributions-point-pinned')));}
   function setPointFields(point){byId('contributionLatitude').value=point?.latitude??'';byId('contributionLongitude').value=point?.longitude??'';}
   function locationStatus(text,state=''){const status=byId('newLocationStatus');status.textContent=text;if(state)status.dataset.state=state;else delete status.dataset.state;}
-  function canRequestPoint(){return pointForm()&&!pendingWrite&&!busy&&!imageBatch&&!imageBusy&&!imageProcessing;}
+  function canRequestPoint(){return window.HauntologiesAccount?.canContribute()&&privateActor===window.HauntologiesAccount.snapshot().actor&&pointForm()&&!pendingWrite&&!busy&&!imageBatch&&!imageBusy&&!imageProcessing;}
   window.ContributionPoint=Object.freeze({
     get:()=>{const point=pointForm()?readPoint():null;return point?{...point}:null;},
     show:showPoint,
@@ -343,7 +348,7 @@
   });
   function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
   function draftValue(){return {version:1,place_text:byId('contributionPlace')?.value||'',object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
-  function saveDraft(){if(!isOpenForm())return;try{const value=draftValue();if(value.place_text||value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
+  function saveDraft(){if(!privateActor||!isOpenForm())return;try{const value=draftValue();if(value.place_text||value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
       const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets)){forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);draftNotice('');
@@ -484,15 +489,15 @@
     imageProcessing=true;byId('previewContribution').disabled=true;invalidatePreview();renderStagedImages();
     try{for(const file of files){const prepared=await window.ContributionImage.prepare(file);if(prepared.metadataRemoved!==true||!(prepared.file instanceof Blob))throw new Error('Image processing unavailable');images.push({file:prepared.file,name:file.name,width:prepared.width,height:prepared.height,resized:prepared.resized===true,sourceWidth:prepared.sourceWidth,sourceHeight:prepared.sourceHeight,metadata:{rights:'unknown'},pending:null,receipt:null});}}
     catch(failure){if(generation!==identityGeneration||owner!==privateActor)return;error.textContent=failure.message||'Image could not be prepared';error.hidden=false;}
-    finally{imageProcessing=false;byId('previewContribution').disabled=busy;renderStagedImages();}
+    finally{if(generation===identityGeneration&&owner===privateActor){imageProcessing=false;byId('previewContribution').disabled=busy;renderStagedImages();}}
   }
   async function attachmentRequest(entry){
-    const batch=imageBatch;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000),pending=entry.pending,body=new FormData();
+    const batch=imageBatch,generation=identityGeneration,account=window.HauntologiesAccount?.snapshot();const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000),pending=entry.pending,body=new FormData();
     body.set('submission_id',batch.submission_id);body.set('expected_revision',String(pending.expected_revision));body.set('idempotency_key',pending.idempotency_key);body.set('metadata_json',pending.metadata_json);body.set('image',entry.file,entry.file.name);
     try{
       const response=await fetch(apiRoot+'/attachment',{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',headers:{'X-Hauntologies-Actor':batch.actor_id},body,signal:controller.signal});
       let data;try{data=await response.json();}catch{throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});}
-      if(!response.ok){if(response.status===401||response.status===403){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)await accessActions(byId('workflowConnection'));}throw Object.assign(new Error(typeof data.error==='string'?data.error:'Image not saved'),{status:response.status});}
+      if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&batch.actor_id===privateActor){if(response.status===401)window.HauntologiesAccount?.invalidate(account);clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)await accessActions(byId('workflowConnection'));}throw Object.assign(new Error(typeof data.error==='string'?data.error:'Image not saved'),{status:response.status});}
       const confirmedActor=await sessionActor();if(imageBatch!==batch||privateActor!==batch.actor_id||confirmedActor!==batch.actor_id)throw Object.assign(new Error('Account changed'),{status:409});
       const receipt=data.receipt,result=receipt?.result;
       if(typeof receipt?.id!=='string'||!receipt.id||receipt.action!=='attachment'||result?.submission_id!==batch.submission_id||result.revision!==pending.expected_revision+1||!attachmentId(result.attachment_id)||data.submission?.id!==batch.submission_id||!Number.isInteger(data.submission.revision)||data.submission.revision<result.revision)throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});
@@ -538,7 +543,7 @@
       const blocked=[400,403,413,415].includes(error.status)||['attachment_limit','attachment_quota'].includes(error.message);
       imageStatus(error.accountMismatch?'Contribution saved. Use the original account to retry images':error.status===409?'Contribution saved. Review it before retrying images':'Contribution saved. Image not saved',!blocked);
       if(error.status===401){byId('retryContributionImages').hidden=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);try{const response=await fetch('/api/access-status',{credentials:'same-origin',cache:'no-store',signal:controller.signal});const access=await response.json();byId('retryContributionImages').hidden=!(response.ok&&access.enabled===true&&access.sign_in_url==='/api/contributions/sign-in');}catch{}finally{clearTimeout(timer);}}
-    }finally{imageBusy=false;if(imageBatch===batch||generation===identityGeneration){renderStagedImages();byId('retryContributionImages').disabled=false;}}
+    }finally{if(generation===identityGeneration){imageBusy=false;renderStagedImages();byId('retryContributionImages').disabled=false;}}
   }
   function renderPrivateImages(root,attachments){
     const list=el('div');for(const [index,ref] of (attachments||[]).entries()){
@@ -623,13 +628,14 @@
     const root=byId('workflowErrors');root.replaceChildren();byId('typedContributionForm').querySelectorAll('[aria-invalid]').forEach(input=>input.removeAttribute('aria-invalid'));if(!errors?.length){root.hidden=true;return;}
     root.append(el('h4','Errors'));const list=el('ul');errors.forEach(err=>{const li=el('li'),message=typeof err==='string'?err:err.message||pretty(err),input=typeof err==='object'?errorControl(err.field):null;if(input){input.setAttribute('aria-invalid','true');const link=el('a',message);link.href='#'+input.id;link.addEventListener('click',event=>{event.preventDefault();let parent=input.parentElement;while(parent){if(parent.tagName==='DETAILS')parent.open=true;parent=parent.parentElement;}input.focus();input.scrollIntoView({block:'center'});});li.append(link);}else li.textContent=message;list.append(li);});root.append(list);root.hidden=false;root.focus();
   }
-  async function api(path,body){
-    const generation=identityGeneration,actor=privateActor;
+  async function api(path,body,expectedActor=privateActor){
+    const generation=identityGeneration,actor=privateActor,account=window.HauntologiesAccount?.snapshot();
+    if(!window.HauntologiesAccount?.canContribute())throw Object.assign(new Error('Sign in to contribute'),{status:401});
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{
-    const response=await fetch(apiRoot+path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json',...(privateActor?{'X-Hauntologies-Actor':privateActor}:{})}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
+    const response=await fetch(apiRoot+path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json',...(expectedActor?{'X-Hauntologies-Actor':expectedActor}:{})}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
     let data;try{data=await response.json();}catch{throw Object.assign(new Error('The contribution service returned an unreadable response.'),{status:response.status,uncertain:true});}
-    if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&actor===privateActor){clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
+    if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&actor===privateActor){if(response.status===401)window.HauntologiesAccount?.invalidate(account);clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
     }finally{clearTimeout(timeout);}
   }
   function empty(container,message){container.replaceChildren(el('p',message,'empty'));}
@@ -660,8 +666,8 @@
     const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!caps().can_submit||busy||!!pendingWrite||preview?.result?.validation?.valid!==true;
     if(pendingWrite)showReconciliation();
   }
-  async function loadDashboard(){const request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest)return null;
-    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();}
+  async function loadDashboard(){if(!window.HauntologiesAccount?.canContribute())return null;const account=window.HauntologiesAccount.snapshot(),request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest||!window.HauntologiesAccount.isCurrent(account)||actor!==account.actor)return null;
+    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();for(const [id,value] of Object.entries(privateTaskDrafts.get(actor)||{}))byId(id).value=value;restorePendingTask();}
     const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
    }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
@@ -701,8 +707,8 @@
   }
   let previewInFlight=false;
   async function previewForm(event){
-    event.preventDefault();if(previewInFlight||busy||imageProcessing||imageBusy)return;
-    previewInFlight=true;
+    event.preventDefault();if(!window.HauntologiesAccount?.canContribute()||previewInFlight||busy||imageProcessing||imageBusy)return;
+    const account=window.HauntologiesAccount.snapshot();previewInFlight=true;
     try{if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
     renderErrors([]);const errors=[],explanation=byId('contributionSummary').value;
     if(!explanation.trim())errors.push({field:'summary',message:'Describe what you would like to contribute'});
@@ -713,6 +719,7 @@
     for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
     if(errors.length){renderErrors(errors);return;}
     if(pointForm()&&readPoint())await window.ContributionPlace?.named();
+    if(!window.HauntologiesAccount.isCurrent(account))return;
     // A place chosen while signed out, or before a dropped connection, failed to load. Ask again
     // rather than stopping at a local preview: signing in afterwards does not reload it.
     const lookupGeneration=identityGeneration,lookupOwner=privateActor;
@@ -735,8 +742,8 @@
       if(error.status===401){if(!owner)local('sign-in');return;}
       if(generation!==identityGeneration||owner!==privateActor)return;local('unavailable');serviceFailure(error,()=>byId('previewContribution').click());}
     // Preview must never stay disabled after a failed check, whatever happened to the session.
-    finally{byId('previewContribution').disabled=false;}
-    }finally{previewInFlight=false;}
+    finally{if(window.HauntologiesAccount.isCurrent(account))byId('previewContribution').disabled=false;}
+    }finally{if(window.HauntologiesAccount.isCurrent(account))previewInFlight=false;}
   }
 
   async function submitPreview(){
@@ -756,7 +763,7 @@
       if(generation!==identityGeneration||privateActor!==owner)return;const uncertain=!!request&&(error.uncertain||!error.status||error.status>=500);
       if(uncertain)renderErrors([]);else if(error.status===400)renderErrors([error.message]);else serviceFailure(error);
       if(!uncertain){if(request)retainWrite(null);}else showReconciliation();
-    }finally{busy=false;byId('previewContribution').disabled=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}
+    }finally{if(generation===identityGeneration&&owner===privateActor){busy=false;byId('previewContribution').disabled=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}}
   }
   function showSavedReadback(submission){const root=byId('contributionReceipt');root.replaceChildren(el('h3','Current saved contribution'),metadata([['Revision',submission.revision],['Status',statusLabel(submission.status)]]),button('Check review status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.hidden=false;}
   // Where a submission stands, in the order a contributor experiences it.
@@ -764,7 +771,7 @@
   const progressStage=status=>({draft:0,submitted:1,changes_requested:1,approved:2,merged:3})[status]??1;
   const whenText=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';};
   function nextStep(s){
-    if(s.status==='approved')return s.type==='open_proposal'?'Approved. Waiting for a publisher to add it to the map.':'Approved. Waiting to be published.';
+    if(s.status==='approved')return 'Approved. Another participant verifies the map and list preview before publication.';
     return({draft:'Draft. Submit it when it is ready.',submitted:'Submitted. A reviewer approves it next.',changes_requested:'A reviewer asked for a revision. Revise it and submit again.',merged:'On the public map.',withheld:'Withdrawn.'})[s.status]||'';
   }
   function submissionProgress(s){
@@ -841,8 +848,15 @@
     renderReviewControls(root,s);
     if(s.revision>1)root.append(el('p','Revision '+s.revision,'submission-ref'));
   }
-  // Release jobs are an administrator's view; contributors follow their submission's status instead.
-  function renderJobs(){const root=byId('applicationJobs'),jobs=caps().is_admin?dashboard?.jobs||[]:[];root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;if(!jobs.length)return;jobs.forEach(job=>{const card=el('details',undefined,'job-card');card.append(el('summary',job.id),metadata([['Status',statusLabel(job.status||job.state)||'Unknown']]));card.append(rawDisclosure('Receipt',job),button('Refresh',async()=>{try{const data=await api('/job?id='+encodeURIComponent(job.id));card.append(rawDisclosure('Receipt',data.job));}catch(error){card.append(el('p',error.message,'error'));}},'outline'));jobControls(card,job);root.append(card);});}
+  // Server-filtered verification jobs are available to every eligible nonauthor, not just admins.
+  function renderJobs(){
+    const root=byId('applicationJobs'),jobs=(dashboard?.jobs||[]).filter(job=>job.can_verify===true||caps().is_admin&&job.status!=='verification_pending');
+    root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;
+    for(const job of jobs){const title=dashboard?.submissions?.find(s=>s.id===job.submission_id)?.title||'Contribution';const card=el('details',undefined,'job-card');card.append(el('summary',title));
+      if(caps().is_admin)card.append(rawDisclosure('Receipt',job));
+      jobControls(card,job);root.append(card);
+    }
+  }
   function showReconciliation(ready=false){
     if(!pendingWrite||pendingWrite.actor_id!==privateActor)return;
     const root=byId('workflowConnection');root.querySelector('[data-reconciliation]')?.remove();
@@ -875,23 +889,27 @@
   const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
   // Approval, staging and map/list verification are separate, observable decisions.
   async function stageForVerification(s){
+    const account=window.HauntologiesAccount?.snapshot();
+    if(!window.HauntologiesAccount?.isCurrent(account))return;
     const staged=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});
     await loadDashboard();
-    window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:staged.job}));
+    if(!window.HauntologiesAccount.isCurrent(account))return;
+    window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:{...staged.job,uiAccount:account}}));
   }
-  const publishable=s=>!!caps().can_apply&&s.status==='approved'&&(s.approval?.independent===true||s.approval?.admin_self_approval===true)&&s.approval?.revision===s.revision&&s.application?.applicable===true;
+  const publishable=s=>!!caps().can_apply&&!s.is_own&&s.status==='approved'&&s.approval?.independent===true&&s.approval?.revision===s.revision&&s.application?.applicable===true;
   // One decision: approve, with an optional comment, or send back to revise, with a required one.
   function renderReviewControls(root,s){
-    const canReview=!!caps().can_review&&!!caps().independent_review_available&&(!s.is_own||!!caps().can_self_approve)&&s.status==='submitted'&&s.validation?.valid===true;
+    const account=window.HauntologiesAccount?.snapshot();
+    const canReview=!!caps().can_review&&!!caps().independent_review_available&&!s.is_own&&s.status==='submitted'&&s.validation?.valid===true;
     const out=el('p',undefined,'small');out.setAttribute('role','status');
-    const refresh=async()=>{await loadDashboard();await loadSubmission(s.id);};
+    const refresh=async()=>{if(!window.HauntologiesAccount?.isCurrent(account))return;await loadDashboard();if(window.HauntologiesAccount.isCurrent(account))await loadSubmission(s.id);};
     if(canReview){
-      const form=el('div',undefined,'decision-form'),comment=el('textarea'),reviewInputs=new Map(),approve=button('Approve',async()=>{
+      const form=el('div',undefined,'decision-form'),comment=el('textarea'),reviewInputs=new Map(),approve=button('Approve review',async()=>{
         if([...reviewInputs.values()].some(input=>!input.checked)){out.textContent='Confirm each review check before approving.';return;}
         approve.disabled=revise.disabled=true;out.textContent='Approving…';
         try{
           const result=await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries([...reviewInputs].map(([key,input])=>[key,input.checked?'pass':'not_tested'])),rationale:comment.value.trim()||'Approved.'});
-          out.textContent='Approved. Publication still requires staging and map/list verification.';
+          out.textContent='Review approved. Verify the map and list preview next.';
           await refresh();
         }catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
       },'primary'),revise=button('Revise and resubmit',async()=>{
@@ -901,33 +919,37 @@
         catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
       },'outline');
       comment.rows=2;comment.placeholder='Comment (optional to approve, required to send back)';comment.setAttribute('aria-label','Comment');
-      if(s.is_own)form.append(el('p','You are approving your own contribution as an admin. This is recorded.','small'));
       const labels={evidence_check:'I checked the evidence and its limits.',geography_check:'I checked the location and uncertainty.',rights_check:'I checked rights and permitted reuse.',duplicate_check:'I checked for duplicate records.',privacy_check:'I checked privacy and public credit consent.'};
       for(const key of reviewKeys){const label=el('label',undefined,'consent-line'),input=el('input');input.type='checkbox';reviewInputs.set(key,input);label.append(input,document.createTextNode(labels[key]));form.append(label);}
-      form.append(el('p',s.application?.applicable?'Approval permits this displayed change to be staged. It does not publish it.':'This contribution is review-only; approval does not publish it.','small'));
+      form.append(el('p',s.application?.applicable?'After approving, you or another participant can verify the map and list preview to publish. The submitter cannot verify it.':'This contribution is review-only; approval does not publish it.','small'));
       if(caps().can_apply&&s.application?.applicable!==true)form.append(el('p','Approving records it, but this one cannot go on the map automatically.','small'));
       const actions=el('div',undefined,'decision-actions');actions.append(approve,revise);
       form.append(comment,actions,out);root.append(form);
     }else if(publishable(s)){
-      const go=button('Stage for verification',async()=>{go.disabled=true;out.textContent='Staging…';try{await stageForVerification(s);await refresh();}catch(error){out.textContent=error.message;go.disabled=false;}},'primary');
-      root.append(el('p','Stage this approved change, inspect its map and list preview, then record verification to publish.','small'),go,out);
+      const go=button('Verify',async()=>{go.disabled=true;out.textContent='Preparing the verification preview…';try{await stageForVerification(s);await refresh();}catch(error){out.textContent=error.message;go.disabled=false;}},'primary');
+      root.append(el('p','Check the map and list preview, then verify to publish. No additional reviewer is required.','small'),go,out);
+    }else if(s.is_own&&s.status==='approved'){
+      root.append(el('p','Another participant must verify your submission.','small'));
     }else if(caps().can_triage&&s.status==='draft'){
       // Sending a revision back to the queue is not a decision on it, so it may be one's own.
       const start=button(s.is_own?'Send for review':'Start review',async()=>{start.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'ready_for_review',rationale:'Revision ready for review.'});await refresh();}catch(error){out.textContent=error.message;start.disabled=false;}},'outline');
       root.append(start,out);
     }
   }
-  function jobControls(card,job){
-    if(job.status==='verification_pending')card.append(button('Preview',()=>window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:job})),'outline'));
+  function jobControls(card,job,includePreview=true){
+    const account=window.HauntologiesAccount?.snapshot();
+    if(!window.HauntologiesAccount?.isCurrent(account))return;
+    if(includePreview&&job.status==='verification_pending')card.append(button('Verify',()=>window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:{...job,uiAccount:account}})),'outline'));
     if(!caps().can_apply)return;
-    if(job.status==='verification_pending'){
+    if(!includePreview&&job.status==='verification_pending'&&job.can_verify===true){
       const form=el('form',undefined,'job-action-form');form.append(el('h4','Verify'));
-      const label=el('label','Result');const status=el('select');status.setAttribute('aria-label','Map/list verification outcome');['not_tested','pass','fail'].forEach(value=>{const option=el('option',statusLabel(value));option.value=value;status.append(option);});label.append(status);const evidenceLabel=el('label','Evidence');const evidence=el('textarea');evidence.rows=3;evidence.required=true;evidence.setAttribute('aria-label','Map/list verification evidence');evidenceLabel.append(evidence);const submit=el('button','Verify','outline');submit.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(label,evidenceLabel,submit,output);form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;try{const result=await safeMutation('/verify',{idempotency_key:crypto.randomUUID(),job_id:job.id,map_list_check:{status:status.value,evidence:evidence.value}});output.textContent=statusLabel(result.job.status);if(['verified','rolled_back'].includes(result.job.status))window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();}catch(error){output.textContent=error.message;submit.disabled=false;}});card.append(form);
+      const label=el('label','Result');const status=el('select');status.setAttribute('aria-label','Map/list verification outcome');['not_tested','pass','fail'].forEach(value=>{const option=el('option',statusLabel(value));option.value=value;status.append(option);});label.append(status);const evidenceLabel=el('label','Evidence');const evidence=el('textarea');evidence.rows=3;evidence.required=true;evidence.setAttribute('aria-label','Map/list verification evidence');evidenceLabel.append(evidence);const confirmLabel=el('label',undefined,'consent-line'),confirm=el('input');confirm.type='checkbox';confirmLabel.append(confirm,document.createTextNode('I checked that the map and list preview match the approved contribution.'));const submit=el('button','Verify and publish','primary');submit.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(label,evidenceLabel,confirmLabel,submit,output);form.addEventListener('submit',async event=>{event.preventDefault();if(!window.HauntologiesAccount.isCurrent(account))return;if(status.value==='not_tested'||!evidence.value.trim()){output.textContent='Choose a result and describe what you checked.';return;}if(status.value==='pass'&&(!confirm.checked||card.closest('dialog')?.dataset.previewReady!=='true')){output.textContent='Inspect the rendered map and list preview and confirm the check before publishing.';return;}submit.disabled=true;try{const result=await safeMutation('/verify',{idempotency_key:crypto.randomUUID(),job_id:job.id,map_list_check:{status:status.value,evidence:evidence.value}});output.textContent=statusLabel(result.job.status);if(['verified','rolled_back'].includes(result.job.status))window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();if(selectedSubmission?.id===job.submission_id)await loadSubmission(job.submission_id);if(result.job.status==='verified')card.closest('dialog')?.close();}catch(error){output.textContent=error.message;submit.disabled=false;}});card.append(form);
     }
     if(caps().can_rollback&&job.status==='verified'){
       const form=el('form',undefined,'job-action-form');form.append(el('h4','Rollback'));const label=el('label','Reason');const reason=el('textarea');reason.rows=3;reason.required=true;reason.setAttribute('aria-label','Rollback reason');label.append(reason);const submit=el('button','Rollback','outline');submit.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(label,submit,output);form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;try{const result=await safeMutation('/rollback',{idempotency_key:crypto.randomUUID(),job_id:job.id,rationale:reason.value});output.textContent=statusLabel(result.job.status);if(result.job.status==='rolled_back')window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();}catch(error){output.textContent=error.message;submit.disabled=false;}});card.append(form);
     }
   }
+  window.addEventListener('contributions-verification-ready',event=>{const {job,container}=event.detail||{};if(window.HauntologiesAccount?.isCurrent(event.detail?.account)&&job?.can_verify===true&&container?.isConnected)jobControls(container,job,false);});
   document.querySelectorAll('[data-workflow-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.workflowView)));
   byId('contributionType').addEventListener('change',()=>{renderPayload(byId('contributionType').value);invalidatePreview();});
   byId('publicCreditConsent').addEventListener('change',()=>{byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;invalidatePreview();});
@@ -955,18 +977,20 @@
   byId('chooseContributionPoint').addEventListener('click',()=>{if(byId('chooseContributionPoint').getAttribute('aria-pressed')==='true'){window.dispatchEvent(new CustomEvent('contributions-point-pick-cancelled'));return;}if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
   byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);locationStatus('');invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
   window.addEventListener('contributions-clarify-requested',event=>{
+    if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
     for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
   window.addEventListener('contributions-refresh-requested',()=>loadDashboard());
   window.addEventListener('contributions-review-requested',async event=>{
+    if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;
     byId('draftTab').click();switchView('reviewView');await loadSubmission(id);
   });
   window.addEventListener('contributions-session-ended',event=>{const accountKey=privateActor?draftStorageKey:null;if(event.detail?.signedOut&&privateActor){try{localStorage.setItem(signedOutMarker(privateActor),String(Date.now()));}catch{}}clearPrivateView(event.detail?.disabled?'Sign-in is not enabled yet':'Sign in to contribute');
-    // Signing out on purpose removes the account's draft; an expired session keeps it for the next sign-in.
-    if(event.detail?.signedOut&&accountKey){forgetDraft(accountKey);draftNotice('');}});
+    // Explicit sign-out hides the draft too; only its owner can restore it.
+    if(event.detail?.signedOut&&accountKey)draftNotice('');});
   // Signing in from a preview carries straight on to the checked preview.
   let resumePreviewAfterSignIn=false;
   window.addEventListener('contributions-edit-deleted',()=>{if(privateActor)loadDashboard();});
@@ -974,12 +998,12 @@
   // Returning to the tab picks up review decisions made elsewhere.
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&privateActor&&Date.now()-dashboardLoadedAt>30000)loadDashboard();});
   window.addEventListener('storage',event=>{if(privateActor&&event.key===signedOutMarker(privateActor)&&event.newValue)window.dispatchEvent(new CustomEvent('contributions-session-ended',{detail:{signedOut:true}}));});
-  window.addEventListener('focus',async()=>{if(privateActor){const old=privateActor;try{const confirmed=await sessionActor();if(privateActor===old&&confirmed!==old)clearPrivateView('Account changed');}catch{if(privateActor===old)clearPrivateView('Sign in to contribute');}}});
+  // account.js owns focus/session reconciliation; duplicate checks can race account switches.
   window.addEventListener('record-edit-saved',async event=>{await loadDashboard();if(selectedSubmission?.id===event.detail?.submissionId)await loadSubmission(selectedSubmission.id);});
   byId('tasksTool').addEventListener('click',()=>window.requireEditAccount(byId('tasksTool'),()=>{byId('draftTab').click();switchView('taskView');loadSharedTasks();byId('toolsMenu').hidden=true;byId('toolsButton').setAttribute('aria-expanded','false');}));
   byId('createTaskForm').addEventListener('submit',createTask);
   byId('refreshSharedTasks').addEventListener('click',loadSharedTasks);
-  restorePendingTask();renderTaskList();loadSharedTasks();
-  resetOpenContext();restoreDraft();loadDashboard();
+  renderTaskList();if(window.HauntologiesAccount?.canContribute()){restorePendingTask();loadSharedTasks();}
+  resetOpenContext();if(window.HauntologiesAccount?.canContribute())loadDashboard();
 
 })();

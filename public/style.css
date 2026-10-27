@@ -296,3 +296,6 @@ details[open]:not([data-closing])>summary>.disclosure-hint{visibility:hidden}
 .header-tools .map-tool-tray button{width:100%;min-width:0;padding:6px 10px}
 .map-tool-tray .zoom-tools{align-self:center}
 @media(max-width:340px){.map-tool-tray{flex-wrap:nowrap;width:auto;max-width:none;padding-block:0}}
+
+/* Private affordances never flash while the session is unknown or unavailable. */
+html:not([data-account-state="signed_in"]) [data-requires-account]{display:none!important}

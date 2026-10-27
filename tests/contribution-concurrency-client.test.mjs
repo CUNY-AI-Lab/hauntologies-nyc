@@ -46,9 +46,19 @@ test('an old in-flight mutation cannot clear a newer account pending write',asyn
 });
 const apiSource=source.slice(source.indexOf('  async function api('),source.indexOf('  function empty(',source.indexOf('  async function api(')));
 test('a delayed old-account 401 cannot clear the new account UI',async()=>{
-  let complete,clears=0;const context=vm.createContext({identityGeneration:1,privateActor:'actor-a',apiRoot:'/api/contributions',AbortController,setTimeout:()=>1,clearTimeout(){},
+  let complete,clears=0;const context=vm.createContext({identityGeneration:1,privateActor:'actor-a',apiRoot:'/api/contributions',window:{HauntologiesAccount:{snapshot:()=>({actor:'actor-a',generation:1}),canContribute:()=>true,invalidate(){throw Error('Old response invalidated current identity');}}},AbortController,setTimeout:()=>1,clearTimeout(){},
     fetch:()=>new Promise(r=>{complete=r;}),clearPrivateView(){clears++;},accessActions(){},byId(){}});
   vm.runInContext(apiSource+';globalThis.run=api;',context);const pending=context.run('/submission?id=synthetic');
   context.identityGeneration++;context.privateActor='actor-b';complete({ok:false,status:401,json:async()=>({error:'sign_in_required'})});
   await assert.rejects(pending,e=>e.status===401);assert.equal(clears,0);
+});
+test('old submit completion cannot unlock a newer account submission',async()=>{
+ const handler=source.slice(source.indexOf('  async function submitPreview(){'),source.indexOf('  function showSavedReadback('));let complete,started;
+ const ready=new Promise(resolve=>started=resolve),control={disabled:false},envelope={synthetic:true};
+ const context=vm.createContext({identityGeneration:1,privateActor:'actor-a',pendingWrite:null,busy:false,imageProcessing:false,imageBusy:false,imageBatch:null,draftRevisionBlocked:false,revisionOf:null,preview:{raw:JSON.stringify(envelope,null,2),result:{validation:{valid:true}}},
+  caps:()=>({can_submit:true}),buildEnvelope:()=>envelope,byId:()=>control,sessionActor:async()=>'actor-a',crypto:{randomUUID:()=> 'synthetic-request'},retainWrite:request=>{context.pendingWrite=request;},
+  api:()=>new Promise(resolve=>{complete=resolve;started();}),requireReceipt:r=>r,requireOriginalActor:async()=>{},renderErrors(){},serviceFailure(){},showReconciliation(){},clearSavedDraft(){},showReceipt(){},beginImages:async()=>{},loadDashboard:async()=>{}});
+ vm.runInContext(handler+';globalThis.submit=submitPreview;',context);const pending=context.submit();await ready;
+ context.identityGeneration++;context.privateActor='actor-b';context.busy=true;control.disabled=true;const newer={actor_id:'actor-b'};context.pendingWrite=newer;
+ complete({submission:{id:'synthetic'}});await pending;assert.equal(context.busy,true);assert.equal(control.disabled,true);assert.equal(context.pendingWrite,newer);
 });

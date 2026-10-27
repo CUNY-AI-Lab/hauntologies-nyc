@@ -170,10 +170,12 @@
     if(state.saved)renderReceipt(state.saved);lock();
   }
   async function api(path,body){
+    const account=window.HauntologiesAccount?.snapshot();if(!window.HauntologiesAccount?.isCurrent(account))throw Object.assign(new Error('Sign in to contribute'),{status:401});
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{
       const response=await fetch('/api/contributions'+path,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json',...(current?.actor_id?{'X-Hauntologies-Actor':current.actor_id}:{})}:undefined,body:body?JSON.stringify(body):undefined,signal:controller.signal});
       let data;try{data=await response.json();}catch{throw Object.assign(new Error('Unreadable response'),{status:response.status,uncertain:true});}
+      if(response.status===401)window.HauntologiesAccount.invalidate(account);
       if(!response.ok)throw Object.assign(new Error(typeof data.error==='string'?data.error:'Request failed'),{status:response.status});return data;
     }finally{clearTimeout(timeout);}
   }
@@ -280,7 +282,8 @@
   }
 
   window.addEventListener('record-edit-requested',async event=>{
-    const generation=++editorGeneration;let actor;try{actor=(await api('/session')).actor_id;}catch{window.dispatchEvent(new CustomEvent('account-open-requested'));return;}if(generation!==editorGeneration||typeof actor!=='string')return;
+    const account=window.HauntologiesAccount?.snapshot();if(!window.HauntologiesAccount?.isCurrent(account))return;
+    const generation=++editorGeneration;let actor;try{actor=(await api('/session')).actor_id;}catch{if(generation===editorGeneration&&window.HauntologiesAccount.isCurrent(account)){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));}return;}if(generation!==editorGeneration||!window.HauntologiesAccount.isCurrent(account)||actor!==account.actor)return;
     const {recordId,record,opener:source}=event.detail||{};if(!model||typeof recordId!=='string'||!record)return;
     opener=source instanceof HTMLElement?source:document.activeElement;
     const restored=restorePending(actor);if(restored&&!drafts.has(actor+':pending'))drafts.set(actor+':pending',restored);
@@ -292,7 +295,8 @@
     message.focus();loadTarget(state);
   });
   window.addEventListener('record-edit-revision-requested',async event=>{
-    const generation=++editorGeneration;let actor;try{actor=(await api('/session')).actor_id;}catch{window.dispatchEvent(new CustomEvent('account-open-requested'));return;}if(generation!==editorGeneration||typeof actor!=='string')return;
+    const account=window.HauntologiesAccount?.snapshot();if(!window.HauntologiesAccount?.isCurrent(account))return;
+    const generation=++editorGeneration;let actor;try{actor=(await api('/session')).actor_id;}catch{if(generation===editorGeneration&&window.HauntologiesAccount.isCurrent(account)){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));}return;}if(generation!==editorGeneration||!window.HauntologiesAccount.isCurrent(account)||actor!==account.actor)return;
     const {submission,opener:source}=event.detail||{};let original;
     try{original=JSON.parse(submission.raw_json);}catch{return;}
     const target=submission.proposal?.target,recordId=original.targets?.[0]?.record_id;

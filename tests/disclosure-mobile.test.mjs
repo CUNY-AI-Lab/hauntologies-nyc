@@ -17,9 +17,8 @@ function setup(width, present = true, open = true) {
   }));
   return { details, api: window.HauntologiesDisclosure, listeners, mediaListeners };
 }
-for (const width of [320, 390, 760]) test(`Event details starts closed at ${width}px`, () => assert.equal(setup(width).details.open, false));
-test('desktop retains the HTML default instead of forcing all disclosures closed', () => {
-  assert.equal(setup(761).details.open, true); assert.equal(setup(1440).details.open, true);
+for (const width of [320, 390, 760, 761, 1440]) test(`Event details starts closed at ${width}px`, () => assert.equal(setup(width).details.open, false));
+test('already collapsed Event details stays collapsed on desktop', () => {
   assert.equal(setup(1440, true, false).details.open, false);
 });
 test('missing Event details does not break other disclosure controls', () => assert.doesNotThrow(() => setup(390, false)));

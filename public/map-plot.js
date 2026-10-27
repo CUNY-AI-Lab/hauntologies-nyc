@@ -14,6 +14,7 @@
   function say(text) { const status = $('mapStatus'); if (status) status.textContent = text; }
 
   function arm(on) {
+    on = on && Boolean(window.HauntologiesAccount?.canContribute());
     armed = on;
     button.setAttribute('aria-pressed', String(on));
     document.body.classList.toggle('map-plotting', on);
@@ -65,7 +66,7 @@
   }
 
   function confirm() {
-    if (!plotted || plotted.outside) return;
+    if (!window.HauntologiesAccount?.canContribute() || !plotted || plotted.outside) return;
     const {latitude, longitude} = plotted;
     const name = [plotted.near, plotted.area].filter(Boolean).join(', ') || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
     arm(false);
@@ -73,6 +74,7 @@
     window.dispatchEvent(new CustomEvent('contributions-plot-confirmed', {detail: {latitude, longitude, name}}));
   }
 
+  window.addEventListener('hauntologies-auth-changed', () => { if(armed) arm(false); else clearSpot(); });
   button.addEventListener('click', () => arm(!armed));
   map.on('click', event => {
     if (!armed) return;

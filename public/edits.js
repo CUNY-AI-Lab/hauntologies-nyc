@@ -8,7 +8,7 @@
   const button=(label,action)=>{const el=node('button',label);el.type='button';el.className='outline';el.addEventListener('click',action);return el;};
   const date=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
   let page=1,totalPages=1,loaded=false,generation=0,scroll=0,returnFocus=null,actor=null;
-  async function get(path){const response=await fetch(path,{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error(response.status===401?'Sign in to view your edits.':'Edits are temporarily unavailable.');return response.json();}
+  async function get(path){const account=window.HauntologiesAccount?.snapshot();const response=await fetch(path,{credentials:'same-origin',cache:'no-store'});if(response.status===401)window.HauntologiesAccount?.invalidate(account);if(!response.ok)throw new Error(response.status===401?'Sign in to view your edits.':'Edits are temporarily unavailable.');return response.json();}
   async function post(path,body){const response=await fetch(path,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',...(actor?{'X-Hauntologies-Actor':actor}:{})},body:JSON.stringify(body)});let data={};try{data=await response.json();}catch{}if(!response.ok)throw new Error(response.status===401?'Sign in to change your edits.':response.status===409?'This edit changed. Reload and try again.':'That edit could not be removed right now.');return data;}
   // Removes an unpublished edit for good; a published one stays with the map.
   async function remove(item,control){if(!window.confirm('Delete "'+(item.title||'this edit')+'"? It will be gone for good.'))return;control.disabled=true;status.textContent='Deleting…';
@@ -30,10 +30,10 @@
       list.replaceChildren(...data.items.map(showItem));status.textContent=data.total+' '+(data.total===1?'edit':'edits');loaded=true;scroll=0;dialog.scrollTop=0;controls();
     }catch(error){if(version!==generation)return;list.replaceChildren();status.textContent=error.message;loaded=false;controls();}
   }
-  async function open(restore=false){if(byId('accountDialog').open)byId('accountDialog').close();
-    try{const currentActor=await identity();if(actor!==currentActor){clear();actor=currentActor;}if(!dialog.open)dialog.showModal();back.hidden=true;
+  async function open(restore=false){const account=window.HauntologiesAccount?.snapshot();if(!window.HauntologiesAccount?.isCurrent(account))return;const version=generation;if(byId('accountDialog').open)byId('accountDialog').close();
+    try{const currentActor=await identity();if(version!==generation||!window.HauntologiesAccount.isCurrent(account)||currentActor!==account.actor)return;if(actor!==currentActor){clear();actor=currentActor;}if(!dialog.open)dialog.showModal();back.hidden=true;
       if(restore&&loaded){dialog.scrollTop=scroll;if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});}else load(restore?page:1);
-    }catch(error){clear();status.textContent=error.message;if(!dialog.open)dialog.showModal();}
+    }catch(error){if(version!==generation||!window.HauntologiesAccount.isCurrent(account))return;clear();status.textContent=error.message;}
   }
   byId('openOwnEdits').addEventListener('click',()=>open());byId('closeOwnEdits').addEventListener('click',()=>dialog.close());
   byId('previousEdits').addEventListener('click',()=>load(page-1));byId('nextEdits').addEventListener('click',()=>load(page+1));

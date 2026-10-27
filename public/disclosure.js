@@ -2,9 +2,9 @@
 // One unfold treatment for every <details> on the page, including ones rendered later.
 // The element's own height is animated, so no content is rewrapped and existing selectors hold.
 (() => {
-  // Choose the initial mobile state once. Resizing must not override a user's toggle.
+  // Choose the initial Event details state once, at every viewport. Preserve later toggles.
   const eventDetails = document.getElementById('eventDetails');
-  if (eventDetails && matchMedia('(max-width: 760px)').matches) eventDetails.open = false;
+  if (eventDetails) eventDetails.open = false;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const DURATION = 220, EASE = 'cubic-bezier(.2,.7,.2,1)';
   const running = new WeakMap();

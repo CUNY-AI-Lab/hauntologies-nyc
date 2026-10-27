@@ -82,3 +82,10 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 .map-load-notice{position:fixed;z-index:1000;left:50%;bottom:calc(var(--panel-bottom) + 8px);transform:translateX(-50%);display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 24px);padding:8px 12px;border:1px solid #827563;background:#11110f;color:var(--ink);font-size:12px}
 .map-load-notice>span{min-width:0;overflow-wrap:anywhere}
 .map-load-notice>button{flex:none;min-height:44px}
+
+/* The review lantern stays legible at 28px; low-amplitude candle sputter, never a strobe. */
+.review-lantern .lantern-shell{fill:#483016}
+.review-lantern .lantern-eyes{fill:#ffdf77;stroke:#ffdf77;stroke-width:.6;filter:drop-shadow(0 0 1.5px #ffae38);animation:lantern-glow 5.8s linear infinite}
+.review-lantern .lantern-mouth{fill:#eeb353;stroke-width:.6}
+@keyframes lantern-glow{0%,26%,53%,79%,100%{opacity:1;filter:drop-shadow(0 0 2.5px #ffd978)}18%,61%,91%{opacity:.88;filter:drop-shadow(0 0 1.5px #ffae38)}22%,69%,95%{opacity:.96;filter:drop-shadow(0 0 2px #ffc85f)}48%,74%{opacity:.82;filter:drop-shadow(0 0 1px #ffae38)}}
+@media(prefers-reduced-motion:reduce){.review-lantern .lantern-eyes{animation:none;opacity:1;filter:drop-shadow(0 0 2px #ffae38)}}

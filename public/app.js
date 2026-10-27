@@ -72,6 +72,7 @@ function emptyMapTarget(target){
  return target instanceof Element&&$('map').contains(target)&&!$('map').inert&&!document.querySelector('dialog[open]')&&!target.closest('.leaflet-marker-icon,.leaflet-popup,.leaflet-tooltip,.leaflet-interactive,.leaflet-control,button,a,input,select,textarea,[role="button"]');
 }
 function requestContributionPoint(latlng,replace=false){
+ if(!window.HauntologiesAccount?.canContribute())return false;
  const accepted=window.ContributionPoint?.request({latitude:latlng.lat,longitude:latlng.lng},{replace});
  if(accepted){stopContributionPicking();toolOpener='map';$('chooseContributionPoint').focus({preventScroll:true});$('newLocationStatus').scrollIntoView({block:'nearest'});}
  else if(window.ContributionPoint)$('mapStatus').textContent='Location unavailable for this contribution';
@@ -170,7 +171,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 // A fresh pin lands with one pulse; redrawing an existing pin does not repeat it.
 window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{
- if(!map)return;
+ if(!map||!window.HauntologiesAccount?.canContribute())return;
  // Contribute stays on screen while a point is chosen. It stops being modal so the map takes the click;
  // returning to the Contribute tab after a pin or cancel restores modality.
  for(const id of ['toolsMenu','layersPanel','filtersPanel'])$(id).hidden=true;
@@ -223,6 +224,7 @@ function openSidecar(open=true){
  document.body.classList.toggle('sidecar-open',open);
 }
 function switchPanel(id){
+ if(id==='draftPanel'&&!window.HauntologiesAccount?.canContribute())return;
  openSidecar();document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
  $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Contribute';
@@ -233,26 +235,24 @@ function switchPanel(id){
  if(id==='draftPanel')window.ContributionPoint?.show();
 }
 async function requireEditAccount(button, action){
- if(button.disabled)return;
- const request=++editRequest;
- const current=()=>request===editRequest&&!$('toolsMenu').hidden&&!document.querySelector('dialog[open]');
+ if(button.disabled||!window.HauntologiesAccount?.canContribute())return;
+ const account=window.HauntologiesAccount.snapshot(),request=++editRequest,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+ const current=()=>request===editRequest&&window.HauntologiesAccount.isCurrent(account)&&!$('toolsMenu').hidden&&!document.querySelector('dialog[open]');
  button.disabled=true;
  try{
-  const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'});
+  const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
   if(!current())return;
-  if(response.status===401){
-   try{sessionStorage.setItem('hauntologies-return-edit','true');}catch{}
-   location.assign('/register?return=edit');return;
-  }
-  if(!response.ok){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
+  if(response.status===401){window.HauntologiesAccount.invalidate(account);return;}
+  if(!response.ok){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
   const session=await response.json();
   if(!current())return;
-  if(session.password_required){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
+  if(session.actor_id!==account.actor||session.password_required){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
   action();
- }catch{if(current())window.dispatchEvent(new CustomEvent('account-open-requested'));}
- finally{button.disabled=false;}
+ }catch{if(current()){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));}}
+ finally{clearTimeout(timer);button.disabled=false;}
 }
 $('toolsButton').addEventListener('click',()=>{
+ if(!window.HauntologiesAccount?.canContribute())return;
  const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';
  $('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));
  if(open)$('submitTool').focus();
@@ -358,10 +358,10 @@ if(map){
  document.addEventListener('pointerdown',event=>{pointers.add(event.pointerId);if(pointers.size>1)cancelHold();},{capture:true,passive:true});
  $('map').addEventListener('pointerdown',event=>{
   cancelHold();
-  if(event.button!==0||event.isPrimary===false||pointers.size!==1||event.ctrlKey||event.metaKey||event.altKey||event.shiftKey||!emptyMapTarget(event.target))return;
+  if(!window.HauntologiesAccount?.canContribute()||event.button!==0||event.isPrimary===false||pointers.size!==1||event.ctrlKey||event.metaKey||event.altKey||event.shiftKey||!emptyMapTarget(event.target))return;
   const candidate={id:event.pointerId,x:event.clientX,y:event.clientY,latlng:map.mouseEventToLatLng(event),timer:null};
   hold=candidate;candidate.timer=setTimeout(()=>{
-   if(hold!==candidate||!pointers.has(candidate.id)||!emptyMapTarget(event.target))return;
+   if(!window.HauntologiesAccount?.canContribute()||hold!==candidate||!pointers.has(candidate.id)||!emptyMapTarget(event.target))return;
    hold=null;suppressClickUntil=performance.now()+1000;
    requestContributionPoint(candidate.latlng,contributionPicking);
   },650);
@@ -454,7 +454,7 @@ function visibleMapCenter(){
 function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.getVisibleParent&&pointLayer.getVisibleParent(marker)!==marker)map.setZoom(Math.min(map.getMaxZoom(),18),{animate:false});map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false});}
 function revealPlaceCard(card){if(!card)return;const panel=$('casePanel');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-8;placeLayout?.remember();}
 function selectRecord(r){
- if(selectingContributionPlace){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
+ if(selectingContributionPlace&&window.HauntologiesAccount?.canContribute()){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
  selected=r.id;renderRecords();switchPanel('casePanel');map?.closePopup();
  const button=[...$('recordList').querySelectorAll('button[data-record-id]'),...$('unlocatedList').querySelectorAll('button[data-record-id]')].find(b=>b.dataset.recordId===r.id);revealPlaceCard(button?.closest('.place-card'));button?.focus({preventScroll:true});revealRecord(r);
 }
@@ -466,9 +466,9 @@ for(const id of ['periodStart','periodEnd'])$(id).addEventListener('input',()=>{
 $('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFilters').addEventListener('click',()=>resetFilters());
 function addContributionAction(card,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
- const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
- button.addEventListener('click',()=>{switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
- const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
+ const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.requiresAccount='';button.hidden=!window.HauntologiesAccount?.canContribute();button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
+ button.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
+ const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.requiresAccount='';edit.hidden=!window.HauntologiesAccount?.canContribute();edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
  edit.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}})));card.append(edit);
 }
 function placeFacts(r){
@@ -511,7 +511,7 @@ window.addEventListener('edits-place-requested',async event=>{await refreshPubli
 
 refreshPublishedPlaces();refreshPendingPlaces();
 
-window.addEventListener('contributions-place-pick-requested',()=>{closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
+window.addEventListener('contributions-place-pick-requested',()=>{if(!window.HauntologiesAccount?.canContribute())return;closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');
  // The visible place field replaced the old picker button, which is now hidden.
  ($('contributionPlace')||$('chooseExistingPlace')).focus();}});
@@ -574,3 +574,5 @@ function setupPlaceLayout(){
  return{layout,remember};
 }
 placeLayout=setupPlaceLayout();
+
+window.addEventListener('hauntologies-auth-changed',()=>{editRequest++;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();});
