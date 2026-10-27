@@ -110,7 +110,7 @@ function pendingPopup(place,record){
  const where=document.createElement('p');where.className='pending-place-where';where.textContent=pendingWhere(place,record);root.append(where);
  if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)where.textContent=v.label;}).catch(()=>{});
  if(place.description){const p=document.createElement('p');p.textContent=place.description;root.append(p);}
- const note=document.createElement('p');note.className='small';note.textContent='Shared by a contributor. Not yet checked by a reviewer.';root.append(note);return root;
+ const note=document.createElement('p');note.className='small';note.textContent=place.status==='approved'?'Shared by a contributor. Approved by a reviewer; publication is a separate step.':place.status==='changes_requested'?'Shared by a contributor. A reviewer has requested more information.':'Shared by a contributor. Not yet checked by a reviewer.';root.append(note);return root;
 }
 function pendingPoint(place,records){const record=place.record_id?records.get(place.record_id):null,lat=record?Number(record.latitude):place.latitude,lon=record?Number(record.longitude):place.longitude;return Number.isFinite(lat)&&Number.isFinite(lon)?{record,lat,lon}:null;}
 function renderPendingPlaces(){
@@ -142,12 +142,15 @@ function renderPendingList(records,own){
  const feed=$('pendingPlacesFeed');if(!feed)return;
  const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
  feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
- $('pendingPlacesList').replaceChildren(...shown.map(place=>{
-  const row=document.createElement('li'),button=document.createElement('button'),record=place.record_id?records.get(place.record_id):null;button.type='button';
-  const title=document.createElement('strong');title.textContent=place.title;const meta=document.createElement('span');
-  meta.textContent=[own.has(place.id)?'Yours':'',pendingLabel(place),pendingWhere(place,record)].filter(Boolean).join(' · ');
-  if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)meta.textContent+=' · '+v.label;}).catch(()=>{});
-  button.append(title,meta);button.addEventListener('click',()=>bringUpPending(place));row.append(button);return row;
+ const list=$('pendingPlacesList'),openLocations=new Set([...list.querySelectorAll('details[open]')].map(node=>node.dataset.placeId));
+ list.replaceChildren(...shown.map(place=>{
+  const row=document.createElement('li'),record=place.record_id?records.get(place.record_id):null;
+  const title=document.createElement('strong');title.className='pending-title';title.textContent=place.title;
+  const status=document.createElement('p');status.className='pending-status';status.textContent=[own.has(place.id)?'Yours':'',pendingLabel(place)].filter(Boolean).join(' · ');row.append(title,status);
+  if(record){const attached=document.createElement('p');attached.className='pending-target';const label=document.createElement('span');label.textContent='Adds to';const name=document.createElement('strong');name.textContent=record.title||'A mapped place';attached.append(label,name);row.append(attached);}
+  const location=document.createElement('details'),toggle=document.createElement('summary'),where=document.createElement('p');location.className='pending-location';location.dataset.placeId=place.id;location.open=openLocations.has(place.id);toggle.textContent='Location';where.textContent=record?whereLabel(record):place.location_text||'Location marked on the map';location.append(toggle,where);row.append(location);
+  if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)where.textContent=v.label;}).catch(()=>{});
+  const button=document.createElement('button');button.type='button';button.className='pending-map-action';button.textContent='Show on map';button.setAttribute('aria-label','Show '+place.title+' on map');button.addEventListener('click',()=>bringUpPending(place));row.append(button);return row;
  }));
 }
 let pendingSignature='';
@@ -480,7 +483,7 @@ function placeFacts(r){
 }
 
 function appendPlaceRecord(card,r){
- return window.PlaceRecordView.append(card,r,{summary:PlaceSummary.view(r),safeUrl});
+ return window.PlaceRecordView.append(card,r,{summary:PlaceSummary.view(r),near:vicinityOf(r)?.area||'',safeUrl});
 }
 
 function renderDetail(r){

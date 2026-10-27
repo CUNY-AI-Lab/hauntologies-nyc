@@ -21,7 +21,10 @@
     return 'Unclassified';
   }
   function location(record){
-    const original=String(record.location_text||record.place_original||record.borough||'Unknown').replace(/\s*·\s*/g,', ');
+    // The imported Pelham row contains an image label in its location cell.
+    // Hide only this known artifact; preserve the source record and its existing borough.
+    const locationText=record.id==='demolished-nyc-106'&&/^\s*Image:\s*Map\s*$/i.test(record.location_text||'')?'':record.location_text;
+    const original=String(locationText||record.place_original||record.borough||'Unknown').replace(/\s*·\s*/g,', ');
     const clean=original.replace(/\uFEFF/g,'');
     const match=clean.match(/^\s*\d+(?:\.\d+)?[°º][\s\S]*?\/\s*(-?\d+(?:\.\d+)?)\s*;\s*(-?\d+(?:\.\d+)?)\s*,\s*(.+)$/u);
     return match&&Number(match[1])===Number(record.latitude)&&Number(match[2])===Number(record.longitude)?match[3].trim():original;
