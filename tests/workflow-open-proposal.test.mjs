@@ -301,23 +301,23 @@ test('a revised approved proposal cannot inherit its earlier approval', async t 
   assert.equal(count(h, 'workflow_jobs'), 0);
 });
 
-test('an admin place approved before approval could publish reaches the map after revise, Start review and approve', async t => {
-  const admin = 'contributor', h = harness({ authorization: { reviewers: [admin], publishers: [admin], admins: [admin] } }); t.after(() => h.db.close());
+test('a legacy review-only approval reaches the map after revision and independent review', async t => {
+  const admin = 'reviewer', h = harness({ authorization: { reviewers: [admin], publishers: [admin], admins: [admin] } }); t.after(() => h.db.close());
   const created = await submit(h, envelope({ geometry: point() }, { title: 'Thomas Shoe Factory' }));
-  status(await call(h, 'review', review(h, created.submission)), 200);
+  status(await call(h, 'review', review(h, created.submission),{actor:admin}), 200);
   // The approval as an earlier operator recorded it: review-only, so it can never publish.
   const row = h.db.native.prepare('SELECT id,binding_json FROM workflow_approvals').get(), binding = { ...JSON.parse(row.binding_json), application_applicable: false };
   h.db.native.prepare('UPDATE workflow_approvals SET binding_json=?,approval_hash=? WHERE id=?').run(JSON.stringify(binding), await hash(stable(binding)), row.id);
-  const stuck = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 1, approval_hash: await hash(stable(binding)) });
+  const stuck = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 1, approval_hash: await hash(stable(binding)) },{actor:admin});
   status(stuck, 409); assert.equal(stuck.body.error, 'approval_predates_application');
   const revised = await call(h, 'revise', { idempotency_key: key(h, 'revise'), submission_id: created.submission.id, expected_revision: 1, submission_json: created.request.submission_json }); status(revised, 200);
   assert.equal(revised.body.submission.status, 'draft');
-  const queued = await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: created.submission.id, expected_revision: 2, action: 'ready_for_review', rationale: 'Revision ready for review.' }); status(queued, 200);
+  const queued = await call(h, 'triage', { idempotency_key: key(h, 'triage'), submission_id: created.submission.id, expected_revision: 2, action: 'ready_for_review', rationale: 'Revision ready for review.' },{actor:admin}); status(queued, 200);
   assert.equal(queued.body.submission.status, 'submitted');
-  const approved = await call(h, 'review', review(h, queued.body.submission)); status(approved, 200);
+  const approved = await call(h, 'review', review(h, queued.body.submission),{actor:admin}); status(approved, 200);
   assert.equal(approved.body.submission.application.applicable, true);
-  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 2, approval_hash: approved.body.submission.approval.approval_hash }); status(staged, 201);
-  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Published from Review on approval.' } }), 200);
+  const staged = await call(h, 'apply', { idempotency_key: key(h, 'apply'), submission_id: created.submission.id, expected_revision: 2, approval_hash: approved.body.submission.approval.approval_hash },{actor:admin}); status(staged, 201);
+  status(await call(h, 'verify', { idempotency_key: key(h, 'verify'), job_id: staged.body.job.id, map_list_check: { status: 'pass', evidence: 'Checked the persisted preview against the proposed map point and list.' } },{actor:admin}), 200);
   assert.deepEqual((await publishedRecords(h.db)).map(r => r.title), ['Thomas Shoe Factory']);
 });
 
@@ -381,4 +381,44 @@ test('a stale saved preview is displayed fresh before approval and old publicati
   // Changed content is still refused.
   const other = await call(h, 'submit', { idempotency_key: key(h, 'submit'), submission_json: JSON.stringify(envelope({ geometry: point() }, { title: 'Second place' }), null, 2) }, { actor: A });
   const changed = await call(h, 'review', review(h, { ...other.body.submission, payload_hash: 'e'.repeat(64) }), { actor: B }); status(changed, 409); assert.equal(changed.body.error, 'proposal_changed');
+});
+
+const peerA='map_00000000-0000-4000-8000-00000000000a',peerB='map_00000000-0000-4000-8000-00000000000b',peerC='map_00000000-0000-4000-8000-00000000000c';
+async function peerJob(t){
+ const h=harness({authorization:{reviewers:[],publishers:[],everyone:true}});t.after(()=>h.db.close());
+ const raw=JSON.stringify(envelope({geometry:point()},{title:'Synthetic peer verification'}));
+ const sent=await call(h,'submit',{idempotency_key:key(h,'submit'),submission_json:raw},{actor:peerA});status(sent,201);
+ status(await call(h,'review',review(h,sent.body.submission),{actor:peerA}),403);
+ const approved=await call(h,'review',review(h,sent.body.submission),{actor:peerB});status(approved,200);
+ const staged=await call(h,'apply',{idempotency_key:key(h,'apply'),submission_id:sent.body.submission.id,expected_revision:1,approval_hash:approved.body.submission.approval.approval_hash},{actor:peerB});status(staged,201);
+ return{h,s:sent.body.submission,job:staged.body.job,raw};
+}
+const peerVerification=(h,job)=>({idempotency_key:key(h,'verify'),job_id:job.id,map_list_check:{status:'pass',evidence:'Synthetic check: persisted map point and list title match the independently reviewed proposal.'}});
+test('ordinary nonauthor can review and verify; author and anonymous cannot finalize',async t=>{
+ const {h,s,job}=await peerJob(t);
+ const b=(await call(h,'dashboard',undefined,{actor:peerB})).body;
+ assert.equal(b.capabilities.is_admin,false);assert.equal(b.capabilities.can_apply,true);assert.equal(b.jobs.find(j=>j.id===job.id).can_verify,true);
+ const a=(await call(h,'dashboard',undefined,{actor:peerA})).body;assert.equal(a.jobs.find(j=>j.id===job.id).can_verify,false);
+ const denied=await call(h,'verify',peerVerification(h,job),{actor:peerA});status(denied,403);assert.equal(denied.body.error,'self_verification_forbidden');
+ status(await call(h,'verify',peerVerification(h,job),{actor:null}),401);
+ status(await call(h,'verify',{...peerVerification(h,job),map_list_check:{status:'not_tested',evidence:'Not checked'}},{actor:peerB}),409);
+ assert.equal((await publishedRecords(h.db)).length,0);
+ status(await call(h,'verify',peerVerification(h,job),{actor:peerB}),200);
+ assert.equal((await publishedRecords(h.db)).length,1);
+ assert.equal((await call(h,'submission?id='+s.id,undefined,{actor:peerA})).body.submission.status,'merged');
+});
+test('two nonauthors racing verification activate only once',async t=>{
+ const {h,job}=await peerJob(t);const results=await Promise.all([call(h,'verify',peerVerification(h,job),{actor:peerB}),call(h,'verify',peerVerification(h,job),{actor:peerC})]);
+ assert.equal(results.filter(r=>r.status===200).length,1);assert.equal(results.filter(r=>r.status===409).length,1);assert.equal((await publishedRecords(h.db)).length,1);
+});
+test('same-owner same-key verification retry is idempotent',async t=>{
+ const {h,job}=await peerJob(t),body=peerVerification(h,job);const first=await call(h,'verify',body,{actor:peerB}),again=await call(h,'verify',body,{actor:peerB});status(first,200);status(again,200);assert.equal(first.body.receipt.id,again.body.receipt.id);assert.equal(again.body.reused,true);assert.equal((await publishedRecords(h.db)).length,1);
+});
+test('pending verification freezes revision; an older failed job cannot verify a new revision',async t=>{
+ const {h,s,job,raw}=await peerJob(t);
+ const revise=()=>call(h,'revise',{idempotency_key:key(h,'revise'),submission_id:s.id,expected_revision:1,submission_json:raw},{actor:peerA});
+ status(await revise(),409);
+ status(await call(h,'verify',{...peerVerification(h,job),map_list_check:{status:'fail',evidence:'Synthetic preview needs correction.'}},{actor:peerB}),200);
+ status(await revise(),200);
+ const stale=await call(h,'verify',peerVerification(h,job),{actor:peerB});assert.ok([404,409].includes(stale.status));assert.equal((await publishedRecords(h.db)).length,0);
 });

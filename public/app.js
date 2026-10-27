@@ -1,6 +1,8 @@
 'use strict';
 const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeUrl=window.DraftModel.safeUrl;
+// Recovery assets are enhancements: an interrupted download must not stop map initialization.
+const publicReads=window.HauntologiesPublicReads||{json:async path=>{const response=await fetch(path,{cache:'no-store'});if(!response.ok)throw new Error('Public map read unavailable');return response.json();},singleFlight:task=>task};
 const link=(url,label)=>safeUrl(url)?`<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${esc(label)}</a>`:esc(label);
 const displayLabel=value=>String(value??'').replace(/\s*·\s*/g,', ');
 // Where a place is, by its nearest cross streets and neighbourhood (data/place-vicinity.json,
@@ -25,14 +27,15 @@ const NYC_BOUNDS=[[40.47737324425922,-74.25874745984156],[40.91766180885905,-73.
 const LAYERS=window.HAUNT_LAYERS||[], layerById=new Map(LAYERS.map(layer=>[layer.id,layer]));
 const layerOpacities=new Map();
 const pilot={...window.HAUNT_PILOT};
-let drafts=[],selected=pilot.id,picking=false,selectingContributionPlace=false,map,imagery,pointLayer,baseErrors=0,loadToken=0;
+let drafts=[],selected=pilot.id,picking=false,selectingContributionPlace=false,map,imagery,pointLayer,baseMapHealth,loadToken=0;
 try{drafts=JSON.parse(localStorage.getItem(STORAGE)||'[]').filter(r=>(validCoordinates(r.latitude,r.longitude)||((r.latitude===null||r.latitude==='')&&(r.longitude===null||r.longitude==='')))&&(safeUrl(r.source_url)||r.original_submission||r.sources?.length)).slice(0,500)}catch{}
 const sourceInventory=window.NYC_INVENTORY||{records:[],audits:[]};
 pilot.category='pilot';pilot.borough='Manhattan';
 let hostedRecords=[],publishedPlaces=[];
 const allRecords=()=>[...new Map([...drafts,pilot,...sourceInventory.records,...publishedPlaces].map(record=>[record.id,record])).values()];
 let publishedRequest=0,publishedSignature='';
-async function refreshPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const response=await fetch('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''),{cache:'no-store'});if(!response.ok)return false;const page=await response.json();if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+async function loadPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const page=await publicReads.json('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''));if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+const refreshPublishedPlaces=publicReads.singleFlight(loadPublishedPlaces);
 window.HauntologiesPublic=Object.freeze({refresh:refreshPublishedPlaces});
 window.addEventListener('focus',refreshPublishedPlaces);
 function setHostedRecords(records){hostedRecords=records;populateFacets();renderRecords()}
@@ -69,6 +72,7 @@ function emptyMapTarget(target){
  return target instanceof Element&&$('map').contains(target)&&!$('map').inert&&!document.querySelector('dialog[open]')&&!target.closest('.leaflet-marker-icon,.leaflet-popup,.leaflet-tooltip,.leaflet-interactive,.leaflet-control,button,a,input,select,textarea,[role="button"]');
 }
 function requestContributionPoint(latlng,replace=false){
+ if(!window.HauntologiesAccount?.canContribute())return false;
  const accepted=window.ContributionPoint?.request({latitude:latlng.lat,longitude:latlng.lng},{replace});
  if(accepted){stopContributionPicking();toolOpener='map';$('chooseContributionPoint').focus({preventScroll:true});$('newLocationStatus').scrollIntoView({block:'nearest'});}
  else if(window.ContributionPoint)$('mapStatus').textContent='Location unavailable for this contribution';
@@ -147,16 +151,19 @@ function renderPendingList(records,own){
  }));
 }
 let pendingSignature='';
-async function refreshPendingPlaces(){
+async function loadPendingPlaces(){
  const request=++pendingRequest;
- try{const response=await fetch('/api/pending-places',{cache:'no-store'});if(!response.ok)return;const data=await response.json();if(request!==pendingRequest||!Array.isArray(data.places))return;
+ try{const data=await publicReads.json('/api/pending-places');if(request!==pendingRequest||!Array.isArray(data.places))return;
   const places=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string'),signature=JSON.stringify(places);
   // Redrawing closes an open popup, so an unchanged list is left alone.
   if(signature===pendingSignature)return;pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();}catch{}
 }
+const refreshPendingPlaces=publicReads.singleFlight(loadPendingPlaces);
 window.addEventListener('contributions-records-changed',renderPendingPlaces);
 window.addEventListener('contributions-own-places',refreshPendingPlaces);
 window.addEventListener('focus',refreshPendingPlaces);
+window.addEventListener('online',()=>{refreshPendingPlaces();refreshPublishedPlaces();});
+window.addEventListener('pageshow',()=>{refreshPendingPlaces();refreshPublishedPlaces();});
 // Places under review and newly published ones keep up on their own while the map is on screen,
 // and catch up as soon as it comes back (iOS rarely sends focus when a tab returns).
 setInterval(()=>{if(document.visibilityState==='visible'){refreshPendingPlaces();refreshPublishedPlaces();}},30000);
@@ -164,7 +171,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 // A fresh pin lands with one pulse; redrawing an existing pin does not repeat it.
 window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{
- if(!map)return;
+ if(!map||!window.HauntologiesAccount?.canContribute())return;
  // Contribute stays on screen while a point is chosen. It stops being modal so the map takes the click;
  // returning to the Contribute tab after a pin or cancel restores modality.
  for(const id of ['toolsMenu','layersPanel','filtersPanel'])$(id).hidden=true;
@@ -217,6 +224,7 @@ function openSidecar(open=true){
  document.body.classList.toggle('sidecar-open',open);
 }
 function switchPanel(id){
+ if(id==='draftPanel'&&!window.HauntologiesAccount?.canContribute())return;
  openSidecar();document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
  $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Contribute';
@@ -227,26 +235,24 @@ function switchPanel(id){
  if(id==='draftPanel')window.ContributionPoint?.show();
 }
 async function requireEditAccount(button, action){
- if(button.disabled)return;
- const request=++editRequest;
- const current=()=>request===editRequest&&!$('toolsMenu').hidden&&!document.querySelector('dialog[open]');
+ if(button.disabled||!window.HauntologiesAccount?.canContribute())return;
+ const account=window.HauntologiesAccount.snapshot(),request=++editRequest,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+ const current=()=>request===editRequest&&window.HauntologiesAccount.isCurrent(account)&&!$('toolsMenu').hidden&&!document.querySelector('dialog[open]');
  button.disabled=true;
  try{
-  const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'});
+  const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
   if(!current())return;
-  if(response.status===401){
-   try{sessionStorage.setItem('hauntologies-return-edit','true');}catch{}
-   location.assign('/register?return=edit');return;
-  }
-  if(!response.ok){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
+  if(response.status===401){window.HauntologiesAccount.invalidate(account);return;}
+  if(!response.ok){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
   const session=await response.json();
   if(!current())return;
-  if(session.password_required){window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
+  if(session.actor_id!==account.actor||session.password_required){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));return;}
   action();
- }catch{if(current())window.dispatchEvent(new CustomEvent('account-open-requested'));}
- finally{button.disabled=false;}
+ }catch{if(current()){window.HauntologiesAccount.invalidate(account);window.dispatchEvent(new CustomEvent('account-open-requested'));}}
+ finally{clearTimeout(timer);button.disabled=false;}
 }
 $('toolsButton').addEventListener('click',()=>{
+ if(!window.HauntologiesAccount?.canContribute())return;
  const open=$('toolsMenu').hidden;closeTools();toolOpener='toolsButton';
  $('toolsMenu').hidden=!open;$('toolsButton').setAttribute('aria-expanded',String(open));
  if(open)$('submitTool').focus();
@@ -303,7 +309,7 @@ const loadedTiles=new Set(),failedTiles=new Set();
 function syncTileCounts(){layerLoaded=loadedTiles.size;layerFailed=failedTiles.size}
 function updateLayerStatus(){
  let status='';
- if(!activeLayer)status=baseErrors?'Street map unavailable':'';
+ if(!activeLayer)status=baseMapHealth?.message||'';
  else if(!L.latLngBounds(activeLayer.bounds).intersects(map.getBounds()))status='No imagery here';
  else if(layerFailed)status=layerLoaded?'Some tiles unavailable':'Map unavailable';
  else if(layerSlow)status='Map loading slowly';
@@ -330,7 +336,7 @@ function changeYear(id){
  imagery.on('load',()=>{if(token!==loadToken)return;layerLoading=false;layerSlow=false;updateLayerStatus()});
  imagery.addTo(map);updateLayerStatus();
 }
-if(window.L){map=L.map('map',{zoomControl:false,minZoom:9,maxZoom:20,maxBounds:[[40.43,-74.33],[40.99,-73.61]],maxBoundsViscosity:.8,doubleClickZoom:true,tapHold:false,scrollWheelZoom:true,wheelDebounceTime:80,wheelPxPerZoomLevel:120,zoomSnap:.25,zoomDelta:1,zoomAnimation:!matchMedia('(prefers-reduced-motion: reduce)').matches}).setView([40.71,-73.98],10);const zoom=L.control.zoom({position:'topright'}).addTo(map);$('zoomTools').append(zoom.getContainer());for(const id of toolPanels){L.DomEvent.disableClickPropagation($(id));L.DomEvent.disableScrollPropagation($(id))}map.createPane('history');map.getPane('history').style.zIndex=250;map.createPane('researchPoints');map.getPane('researchPoints').style.zIndex=450;L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{className:'street-basemap',maxNativeZoom:19,maxZoom:20,noWrap:true,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'}).on('tileerror',()=>{baseErrors++;$('mapStatus').textContent='Street map unavailable'}).addTo(map);pointLayer=(L.markerClusterGroup?L.markerClusterGroup({animate:false,clusterPane:'researchPoints',maxClusterRadius:44,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:cluster=>L.divIcon({html:'<span>'+cluster.getChildCount()+'</span>',className:'research-cluster',iconSize:[44,44]})}):L.layerGroup()).addTo(map);uncertaintyLayer=L.layerGroup().addTo(map);map.on('click',e=>{if(!picking)return;const f=$('contributionForm');f.elements.latitude.value=e.latlng.lat.toFixed(6);f.elements.longitude.value=e.latlng.lng.toFixed(6);picking=false;document.body.classList.remove('picking');$('pickPoint').textContent='Choose on map';$('formStatus').textContent='Point selected';switchPanel('draftPanel')});map.on('moveend',updateLayerStatus);changeYear('none');fetch('data/nyc-borough-boundaries.geojson').then(r=>r.json()).then(data=>L.geoJSON(data,{style:{color:'#7c817a',weight:1,fillColor:'#202721',fillOpacity:.13},interactive:false}).addTo(map)).catch(()=>{})}else{$('mapStatus').textContent='Map unavailable'}
+if(window.L){map=L.map('map',{zoomControl:false,minZoom:9,maxZoom:20,maxBounds:[[40.43,-74.33],[40.99,-73.61]],maxBoundsViscosity:.8,doubleClickZoom:true,tapHold:false,scrollWheelZoom:true,wheelDebounceTime:80,wheelPxPerZoomLevel:120,zoomSnap:.25,zoomDelta:1,zoomAnimation:!matchMedia('(prefers-reduced-motion: reduce)').matches}).setView([40.71,-73.98],10);const zoom=L.control.zoom({position:'topright'}).addTo(map);$('zoomTools').append(zoom.getContainer());for(const id of toolPanels){L.DomEvent.disableClickPropagation($(id));L.DomEvent.disableScrollPropagation($(id))}map.createPane('history');map.getPane('history').style.zIndex=250;map.createPane('researchPoints');map.getPane('researchPoints').style.zIndex=450;const streets=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{className:'street-basemap',maxNativeZoom:19,maxZoom:20,noWrap:true,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'});baseMapHealth=window.HauntologiesMapRecovery?.attach(map,streets,updateLayerStatus);streets.addTo(map);pointLayer=(L.markerClusterGroup?L.markerClusterGroup({animate:false,clusterPane:'researchPoints',maxClusterRadius:44,showCoverageOnHover:false,spiderfyOnMaxZoom:true,iconCreateFunction:cluster=>L.divIcon({html:'<span>'+cluster.getChildCount()+'</span>',className:'research-cluster',iconSize:[44,44]})}):L.layerGroup()).addTo(map);uncertaintyLayer=L.layerGroup().addTo(map);map.on('click',e=>{if(!picking)return;const f=$('contributionForm');f.elements.latitude.value=e.latlng.lat.toFixed(6);f.elements.longitude.value=e.latlng.lng.toFixed(6);picking=false;document.body.classList.remove('picking');$('pickPoint').textContent='Choose on map';$('formStatus').textContent='Point selected';switchPanel('draftPanel')});map.on('moveend',updateLayerStatus);changeYear('none');fetch('data/nyc-borough-boundaries.geojson').then(r=>r.json()).then(data=>L.geoJSON(data,{style:{color:'#7c817a',weight:1,fillColor:'#202721',fillOpacity:.13},interactive:false}).addTo(map)).catch(()=>{})}else{$('mapStatus').textContent='Map unavailable'}
 if(map){
  let lastInteractivePress=null;
  $('map').addEventListener('pointerdown',event=>{
@@ -352,10 +358,10 @@ if(map){
  document.addEventListener('pointerdown',event=>{pointers.add(event.pointerId);if(pointers.size>1)cancelHold();},{capture:true,passive:true});
  $('map').addEventListener('pointerdown',event=>{
   cancelHold();
-  if(event.button!==0||event.isPrimary===false||pointers.size!==1||event.ctrlKey||event.metaKey||event.altKey||event.shiftKey||!emptyMapTarget(event.target))return;
+  if(!window.HauntologiesAccount?.canContribute()||event.button!==0||event.isPrimary===false||pointers.size!==1||event.ctrlKey||event.metaKey||event.altKey||event.shiftKey||!emptyMapTarget(event.target))return;
   const candidate={id:event.pointerId,x:event.clientX,y:event.clientY,latlng:map.mouseEventToLatLng(event),timer:null};
   hold=candidate;candidate.timer=setTimeout(()=>{
-   if(hold!==candidate||!pointers.has(candidate.id)||!emptyMapTarget(event.target))return;
+   if(!window.HauntologiesAccount?.canContribute()||hold!==candidate||!pointers.has(candidate.id)||!emptyMapTarget(event.target))return;
    hold=null;suppressClickUntil=performance.now()+1000;
    requestContributionPoint(candidate.latlng,contributionPicking);
   },650);
@@ -448,7 +454,7 @@ function visibleMapCenter(){
 function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.getVisibleParent&&pointLayer.getVisibleParent(marker)!==marker)map.setZoom(Math.min(map.getMaxZoom(),18),{animate:false});map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false});}
 function revealPlaceCard(card){if(!card)return;const panel=$('casePanel');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-8;placeLayout?.remember();}
 function selectRecord(r){
- if(selectingContributionPlace){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
+ if(selectingContributionPlace&&window.HauntologiesAccount?.canContribute()){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
  selected=r.id;renderRecords();switchPanel('casePanel');map?.closePopup();
  const button=[...$('recordList').querySelectorAll('button[data-record-id]'),...$('unlocatedList').querySelectorAll('button[data-record-id]')].find(b=>b.dataset.recordId===r.id);revealPlaceCard(button?.closest('.place-card'));button?.focus({preventScroll:true});revealRecord(r);
 }
@@ -460,9 +466,9 @@ for(const id of ['periodStart','periodEnd'])$(id).addEventListener('input',()=>{
 $('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFilters').addEventListener('click',()=>resetFilters());
 function addContributionAction(card,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
- const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
- button.addEventListener('click',()=>{switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
- const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
+ const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.requiresAccount='';button.hidden=!window.HauntologiesAccount?.canContribute();button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
+ button.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
+ const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.requiresAccount='';edit.hidden=!window.HauntologiesAccount?.canContribute();edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
  edit.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}})));card.append(edit);
 }
 function placeFacts(r){
@@ -505,7 +511,7 @@ window.addEventListener('edits-place-requested',async event=>{await refreshPubli
 
 refreshPublishedPlaces();refreshPendingPlaces();
 
-window.addEventListener('contributions-place-pick-requested',()=>{closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
+window.addEventListener('contributions-place-pick-requested',()=>{if(!window.HauntologiesAccount?.canContribute())return;closeTools();selectingContributionPlace=true;$('mapStatus').textContent='Choose an existing place on the map or in Places';$('map').focus();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingContributionPlace){selectingContributionPlace=false;updateLayerStatus();switchPanel('draftPanel');
  // The visible place field replaced the old picker button, which is now hidden.
  ($('contributionPlace')||$('chooseExistingPlace')).focus();}});
@@ -568,3 +574,5 @@ function setupPlaceLayout(){
  return{layout,remember};
 }
 placeLayout=setupPlaceLayout();
+
+window.addEventListener('hauntologies-auth-changed',()=>{editRequest++;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();});

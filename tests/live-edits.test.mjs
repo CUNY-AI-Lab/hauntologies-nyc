@@ -137,15 +137,16 @@ test('successive edits build on the published version', async t => {
   assert.equal((await target(h)).expected_version, v2.expected_version + 1);
 });
 
-test('an admin may approve and publish their own edit, and the approval records it', async t => {
-  const h = harness(t, { reviewers: ['admin', 'reviewer'], publishers: ['admin'], stewards: [], admins: ['admin'] });
+test('admin authors cannot review or verify their own edit', async t => {
+  const h = harness(t, { reviewers: ['admin', 'reviewer'], publishers: ['admin','reviewer'], stewards: [], admins: ['admin'] });
   const s = await submit(h, edit(await target(h), { title: 'Admin edit' }), 'admin');
-  const approved = ok(await approve(h, s, 'admin'), 200).submission;
-  const binding = JSON.parse(h.db.native.prepare('SELECT binding_json FROM workflow_approvals WHERE submission_id=?').get(s.id).binding_json);
-  assert.equal(binding.admin_self_approval, true);
-  ok(await verify(h, ok(await apply(h, approved, 'admin'), 201).job, 'admin'), 200);
-  assert.equal((await publishedRecords(h.db))[0].title, 'Admin edit');
-  assert.equal(ok(await call(h, 'dashboard', undefined, 'admin'), 200).capabilities.can_self_approve, true);
+  const denied=await approve(h,s,'admin');assert.equal(denied.status,403);assert.equal(denied.body.error,'self_approval_forbidden');
+  assert.equal(ok(await call(h,'dashboard',undefined,'admin'),200).capabilities.can_self_approve,false);
+  const approved=ok(await approve(h,s,'reviewer'),200).submission;
+  const staged=ok(await apply(h,approved,'reviewer'),201);
+  const ownVerify=await verify(h,staged.job,'admin');assert.equal(ownVerify.status,403);assert.equal(ownVerify.body.error,'self_verification_forbidden');
+  assert.deepEqual(await publishedRecords(h.db),[]);
+  ok(await verify(h,staged.job,'reviewer'),200);
 });
 
 test('a reviewer who is not an admin still cannot approve their own work', async t => {
@@ -238,24 +239,22 @@ test('approved work can be sent back or withheld, but not while a release is sta
   assert.equal((await triage(c, 'request_information')).status, 409);
 });
 
-test('a self-approval is labelled as one, not as independent', async t => {
-  const h = harness(t, { reviewers: ['admin', 'reviewer'], publishers: ['admin'], stewards: [], admins: ['admin'] });
-  const s = await submit(h, edit(await target(h), { title: 'Labelled' }), 'admin');
-  const approved = ok(await approve(h, s, 'admin'), 200).submission;
-  assert.equal(approved.approval.independent, false);
-  assert.equal(approved.approval.admin_self_approval, true);
-  const kinds = ok(await call(h, 'submission?id=' + s.id, undefined, 'admin'), 200).submission.events.map(e => e.kind);
-  assert.ok(kinds.includes('admin_self_approval') && !kinds.includes('independent_approval'), kinds.join(','));
+test('legacy recorded admin self-approval cannot authorize a new publication', async t => {
+  const h = harness(t, { reviewers: ['admin', 'reviewer'], publishers: ['admin'], admins: ['admin'] });
+  const s = await submit(h, edit(await target(h), { title: 'Legacy self approval' }), 'admin');
+  const approved=ok(await approve(h,s,'reviewer'),200).submission;
+  h.db.native.prepare('UPDATE workflow_approvals SET reviewer_id=? WHERE submission_id=?').run('admin',s.id);
+  const result=await apply(h,approved,'admin');assert.equal(result.status,409);assert.equal(result.body.error,'approval_required');
 });
 
-// New places: approving a proposal with a map point publishes it as a map entry.
+// New places: independent review and explicit verification publish a map entry.
 const proposal = (payload = {}, extra = {}) => ({ schema_version: '1.0', type: 'open_proposal', task_ids: [], title: 'Thomas Shoe Factory', summary: 'Footsteps on the upper floor.',
   public_credit: { consent: true, label: 'A. Contributor' }, sources: [], attachments: [], targets: [],
   payload: { explanation: 'Footsteps on the upper floor.', sources_text: 'Brooklyn Daily Eagle, 1911.', geometry: { type: 'Point', coordinates: [-73.9575, 40.7079] }, ...payload }, ...extra });
 
 test('an admin approves a new place and it is on the map at its point', async t => {
   const h = harness(t, { reviewers: ['admin'], publishers: ['admin'], stewards: [], admins: ['admin'] });
-  const s = await submit(h, proposal(), 'admin');
+  const s = await submit(h, proposal(), 'author');
   assert.equal(s.application.applicable, true);
   const approved = ok(await approve(h, s, 'admin'), 200).submission;
   ok(await verify(h, ok(await apply(h, approved, 'admin'), 201).job, 'admin'), 200);

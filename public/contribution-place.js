@@ -100,6 +100,7 @@
   }
 
   function choosePoint(row) {
+    if(!window.HauntologiesAccount?.canContribute())return false;
     // A new point replaces a chosen record.
     if (!$('freeformRecordContext').hidden) $('removeFreeformRecord').click();
     // Coordinates are already on the status line; look up a street name for them instead.

@@ -308,7 +308,7 @@
     if (Number.isFinite(t.latitude)) card.append(text('p', `${t.latitude.toFixed(6)}, ${t.longitude.toFixed(6)}`, 'place-search-coords'));
     const actions = text('div', '', 'place-search-actions');
     if (t.record) actions.append(button('Open record', 'primary', () => openRecord(t.record)));
-    if (document.body.classList.contains('contribution-picking') && typeof requestContributionPoint === 'function') {
+    if (window.HauntologiesAccount?.canContribute() && document.body.classList.contains('contribution-picking') && typeof requestContributionPoint === 'function') {
       actions.append(button('Use this location', 'primary', () => { requestContributionPoint(L.latLng(t.latitude, t.longitude), true); close(); }));
     }
     actions.append(button(state.origin || state.route ? 'Route' : 'Directions', 'outline', startRoute), button('Clear', 'textbutton', clearAll));
@@ -323,6 +323,8 @@
     if (state.origin || state.route) card.append(routeSection());
     if (focused) [...card.querySelectorAll('button')].find(node => node.textContent === focused)?.focus({preventScroll: true});
   }
+
+  window.addEventListener('hauntologies-auth-changed', renderCard);
 
   function routeSection() {
     const section = text('section', '', 'place-search-route');

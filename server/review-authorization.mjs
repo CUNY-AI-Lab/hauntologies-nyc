@@ -16,14 +16,13 @@ function actorList(raw) {
 }
 
 // Publishers apply and verify independently approved changes. Every reviewer is a publisher, so
-// approving a change publishes it; CONTRIBUTIONS_PUBLISHER_IDS can add publishers who do not
+// the same nonauthor can review and verify a change; CONTRIBUTIONS_PUBLISHER_IDS can add publishers who do not
 // review. Publishers have no effect without a valid reviewer list, because nothing can be
 // approved without an independent reviewer. An invalid publisher list adds no publishers and
 // leaves reviewers as configured.
-// Admins (CONTRIBUTIONS_ADMIN_IDS) hold both roles and alone may approve their own work; each
-// such approval is marked in its binding so the history shows it skipped independent review.
+// Admins (CONTRIBUTIONS_ADMIN_IDS) hold both roles, but cannot review or verify their own work.
 // Open review (CONTRIBUTIONS_OPEN_REVIEW=true) adds every verified map account as a reviewer and
-// publisher of other people's work; no one, admins included, may then approve their own.
+// publisher of other people's work; no one, admins included, may review or verify their own.
 export function reviewAuthorization(rawReviewers, rawPublishers, rawAdmins, openReview) {
   const admins = actorList(rawAdmins) || EMPTY, listed = actorList(rawReviewers), everyone = openReview === 'true';
   if (!listed && !admins.length) return everyone ? Object.freeze({ reviewers: EMPTY, publishers: EMPTY, stewards: EMPTY, everyone }) : DISABLED;
