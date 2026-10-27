@@ -34,10 +34,18 @@
 #eventDetails .brand-panel{right:auto;width:max-content;min-width:100%;max-width:calc(100vw - 24px)}
 .program-credits span{white-space:nowrap}
 #pendingPlacesList{padding:0;margin:0;list-style:none;max-height:min(300px,45dvh);overflow:auto;overscroll-behavior:contain}
-#pendingPlacesList>li{border-top:1px solid var(--line);padding:4px 0}
-#pendingPlacesList button{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:0;background:none;color:var(--ink)}
-#pendingPlacesList button:hover{background:#27231c}
-#pendingPlacesList button span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+#pendingPlacesList>li{border-top:1px solid var(--line);padding:12px 0;overflow-wrap:anywhere}
+#pendingPlacesList .pending-title{display:block;font-size:14px;line-height:1.4}
+#pendingPlacesList .pending-status{margin:4px 0 8px;color:var(--muted);font-size:12px}
+#pendingPlacesList .pending-target{margin:8px 0;font-size:12px}
+#pendingPlacesList .pending-target span,#pendingPlacesList .pending-target strong{display:block}
+#pendingPlacesList .pending-target span{color:var(--muted);margin-bottom:2px}
+#pendingPlacesList .pending-location{font-size:12px}
+#pendingPlacesList .pending-location>summary{min-height:44px;cursor:pointer;padding:10px 0}
+#pendingPlacesList .pending-location p{margin:0 0 8px;color:var(--muted)}
+#pendingPlacesList .pending-map-action{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:1px solid var(--line);background:none;color:var(--ink);font-size:12px}
+#pendingPlacesList .pending-map-action:hover{background:#27231c}
+#pendingPlacesList :is(button,summary):focus-visible{outline:2px solid var(--orange);outline-offset:2px}
 #pendingPlacesStatus{margin-top:8px;color:var(--muted)}
 #pendingPlacesStatus:empty{display:none}
 #pendingPlacesCount{background:#8a63c9;color:#fff}

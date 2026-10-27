@@ -1,7 +1,7 @@
 'use strict';
 // The existing Places-card Record disclosure, rendered from the public record only.
 (function(root){
-  function append(card,record,{summary,safeUrl}){
+  function append(card,record,{summary,near='',safeUrl}){
     const document=card.ownerDocument;
     const text=(tag,value,className)=>{const node=document.createElement(tag);node.textContent=String(value);if(className)node.className=className;return node;};
     const present=value=>value!==undefined&&value!==null&&value!=='';
@@ -13,12 +13,8 @@
     const link=(url,label)=>{const node=text('a',label);node.href=url;node.target='_blank';node.rel='noopener noreferrer';return node;};
     const details=document.createElement('details'),toggle=text('summary','Record'),body=document.createElement('div');
     details.className='place-record';body.className='place-record-content';details.append(toggle,body);
-    body.append(text('h3',record.title,'place-record-title'));
-    if(summary.description)body.append(text('p',summary.description,'place-record-description'));
-    if(Array.isArray(record.contributors)&&record.contributors.length)body.append(text('p','Contributors: '+record.contributors.join(', '),'place-record-credit'));
     const facts=metadata([
-      ['Location',record.location_text||record.place_original],['Borough',record.borough],
-      ['Coordinates',summary.latitude!==null&&summary.longitude!==null?summary.latitude+', '+summary.longitude:null],
+      ['Borough',record.borough&&!(summary.location+' '+near).toLowerCase().includes(String(record.borough).toLowerCase())?record.borough:null],
       ['Dates',record.time_original||record.event_date_start],['Date basis',record.time_basis],
       ['Location basis',record.geo_basis||record.location_precision],['Uncertainty',record.uncertainty_note],
       ['Uncertainty (m)',record.uncertainty_m],['Uncertainty basis',record.uncertainty_basis],

@@ -24,7 +24,7 @@ test('Record disclosure preserves long citations, multiple sources, uncertainty 
     image:{url:'https://example.test/image.jpg',caption:'Synthetic caption',creator:'Public image creator',license:'CC BY',sourceUrl:'https://example.test/image-source',licenseUrl:'https://example.test/license'},
     sources:[{title:'First synthetic source',citation,url:'https://example.test/one',repository:'Synthetic archive',locator:'Series 1 / Box 2',rights_statement:'No reproduction permission inferred.',evidence_note:'The source reports a claim.'},{citation:'Second distinct citation',url:'https://example.test/two',source_date_original:'1900',credit:'Public source credit'}]};
   const before=JSON.stringify(record),card=render(record),nodes=descendants(card),text=card.textContent;
-  for(const value of [citation,'Second distinct citation','Synthetic archive','Series 1 / Box 2','Point is approximate.','Date is unresolved.','Public image creator','Public source credit','Consented Alice, Consented Bob','No reproduction permission inferred.'])assert.ok(text.includes(value),value);
+  for(const value of [citation,'Second distinct citation','Synthetic archive','Series 1 / Box 2','Point is approximate.','Date is unresolved.','Public image creator','Public source credit','No reproduction permission inferred.'])assert.ok(text.includes(value),value);
   assert.equal(card.children[0].tagName,'details');assert.equal(card.children[0].children[0].textContent,'Record');
   assert.deepEqual(nodes.filter(n=>n.tagName==='a').map(n=>n.href),['https://example.test/image-source','https://example.test/license','https://example.test/one','https://example.test/two']);
   assert.equal(JSON.stringify(record),before);
@@ -33,7 +33,7 @@ test('Record disclosure preserves long citations, multiple sources, uncertainty 
 test('Record text and source labels never become markup, credential URLs are rejected and names are never inferred',()=>{
   const record={title:'<img src=x onerror=alert(1)>',owner_id:'Private owner',email:'private@example.test',sources:[{title:'<script>unsafe label</script>',url:'javascript:alert(1)'},{citation:'Unlinked credential source',url:'https://name:password@example.test/private'}]};
   const card=render(record,{description:'<b>literal public text</b>',latitude:null,longitude:null}),nodes=descendants(card);
-  assert.ok(card.textContent.includes(record.title));assert.ok(card.textContent.includes('<script>unsafe label</script>'));
+  assert.ok(!card.textContent.includes(record.title));assert.ok(card.textContent.includes('<script>unsafe label</script>'));
   assert.equal(nodes.filter(n=>n.tagName==='a'||n.tagName==='img').length,0);
   for(const secret of ['Private owner','private@example.test','Contributors:','Coordinates'])assert.equal(card.textContent.includes(secret),false);
 });
@@ -50,3 +50,9 @@ test('flat public image attribution aliases retain their caption, credit, licens
  assert.equal(nodes.find(n=>n.tagName==='img').alt,'Synthetic alt');
  assert.deepEqual(nodes.filter(n=>n.tagName==='a').map(n=>n.href),['https://example.test/source','https://example.test/license']);
 });
+
+ test('Record omits summary fields and starts collapsed while retaining dates and distinct metadata',()=>{
+ const card=render({title:'Pelham Bay Naval Training Station',location_text:'Image: Map',borough:'Bronx',event_date_start:'1917',contributors:['Public credit']},{description:'Former facility',location:'Bronx',latitude:40.86611,longitude:-73.81028});
+ for(const repeated of ['Pelham Bay Naval Training Station','Former facility','Image: Map','Bronx','Coordinates','Public credit'])assert.ok(!card.textContent.includes(repeated),repeated);
+ assert.ok(card.textContent.includes('1917'));assert.ok(!card.children[0].open);
+ });
