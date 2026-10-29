@@ -76,8 +76,9 @@ test('an obsolete response cannot clear a newer saved request for the same event
 test('published notes display only their supplied moniker as text on the place card',()=>{
  const elements=[];const context=vm.createContext({document:{createElement:tag=>{const e=new Element(tag);elements.push(e);return e;}},window:{},localStorage:{getItem:()=>null},sessionStorage:{},AbortController,setTimeout,clearTimeout});
  vm.runInContext(source,context);const card=new Element('article');card.root=true;
- context.window.PlaceHistory.append(card,{id:'synthetic',notes:[{text:'A note',moniker:'night <owl>'},{text:'Uncredited'},{text:'Unsafe legacy value',moniker:'nobody@example.test'}]});
+ context.window.PlaceHistory.append(card,{id:'synthetic',notes:[{text:'A note',moniker:'night <owl>'},{text:'Uncredited'},{text:'Unsafe legacy value',moniker:'nobody@example.test'},{text:'',moniker:'source.owl',sources:'Synthetic archive'}]});
  const notes=card.find(e=>e.className==='workflow-details place-notes');assert.equal(notes.open,true);assert.equal(notes.find(e=>e.tag==='small').textContent,'By night <owl>');
  assert.equal(notes.children.filter(e=>e.tag==='section')[1].find(e=>e.tag==='small'),undefined);
  assert.equal(notes.children.filter(e=>e.tag==='section')[2].find(e=>e.tag==='small'),undefined);
+ const sourceOnly=notes.children.filter(e=>e.tag==='section')[3];assert.deepEqual(sourceOnly.children.map(e=>e.textContent),['By source.owl','Sources: Synthetic archive']);
 });
