@@ -47,7 +47,7 @@ The contributor can revise a draft, submitted contribution or requested revision
 
 ## Reviewers, publishers and admins
 
-When `CONTRIBUTIONS_OPEN_REVIEW=true`, every verified map account may review and publish other people's submitted work, but not its own. Open peers do not receive other people's drafts, withheld work, private historical revisions, unpublished hosted targets or raw release snapshots. Explicitly configured roles retain their scoped privileged access. Admin self-approval is available only when open review is disabled and is recorded as such. Attendee-dashboard access remains blocked.
+When `CONTRIBUTIONS_OPEN_REVIEW=true`, every verified map account may review and publish other people's submitted work, but not its own. Open peers do not receive other people's drafts, withheld work, private historical revisions, unpublished hosted targets or raw release snapshots. Explicitly configured roles retain their scoped privileged access. Every review and verification remains independent of the contributor, including for admins. Attendee-dashboard access remains blocked.
 
 `CONTRIBUTIONS_REVIEWER_IDS` lists selected reviewers, who also publish. `CONTRIBUTIONS_PUBLISHER_IDS` can add publishers only when a valid nonempty reviewer list exists. `CONTRIBUTIONS_ADMIN_IDS` adds both roles. Each list is a JSON array of at most 20 canonical immutable actor IDs; invalid entries reject the whole list. These are operator settings, never client claims.
 
@@ -63,7 +63,7 @@ Public contributor names come only from the consented credit label on each contr
 
 With consent and a nonblank label, the name appears with the contribution on the public Under review layer, in the Review queue and detail, and on the published record and Published edits after verification. Unchecking the box or leaving the name blank sends `consent:false` and keeps it unnamed everywhere. Account IDs, email addresses and RSVP names are never inferred as public credit. A roster opt-out withholds a label from every public projection, including pending places, published records, Published edits and contributor counts, while the release itself remains public.
 
-The account-wide switch governs every public place where the person's name appears, including earlier contributions. Turning it back on restores those labels. The roster response shows the signed-in viewer only their own registration name; email addresses never leave that roster query, and RSVP records do not create roles.
+The account-wide switch governs every public place where the person's name appears, including earlier contributions. Turning it back on restores those labels. The authenticated roster lists non-opted-out registrants with their public names and contribution and published counts, plus account status. It also returns the current viewer's own registration name for credit-field prefill. Email addresses never leave that roster query, and RSVP records do not create roles.
 
 ## What stays private
 
@@ -97,7 +97,7 @@ Target Worker: `hauntologies-nyc`, Cloudflare account `452c33847cf5cb1e46f391fca
 2. Preserve migration order and apply only missing, reviewed migrations. `0005_contribution_media.sql` stores images, `0006_map_accounts.sql` stores namespaced accounts, credentials, sessions, challenges and rates, and `0007_roster_opt_out.sql` stores roster opt-outs.
 3. Build and run `node scripts/prepare-account-release.mjs`, then `node --test tests/*.test.mjs`. This prepares account and eligibility settings, open review and the restricted mail binding while preserving the public route and disabling preview URLs.
 4. Store a cryptographically generated Hauntologies-only `MAP_AUTH_SECRET` through Worker secret storage without saving it in files, output or source. Release Admission's restricted mail service before activating the map binding.
-5. Deploy the prepared `dist/server/wrangler.live.json`, verify the serving version, account readiness, signed-out protection and delivered assets, then test verification and reset with an authorized mailbox. Recheck table counts.
+5. Production release is currently blocked: this repository has no configured CI deployment path. A future approved path must deploy the prepared file, verify the serving version, account readiness, signed-out protection and delivered assets, then test verification and reset with an authorized mailbox and recheck table counts. The required build, deployment and readback evidence belongs in that CI path; a local command is not an approved production release method.
 
 Any production verification, reset, contribution or image acceptance test needs its own authorization and a disposable test identity. Local synthetic checks do not authorize participant reads or production writes. Rollback uses the prior Worker version after checking that bindings are retained; leave additive tables in place to preserve account data and audit history.
 

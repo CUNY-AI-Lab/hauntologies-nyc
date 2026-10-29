@@ -50,11 +50,9 @@ Build and prepare the existing Worker release with:
 npm run build && node scripts/prepare-account-release.mjs
 ```
 
-Preparation checks the existing Worker, account and D1 identifiers, projects the public catalog and writes `dist/server/wrangler.live.json`; it performs no deployment or database migration. Run the test suite after preparation. Deploy that prepared release only when deployment is authorized:
+Preparation checks the existing Worker, account and D1 identifiers, projects the public catalog and writes `dist/server/wrangler.live.json`; it performs no deployment or database migration. Run the test suite after preparation.
 
-```sh
-npx wrangler deploy --config dist/server/wrangler.live.json
-```
+Production release is currently blocked: this repository has no configured CI deployment path. A future approved CI path must deploy the prepared configuration, verify the serving version, `/api/access-status` (`enabled` with `account_mode: map`), signed-out protection and delivered assets, and complete an authorized verification/reset mailbox round trip with table-count and readback evidence. Granting deployment access is a separate decision. Existing manual deployment notes are historical; do not run a local `wrangler deploy` from this repository.
 
 The existing D1 binding is `DB`. Do not put participant data, credentials or private source archives in this repository. AI is disabled, and connecting Workers Builds or granting provider access is a separate decision.
 
