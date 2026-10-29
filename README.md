@@ -1,38 +1,63 @@
-# Hauntologies NYC
+# Hauntologies of New York
 
-Source for the NYC Leaflet map and event registration, using Vinext (Vite with a Next.js-compatible app router), React, and Cloudflare Workers/D1. The map client is plain JavaScript with bundled Leaflet and MarkerCluster.
+A Halloween hackathon at the CUNY Graduate Center on Friday, October 30, 3–6:30 p.m., in Room 5307. Drop in anytime.
 
-Use Node.js 22.13 or newer. Install with `npm run install:ci` and run locally with `npm run dev`.
+"The future is always experienced as a haunting," writes critical theorist Mark Fisher in his 2012 essay *What is Hauntology?*, "as a virtuality that already impinges on the present, conditioning expectations and motivating cultural production."
 
-To try contributing and reviewing on your own machine, run `npm run local` and open http://127.0.0.1:8790. Sign in from the map's Sign in button with a testing account; the password for both is `haunted-local-only`:
+To welcome All Hallows' Eve, please join the GC's M.A. Program in Digital Humanities and M.S. Program in Data Analysis and Visualization for Hauntologies of New York. Together, we'll develop a collaborative map of reported hauntings, spectral places and archival silences using public datasets and digitized collections. No coding experience is required.
 
-- `contributor@local.test` submits places and reviews the other testing account’s submitted work.
+[Register here](https://hauntologies-nyc.ailab-452.workers.dev/register). Bring your own laptop if you can, and come in costume if you'd like. Pizza, drinks and Halloween candy will be aplenty.
+
+## Before you come
+
+Registration asks for your name and email address and shows a receipt on the screen; it does not create a map account or send a confirmation email. CUNY addresses are accepted as they are, while guests from outside CUNY need an access code from the organizers. [Contribution access](docs/contribution-access.md) explains the two sign-ups and the steps for contributing.
+
+## The map
+
+The public map is live at https://hauntologies-nyc.ailab-452.workers.dev. Anyone can search places and addresses, filter by borough, place type, period and location certainty, and view aerial imagery from 1924 forward. Signing in lets you propose a place with sources and photographs, add a note to an existing place or propose a correction. Every proposal goes through review; an approved proposal reaches the public map only after the separate publication and verification steps.
+
+The public map is already approved and live, with standalone event registration at `/register`. Map accounts use verified email and a password chosen after verification. Signed-in contributors can save and read their own proposals and private images. Open review lets verified map accounts review and publish others' submitted work, subject to the configured roles and independent-review rules. Contributors choose whether their name appears with each contribution, under review and once published. Attendee-dashboard access remains blocked.
+
+## Where to go from here
+
+This repository holds the source for the map, the registration page and the guides that explain how they work. Read down this path until you reach the guide for your part:
+
+1. [Contribution access](docs/contribution-access.md) explains event registration, map accounts, the contribution form, review and publication.
+2. [Private images](docs/private-images.md) describes image limits, upload behavior and access after submission.
+3. [Area proposals and record annotations](server/EMBEDDED-CONTRIBUTIONS.md) lists the fields for the two contribution types the visible form does not offer.
+4. [Running the site](docs/running-the-site.md) is for maintainers and covers local setup, settings, sign-in, email, releases and rollback.
+5. [Model-assisted ingestion](server/README.md) describes the disabled backend; its [tool contract](public/ingestion/TOOL-CONTRACT.md) and [extraction skill](public/ingestion/SKILL.md) set out its boundaries if it is ever enabled.
+
+## Run it locally
+
+You need Node.js 22.13 or newer. Install dependencies and start the development server with:
+
+```sh
+npm run install:ci
+npm run dev
+```
+
+To try contributing and reviewing on your own machine, run `npm run local` and open http://127.0.0.1:8790. The two synthetic accounts use the password `haunted-local-only`:
+
+- `contributor@local.test` submits places and reviews the other account's work.
 - `reviewer@local.test` can also review and publish.
 
-The local server runs the real contribution service on SQLite in `.local/` (gitignored); `npm run local -- --fresh` starts over. Registration, password resets and image uploads need production services and are off locally.
+The local server runs the real contribution service on SQLite in `.local/` (gitignored). `npm run local -- --fresh` starts over. Registration, password resets and image uploads need production services and are off locally.
 
-Build and prepare the existing Worker release:
+Build and prepare the existing Worker release with:
 
 ```sh
 npm run build && node scripts/prepare-account-release.mjs
 ```
 
-Preparation checks the existing Worker, account and D1 identifiers, projects the public catalog, and writes `dist/server/wrangler.live.json`. It performs no deployment or database migration. Run `node --test tests/*.test.mjs` after preparation.
-
-Deploy that prepared release only when deployment is authorized:
+Preparation checks the existing Worker, account and D1 identifiers, projects the public catalog and writes `dist/server/wrangler.live.json`; it performs no deployment or database migration. Run the test suite after preparation. Deploy that prepared release only when deployment is authorized:
 
 ```sh
 npx wrangler deploy --config dist/server/wrangler.live.json
 ```
 
-The public map is already approved and live at https://hauntologies-nyc.ailab-452.workers.dev, with standalone event registration at `/register`. Release preparation preserves its public `workers.dev` route and keeps preview URLs disabled. Map accounts use verified email and a password chosen after verification. Signed-in contributors can save and read their own proposals and private images. Open review lets every verified map account review and publish others’ submitted work; unpublished hosted data and raw release snapshots retain privileged access. Contributors choose whether their name appears with each contribution, under review and once published. Approval, staging and map/list verification are separate steps. Attendee-dashboard access remains blocked. Account implementation and release steps are documented in [Contribution access](docs/contribution-access.md).
+The existing D1 binding is `DB`. Do not put participant data, credentials or private source archives in this repository. AI is disabled, and connecting Workers Builds or granting provider access is a separate decision.
 
-The existing D1 binding is `DB`. Schema migrations contain no participant rows. Registration tests use synthetic local SQLite fixtures; no attendee or submission data is included. Do not use production data in repository issues, tests, or fixtures.
+## Questions
 
-The metadata editor supports field corrections and up to ten new references per proposal, with a required change message and immutable revision history. Review uses exact proposed values and requires independent authorization; changes do not automatically overwrite map records.
-
-AI is disabled. The deployment gate derives contribution identity from a verified map session and removes client-supplied identity headers. Event registration stays independent of account registration. The exact account endpoints are allowlisted; obsolete identity integrations and administrative routes remain blocked.
-
-Private source archives, provenance evidence, local runtime profiles, credentials, build output, and original Git history are excluded. Public record citations, uncertainty, IDs, and geometry remain in the map source. The task seed file retains 23 current proposed opportunities with private reconciliation metadata removed. Tests dependent on private archives remain in the original workspace; public-category and behavioral tests are retained here.
-
-Connecting a repository to Workers Builds requires the existing Cloudflare GitHub App to have access to that exact repository. Do not grant access, create API tokens, enable AI, or broaden access as an automatic build step. The repository connection is not established by this source export.
+Write to Zach Muhlbauer at zmuhlbauer@gc.cuny.edu with questions about the event or to ask for a guest access code. Problems with the site itself can be opened as issues in this repository; keep attendee names, email addresses and submission details out of them.
