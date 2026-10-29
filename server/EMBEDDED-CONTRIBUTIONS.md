@@ -1,20 +1,22 @@
-# Embedded contribution contracts
+# Area proposals and record annotations
 
-These additions use the existing `/api/contributions/preview`, `/submit`, `/revise` and readback endpoints and existing D1 tables. They do not change authentication, grant reviewer/publisher permissions, enable AI, or change the canonical point-oriented Entries schema. New points use `entry_bundle` or qualifying pointed `open_proposal` submissions.
+This reference covers two contribution types that go beyond what the Contribute form sends: an area proposal and a record annotation. The form sends open proposals and the place editor sends record updates, so neither of these two types reaches the service from the visible interface today.
 
-Both `area_proposal` and `record_annotation` are review-only. Valid submissions enter `submitted`; deterministic errors enter `changes_requested`. Independent review still requires all editorial/privacy checks and cannot be performed by the contributor. Even an independently approved proposal cannot be applied by the existing data operator. No polygon or annotation is automatically written into map records.
+Area proposals and record annotations use the same `/api/contributions/preview`, `/submit` and `/revise` endpoints and existing D1 tables as other contributions. They leave authentication, reviewer permissions, AI settings and the point-oriented Entries schema untouched. Entries from tools use `entry_bundle`; the form's points use `open_proposal` until a publisher promotes one to an `entry_bundle`.
 
-## Shared fields
+The types `area_proposal` and `record_annotation` are review-only. A valid submission enters `submitted`; deterministic validation errors enter `changes_requested`; and revising an approved or merged submission returns it to `draft`. An envelope failure, such as an unsafe URL or oversized submission, is refused before storage. A reviewer other than the contributor must confirm the editorial and privacy checks, including when the contributor is an admin. Even an approved proposal cannot be applied automatically, so no polygon or annotation is written into map records without the separate publication workflow.
 
-Use the existing schema-version `1.0` envelope: `type`, `task_ids`, `title`, `summary`, `public_credit`, `sources`, `attachments`, `targets`, `payload`. The server owns actor identities, revisions, review states, hashes, timestamps and receipts. Public credit requires explicit consent.
+## Fields both types share
 
-For these two types, `sources` contains 1–20 citation objects. Required string fields are `citation`, `locator`, `accessed_on`, `rights_status`, `rights_statement`, `public_use`. `accessed_on` is the actual consultation date in `YYYY-MM-DD`. `url` is null/empty or an HTTP(S) URL without credentials. Optional string/null fields are `source_type`, `source_ref`, `entry_id`, `repository`, `source_date_original`, `evidence_note`. Rights/public-use enums retain the existing canonical values; unknown/restricted rights do not permit excerpts or media. A citation without a known URL is valid. No attachment upload is added.
+Both types use the existing schema-version `1.0` envelope with `type`, `task_ids`, `title`, `summary`, `public_credit`, `sources`, `attachments`, `targets` and `payload`. The server assigns actor identities, revisions, review states, hashes, timestamps and receipts. Public credit appears only with explicit consent.
 
-A dates object contains exactly `time_original`, `time_precision`, `time_start_year`, `time_end_year`, `time_basis`. Precision is `unknown`, `year`, `range` or `circa`. Unknown bounds remain null; known bounds are ordered integer years, and `year` repeats the same year in both fields. A proposal date does not overwrite a source publication date or the original record.
+For these two types, `sources` holds 1 to 20 citation objects. Each object has the string fields `citation`, `locator`, `accessed_on`, `rights_status`, `rights_statement` and `public_use`, where `accessed_on` is the actual consultation date in `YYYY-MM-DD`. The `url` field is null, empty or an HTTP(S) address without credentials. Optional fields are `source_type`, `source_ref`, `entry_id`, `repository`, `source_date_original` and `evidence_note`, each a string or null. Unknown or restricted rights do not permit excerpts or media.
 
-## Area proposal
+A dates object has exactly `time_original`, `time_precision`, `time_start_year`, `time_end_year` and `time_basis`. Precision is `unknown`, `year`, `range` or `circa`. Unknown bounds stay null; known bounds are ordered integer years from 1 to 3000, and `year` repeats the same year in both fields. A proposed date never overwrites a source's publication date or the original record.
 
-`targets` is empty. Payload fields:
+## Area proposals
+
+An area proposal leaves `targets` empty and puts these fields in its payload.
 
 ```json
 {
@@ -41,25 +43,25 @@ A dates object contains exactly `time_original`, `time_precision`, `time_start_y
 }
 ```
 
-Category uses the canonical claim categories. Borough uses the five named NYC boroughs or `unknown`. An unresolved area instead has `geometry_status: "unresolved"` and `geometry: null`; no point, box or centroid is invented.
+The category comes from the canonical claim categories and the borough is one of the five NYC boroughs or `unknown`. An unresolved area sets `geometry_status` to `unresolved` and `geometry` to `null`; the site never invents a point, box or centroid.
 
-Geometry is a single simple GeoJSON Polygon exterior ring in longitude/latitude WGS84 order. There are 3–100 distinct vertices plus the exact closing coordinate, each with exactly two finite numeric ordinates. Unsupported geometry, holes, extra geometry properties, repeated vertices, self-crossing/touching edges, degenerate area and out-of-range coordinates are rejected. The complete perimeter and interior must fit within the checked-in NYC union; a named borough must contain the whole area. Missing boundary data fails closed. Numerical containment uses a documented `1e-10` degree coordinate tolerance. The server never repairs, snaps or closes submitted geometry.
+The geometry is a single simple GeoJSON Polygon with one exterior ring in longitude/latitude WGS84 order. It has 3–100 distinct vertices followed by the exact closing coordinate, with exactly two finite numbers in each coordinate. The server rejects unsupported geometry, holes, extra properties, repeated vertices, self-crossing or touching edges, degenerate area and out-of-range coordinates. The full perimeter and interior must fit inside the checked-in NYC union, and a named borough must contain the whole area. Missing boundary data fails closed. Containment uses a documented `1e-10` degree tolerance. The server never repairs, snaps or closes submitted geometry.
 
-The preview has `proposal: {type, geometry, bounds, dates, source_refs, target: null}`. Geometry is present only after geometry validation; bounds are derived as `[[west,south],[east,north]]`. `application.applicable` is false with `area_proposal_review_only` for a valid proposal.
+A valid proposal preview carries `proposal: {type, geometry, bounds, dates, source_refs, target: null}`. Geometry appears only after validation, and bounds are derived as `[[west,south],[east,north]]`. `application.applicable` is false with `area_proposal_review_only` for a valid proposal, or `attachment_review_only` when it carries an image.
 
-## Record annotation
+## Record annotations
 
-First call `GET /api/contributions/target?id=<stable-record-id>` under the normal signed-in Site identity. It returns:
+Start with `GET /api/contributions/target?id=<stable-record-id>` while signed in. It returns:
 
 ```text
 { target: { record_id, expected_version, expected_hash, origin, title, record } }
 ```
 
-Static inventory and pilot records are parsed from the same checked-in JSON assignments used by the frontend, without executing JavaScript. Their snapshot format version is `1`; the SHA-256 content hash is authoritative for detecting changed source data. Hosted records use their actual D1 version/hash. Ambiguous IDs fail closed. The lookup never creates or imports records into D1.
+The server parses static inventory and pilot records from the checked-in assignments used by the frontend without executing JavaScript. Their snapshot format version is `1`; the SHA-256 content hash detects changed source data. Hosted records use their actual D1 version and hash. An ambiguous ID fails closed, and the lookup never creates or imports records into D1.
 
-For `static_inventory`, `record` is the full original public record, including citations and uncertainty. The pilot includes the same category/borough presentation fields as the map. For `hosted`, it is `{raw_json, raw, derived}`; canonical fields remain under `derived.canonical_entry`. Private server actor/owner IDs are omitted.
+For `static_inventory`, `record` is the full original public record with its citations and uncertainty. Pilot records carry the same category and borough presentation fields as the map. For `hosted`, it is `{raw_json, raw, derived}`, with canonical fields under `derived.canonical_entry`; private actor and owner IDs are omitted. Unpublished hosted records resolve only for their owner, reviewers and publishers.
 
-Copy only the returned `record_id`, `expected_version`, and `expected_hash` into the single envelope target. Payload fields are:
+Copy only `record_id`, `expected_version` and `expected_hash` into the envelope's single target. The payload then has these fields:
 
 ```json
 {
@@ -71,10 +73,14 @@ Copy only the returned `record_id`, `expected_version`, and `expected_hash` into
 }
 ```
 
-Kind is `addition` or `clarification`. Dates can be null or the shared date object. The server re-resolves the target at preview, revision and review, rejecting stale version/hash pairs. The saved preview retains the exact target snapshot; a later revision never overwrites the prior snapshot or original record. The diff shows the original target and proposed annotation separately. `application.applicable` remains false with `record_annotation_review_only`.
+`annotation_kind` is `addition` or `clarification`; `dates` is null or the shared date object. The server resolves the target again at preview, revision and review, rejecting stale version/hash pairs. The saved preview retains the exact target snapshot, so a later revision does not overwrite it or the original record. The diff shows the original target and proposed annotation separately, with `application.applicable` remaining false for `record_annotation_review_only`, or `attachment_review_only` when the annotation carries an image.
 
 ## Evidence and limits
 
-Submission JSON bytes, original source snapshots, revisions, validation results and receipt bindings remain in the existing immutable workflow history. Existing idempotency keys and same-origin checks apply. Static target review uses a fresh server catalog check and rejects D1 ID collisions; static targets are never accepted by apply/activation/rollback operators.
+Submission JSON bytes, original source snapshots, revisions, validation results and receipt bindings remain in immutable workflow history. Existing idempotency keys and same-origin checks apply. Static target review performs a fresh server catalog check and rejects a collision with a D1 ID; static targets are not accepted by apply, activation or rollback operators except as a built-in `record_update`.
 
-Local tests use explicitly synthetic identities and isolated SQLite. They establish deterministic service behavior, not authenticated production acceptance. Hosted submission/revision acceptance still requires a real authorized browser session. The public map uses map accounts; open review grants bounded peer review/publication, while private hosted targets and raw job snapshots retain explicit privileged access.
+Local tests use synthetic identities and isolated SQLite. They establish deterministic service behavior, not authenticated production acceptance. Hosted submission and revision acceptance still require an authorized browser session. The public map uses map accounts; open review grants bounded peer review and publication, while private hosted targets and raw job snapshots retain explicit privileged access.
+
+## Next
+
+[Running the site](../docs/running-the-site.md) covers the settings, release steps and sign-in internals behind these contributions.
