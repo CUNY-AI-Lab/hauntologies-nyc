@@ -8,14 +8,15 @@ import {readFileSync} from 'node:fs';
 // against synthetic controls.
 const source=readFileSync(new URL('../public/contributions.js',import.meta.url),'utf8');
 const slice=(from,to)=>source.slice(source.indexOf(from),source.indexOf(to));
-const part=slice('  function resetOpenContext(){','  function populatePlaceChoices(){')+slice('  const creditStorageKey=','  function buildEnvelope(){')+slice('  function clearRevision(){','  // The queue is for recent work first');
+const part=slice('  const isOpenForm=','  const pointShape=')+slice('  function resetOpenContext(){','  function populatePlaceChoices(){')+slice('  const creditStorageKey=','  function buildEnvelope(){')+slice('  function clearRevision(){','  // The queue is for recent work first')+slice('  // Contributing to a mapped place is a new note on it.',"  window.addEventListener('contributions-records-changed',renderClarificationTargets);");
 function fixture(){
  const node=()=>({value:'',hidden:false,open:false,checked:false,disabled:false,children:[],dataset:{},replaceChildren(...n){this.children=n;},append(...n){this.children.push(...n);},reset(){},focus(){},get textContent(){return this._t||'';},set textContent(v){this._t=String(v);this.children=[];}});
  const ids=['contributionSummary','contributionObjectTitle','extraSources','freeformSources','contributionAttributes','addContributionAttribute','freeformContext','freeformLocation','contributionPlaceMode','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit','freeformRecordContext','revisionContext','cancelRevision','freeformDescription','publicCreditConsent','publicCreditLabel','publicCreditHint','freeformTitle','contributionPlaceName','contributionLatitude','contributionLongitude'];
  const controls=Object.fromEntries(ids.map(id=>[id,node()]));controls.contributionPlaceMode.value='new';controls.publicCreditConsent.checked=true;
  const storage=new Map();
- const context=vm.createContext({byId:id=>controls[id]||node(),el:(tag,text)=>({tag,text}),text:v=>String(v??''),structuredClone,JSON,
-  window:{HauntologiesAccount:{snapshot:()=>({actor:'map_a',generation:1}),isCurrent:()=>true},addEventListener(){},dispatchEvent(){}},document:{activeElement:null,createTextNode:t=>({textContent:String(t)})},
+ const handlers={},chosen=[];
+ const context=vm.createContext({byId:id=>controls[id]||node(),el:(tag,text)=>({tag,text}),text:v=>String(v??''),structuredClone,JSON,chooseOpenReference:(id,title)=>{chosen.push([id,title]);},
+  window:{HauntologiesAccount:{snapshot:()=>({actor:'map_a',generation:1}),isCurrent:()=>true,canContribute:()=>true},addEventListener:(type,fn)=>{handlers[type]=fn;},dispatchEvent(){}},document:{activeElement:null,createTextNode:t=>({textContent:String(t)})},
   CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},button:(label,action,className)=>({label,action,className}),
   localStorage:{getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,v)},fetch:()=>new Promise(()=>{}),
   imageBatch:null,imageStatus(){},invalidatePreview(){},switchView(){},addAttribute(){},setPointFields(){},showOpenReference(){},privateActor:'map_a',
@@ -26,7 +27,8 @@ function fixture(){
  context.resetContributionForm=()=>{controls.publicCreditConsent.checked=true;controls.publicCreditLabel.value='';context.out.restoreCreditFields();};
  const envelope=()=>JSON.parse(JSON.stringify(context.out.buildIntakeEnvelope()));
  const cancelRevision=()=>{context.out.clearRevision();context.resetContributionForm();context.out.resetOpenContext();};
- return {controls,envelope,cancelRevision,...context.out};
+ const contributeTo=(recordId,title)=>handlers['contributions-clarify-requested']({detail:{recordId,title}});
+ return {controls,envelope,cancelRevision,contributeTo,chosen,isRevising:()=>!!context.revisionOriginal,...context.out};
 }
 const typed=(type,extra={})=>({id:'s1',revision:2,title:'Cold spot',raw_json:JSON.stringify({schema_version:'1.0',type,task_ids:[],title:'Cold spot',summary:'Original summary.',public_credit:{consent:true,label:'Ada Example'},sources:[],attachments:[],targets:[{record_id:'synthetic_place',expected_version:0,expected_hash:null}],payload:{annotation_kind:'addition',text:'A draft moves through the hall.',original_wording:'',uncertainty_note:'Reported.',dates:null,...extra}})});
 test('a fresh form shows the credit editor and sends what it says',()=>{
@@ -57,4 +59,21 @@ test('an open proposal revision shows the editor, restores its credit, and sends
  f.controls.publicCreditConsent.checked=true;f.controls.publicCreditLabel.value='Ada Example';
  const e=f.envelope();assert.equal(e.type,'open_proposal');assert.deepEqual(e.public_credit,{consent:true,label:'Ada Example'});
  f.controls.publicCreditConsent.checked=false;assert.deepEqual(f.envelope().public_credit,{consent:false,label:''});
+});
+for(const type of ['record_annotation','entry_bundle','area_proposal'])test(`contributing to a mapped place from a ${type} revision leaves the revision before showing the open form`,()=>{
+ const f=fixture();f.resetOpenContext();f.controls.publicCreditLabel.value='Ada Example';
+ f.loadRevision(typed(type));assert.equal(f.controls.freeformCredit.hidden,true);assert.equal(f.isRevising(),true);
+ f.contributeTo('synthetic_place','Hall');
+ assert.equal(f.isRevising(),false,'the typed revision is left, as Cancel leaves it');assert.equal(f.controls.revisionContext.hidden,true);
+ assert.equal(f.controls.freeformCredit.hidden,false,'the editor shown is the open form\'s');assert.deepEqual(f.chosen,[['synthetic_place','Hall']]);
+ f.controls.publicCreditConsent.checked=false;
+ const e=f.envelope();assert.equal(e.type,'open_proposal','what is sent is a new open proposal');assert.deepEqual(e.public_credit,{consent:false,label:''},'and it follows the visible box');
+ f.controls.publicCreditConsent.checked=true;f.controls.publicCreditLabel.value='Ada Example';assert.deepEqual(f.envelope().public_credit,{consent:true,label:'Ada Example'});
+});
+test('contributing to a mapped place from an open-proposal revision keeps that revision and its visible editor',()=>{
+ const f=fixture();f.resetOpenContext();
+ f.loadRevision({id:'s2',revision:1,title:'Lantern',raw_json:JSON.stringify({schema_version:'1.0',type:'open_proposal',task_ids:[],title:'Lantern',summary:'Old.',public_credit:{consent:true,label:'Ada Example'},sources:[],attachments:[],targets:[],payload:{explanation:'Old.',geometry:null}})});
+ f.contributeTo('synthetic_place','Hall');
+ assert.equal(f.isRevising(),true);assert.equal(f.controls.revisionContext.hidden,false);assert.equal(f.controls.freeformCredit.hidden,false);
+ f.controls.publicCreditConsent.checked=false;const e=f.envelope();assert.equal(e.type,'open_proposal');assert.deepEqual(e.public_credit,{consent:false,label:''},'the editor is live for an open revision');
 });

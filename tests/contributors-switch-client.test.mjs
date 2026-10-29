@@ -82,3 +82,13 @@ test('an interrupted write is checked against the server before failure is decla
  m.listed.checked=true;write=m.listed.listeners.change();const stale=last();m.switchAccount('map_b');m.reply(stale,{},false);await write;await flush();
  assert.equal(m.listed.checked,true,'untouched');assert.equal(m.listed.disabled,true);assert.equal(m.fetches.at(-1).method,'POST','no reread for an account that is no longer current');
 });
+test('when the recovery read fails too, the outcome is described as unknown rather than as a failed save',async()=>{
+ const m=mount({actor:'map_a'});const last=()=>m.fetches.length-1;
+ m.listed.checked=false;const write=m.listed.listeners.change();m.fetches[last()].reject(new TypeError('network'));await flush();
+ assert.equal(m.fetches.at(-1).method,'GET');m.fetches[last()].reject(new TypeError('network'));await write;
+ assert.equal(m.listed.checked,true,'back to the last saved setting');assert.equal(m.listed.disabled,false);assert.equal(m.events.length,0);
+ assert.equal(m.status(),'Could not confirm whether that saved. The switch shows your last saved setting; check again in a moment.');
+ // A 503 on the recheck, or a body without a boolean, is the same unknown outcome.
+ m.listed.checked=false;const again=m.listed.listeners.change();m.reply(last(),{},false);await flush();m.reply(last(),{registrants:[]},true);await again;
+ assert.equal(m.status(),'Could not confirm whether that saved. The switch shows your last saved setting; check again in a moment.');
+});

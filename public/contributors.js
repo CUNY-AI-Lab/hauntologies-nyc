@@ -156,9 +156,11 @@
         loadCredits();
       } catch {
         if (!current()) return;
-        // The write may still have landed: the server's state decides before failure is declared.
+        // The write may still have landed: the server's state decides before failure is declared,
+        // within its own deadline. When that read fails too, the outcome is unknown and said so.
         let landed = null;
-        try { const check = await fetch('/api/contributor-roster', { cache: 'no-store', credentials: 'same-origin' }); if (check.ok) landed = (await check.json())?.you?.listed; } catch {}
+        const recheck = new AbortController(), recheckTimer = setTimeout(() => recheck.abort(), 20000);
+        try { const check = await fetch('/api/contributor-roster', { cache: 'no-store', credentials: 'same-origin', signal: recheck.signal }); if (check.ok) { const state = (await check.json())?.you?.listed; if (typeof state === 'boolean') landed = state; } } catch {} finally { clearTimeout(recheckTimer); }
         if (!current()) return;
         if (landed === want) {
           listed.checked = want; listed.disabled = false;
@@ -167,7 +169,7 @@
         }
         listed.checked = typeof landed === 'boolean' ? landed : !want;
         listed.disabled = false;
-        creditedStatus.textContent = 'That did not save. Try again in a moment.';
+        creditedStatus.textContent = landed === null ? 'Could not confirm whether that saved. The switch shows your last saved setting; check again in a moment.' : 'That did not save. Try again in a moment.';
       } finally { clearTimeout(timer); }
     });
     // Signing in or out changes which list applies; a switch left disabled by an abandoned write is released.

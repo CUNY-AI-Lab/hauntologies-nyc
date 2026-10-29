@@ -1078,10 +1078,17 @@
   for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('input',()=>{invalidatePreview();saveDraft();showPoint();});
   byId('chooseContributionPoint').addEventListener('click',()=>{if(byId('chooseContributionPoint').getAttribute('aria-pressed')==='true'){window.dispatchEvent(new CustomEvent('contributions-point-pick-cancelled'));return;}if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
   byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);locationStatus('');invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
+  // Contributing to a mapped place is a new note on it. A typed revision in progress (entry bundle,
+  // area proposal, record annotation) cannot take a place, so it is left deliberately, as Cancel does,
+  // before the open form is shown; an open-proposal revision keeps going and takes the place.
+  function leaveTypedRevision(){if(!isOpenForm()){clearRevision();resetContributionForm();resetOpenContext();}}
   window.addEventListener('contributions-clarify-requested',event=>{
     if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
-    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
+    leaveTypedRevision();
+    // Visibility follows the form's state, never a bare unhide.
+    const open=isOpenForm();for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=!open;
+    chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
   window.addEventListener('contributions-refresh-requested',()=>loadDashboard());
