@@ -1,0 +1,64 @@
+name: Release Hauntologies
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Full current main commit to release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hauntologies-production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Require the exact current main revision
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_MAIN_SHA" ]]
+          [[ "$(gh api repos/CUNY-AI-Lab/hauntologies-nyc/commits/main --jq .sha)" == "$EXPECTED_MAIN_SHA" ]]
+      - name: Require existing deployment access
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo 'No CI deployment credential is configured.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.expected_main_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: npm run install:ci
+      - name: Build and prepare the exact release
+        run: |
+          npm run build
+          node scripts/prepare-account-release.mjs
+      - name: Run synthetic tests
+        run: node --test tests/*.test.mjs
+      - name: Preflight, deploy and read back
+        env:
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: '452c33847cf5cb1e46f391fca32fd1b5'
+          WRANGLER_WRITE_LOGS: 'false'
+        run: bash scripts/ci-release.sh
