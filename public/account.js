@@ -81,13 +81,13 @@
   }
   async function showAccount(version) {
     byId('accountTitle').textContent = 'Account'; status.textContent = session.email; formHost.replaceChildren(); actions.replaceChildren(); listMessage('Loading…');
-    const actor=session.actor_id, account=window.HauntologiesAccount?.snapshot();
+    const actor=session.actor_id;
     const nameForm=node('form'), nameField=field(nameForm,'Public username','public-username','text','off'), nameHint=node('p','Saved on this device for future contributions. Existing contributions keep their original attribution.'), nameStatus=node('p'), saveName=node('button','Save username');
     nameField.maxLength=120;nameField.autocomplete='off';nameStatus.setAttribute('role','status');saveName.type='submit';saveName.className='outline';
     try{const saved=JSON.parse(localStorage.getItem('hauntologies-public-moniker:'+actor)||'null');nameField.value=typeof saved?.label==='string'?saved.label:'';}catch{}
     nameForm.append(nameHint,saveName,nameStatus);formHost.append(nameForm);
     nameForm.addEventListener('submit',event=>{
-      event.preventDefault();if(!window.HauntologiesAccount?.isCurrent(account)||session?.actor_id!==actor)return;
+      event.preventDefault();if(!window.HauntologiesAccount?.canContribute()||window.HauntologiesAccount.snapshot().actor!==actor||session?.actor_id!==actor)return;
       const label=nameField.value.trim().replace(/\s+/g,' ');
       if(!label||label.length>120||/[@\u0000-\u001f\u007f]/.test(label)){nameStatus.textContent='Choose a public username or moniker, not an email address.';nameField.focus();return;}
       try{localStorage.setItem('hauntologies-public-moniker:'+actor,JSON.stringify({label}));}catch{nameStatus.textContent='Could not save on this device.';return;}
@@ -121,9 +121,10 @@
       const value = await api('/api/auth/session');
       if (check !== checks) return;
       if(typeof value?.actor_id!=='string'||!value.actor_id||typeof value.password_required!=='boolean')throw new Error('Session could not be confirmed. Please sign in again.');
+      const prior=window.HauntologiesAccount?.snapshot(),retainDialog=prior?.status==='unknown'&&prior.actor===value.actor_id;
       const currentDialog = version === generation; identity(value);
       if (!currentDialog) return;
-      if (dialog.open) { if (value.password_required) renderForm('set-password'); else await showAccount(version); }
+      if (dialog.open) { if (value.password_required) renderForm('set-password'); else if(!retainDialog||!formHost.children.length) await showAccount(version); }
       if(!value.password_required)returnToEdit();
     } catch (error) {
       if (check !== checks) return;

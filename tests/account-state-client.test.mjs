@@ -130,6 +130,13 @@ test('Account saves only an explicitly chosen username for the active account',a
  const event=h.events.find(e=>e.type==='hauntologies-public-moniker-changed');assert.equal(event.detail.actor,'actor-a');assert.equal(event.detail.label,'night owl');
  signIn(h,'actor-b');input.value='wrong account';await form.emit('submit');assert.equal(JSON.parse(h.saved.get('hauntologies-public-moniker:actor-a')).label,'night owl');assert.equal(h.saved.has('hauntologies-public-moniker:actor-b'),false);
 });
+test('an unsaved Account username survives a tab switch and can be saved after revalidation',async()=>{
+ const h=accountFixture();h.node('accountDialog').open=true;h.answer(h.requests[0],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();h.answer(h.requests[1],{total:0});await h.settle();
+ const form=h.node('accountFormHost').children[0],input=form.children[0].children[0];input.value='draft.owl';
+ h.document.hidden=true;h.document.visibilityState='hidden';h.documentListeners.visibilitychange();h.document.hidden=false;h.document.visibilityState='visible';h.documentListeners.visibilitychange();
+ h.answer(h.requests[2],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ assert.equal(h.node('accountFormHost').children[0],form);assert.equal(input.value,'draft.owl');await form.emit('submit');assert.equal(JSON.parse(h.saved.get('hauntologies-public-moniker:actor-a')).label,'draft.owl');
+});
 test('signin starts a fresh check and ignores an older in-flight anonymous result',async()=>{
  const h=accountFixture();h.node('accountDialog').open=true;h.answer(h.requests[0],{error:'sign_in_required'},401);await h.settle();
  // A bfcache session check begins while the sign-in form remains on screen.
