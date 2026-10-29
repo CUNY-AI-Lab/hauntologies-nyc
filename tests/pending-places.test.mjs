@@ -56,6 +56,33 @@ test('a new place sent for review is on the public pending layer at once, with n
   for (const secret of ['author', 'owner', 'Private note', 'sources', 'attachments']) assert.ok(!text.includes(secret), secret);
 });
 
+test('a consented public credit names the contributor on the pending layer; nothing else does', async t => {
+  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
+  const credited = await submit(h, { ...proposal({ title: 'Named lantern' }), public_credit: { consent: true, label: '  Ada   Example ' } }, 'map_u1');
+  const unnamed = await submit(h, proposal({ title: 'Unnamed lantern' }), 'map_u2');
+  const emailish = await submit(h, { ...proposal({ title: 'Address lantern' }), public_credit: { consent: true, label: 'ada@example.test' } }, 'map_u3');
+  const hidden = await submit(h, { ...proposal({ title: 'Hidden lantern' }), public_credit: { consent: true, label: 'Bo Example' } }, 'map_u4');
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u4', '', 'bo@example.test', 1, '2026-10-22', '2026-10-22');
+  run('INSERT INTO contributor_roster_hidden (user_id,created_at) VALUES (?,?)', 'u4', '2026-10-22T00:00:00Z');
+  const { places } = await pendingPlaces(h.db), byId = Object.fromEntries(places.map(p => [p.id, p]));
+  assert.equal(byId[credited.id].contributor, 'Ada Example', 'label is trimmed and whitespace collapsed');
+  for (const s of [unnamed, emailish, hidden]) assert.ok(!Object.hasOwn(byId[s.id], 'contributor'), s.id + ' carries no name');
+  const text = JSON.stringify(places);
+  for (const secret of ['map_u', 'owner', '@', 'Bo Example']) assert.ok(!text.includes(secret), secret);
+});
+
+test('the signed-in roster offers the viewer their own registration name and no one else\'s', async t => {
+  const { contributorRoster } = await import('../server/published-edits.mjs');
+  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
+  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
+  register('ada.lovelace', 'Ada@Example.test'); register('Bo Example', 'bo@example.test');
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'ada@example.test', 1, '2026-10-22', '2026-10-22');
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u9', '', 'nobody@example.test', 1, '2026-10-22', '2026-10-22');
+  assert.deepEqual((await contributorRoster(h.db, 'map_u1')).you, { listed: true, name: 'Ada Lovelace' });
+  assert.deepEqual((await contributorRoster(h.db, 'map_u9')).you, { listed: true }, 'an account without an RSVP gets no name');
+  assert.equal((await contributorRoster(h.db)).you, undefined);
+});
+
 test('a contribution to a mapped place is drawn at that place; one with nowhere to draw is left out', async t => {
   const h = harness(t), target = ok(await call(h, 'target?id=' + place.id), 200).target;
   const added = await submit(h, proposal({ geometry: null, targets: [{ record_id: target.record_id, expected_version: target.expected_version, expected_hash: target.expected_hash }] }));
@@ -155,11 +182,11 @@ test('a signed-in account can leave the roster and rejoin it', async t => {
   register('Ada Example', 'ada@example.test'); register('Ada Example', 'ada.alt@example.test'); register('Bo Example', 'bo@example.test');
   run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'ada@example.test', 1, '2026-10-22', '2026-10-22');
   const names = roster => roster.registrants.map(p => p.name);
-  assert.deepEqual((await contributorRoster(h.db, 'map_u1')).you, { listed: true });
+  assert.deepEqual((await contributorRoster(h.db, 'map_u1')).you, { listed: true, name: 'Ada Example' });
   assert.deepEqual(await setRosterListing(h.db, 'map_u1', false), { listed: false });
   await setRosterListing(h.db, 'map_u1', false);
   const hidden = await contributorRoster(h.db, 'map_u1');
-  assert.deepEqual(names(hidden), ['Bo Example']); assert.deepEqual(hidden.you, { listed: false });
+  assert.deepEqual(names(hidden), ['Bo Example']); assert.deepEqual(hidden.you, { listed: false, name: 'Ada Example' });
   assert.deepEqual(names(await contributorRoster(h.db)), ['Bo Example']);
   await setRosterListing(h.db, 'map_u1', true);
   assert.deepEqual(names(await contributorRoster(h.db, 'map_u1')), ['Ada Example', 'Bo Example']);

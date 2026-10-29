@@ -555,6 +555,22 @@
   byId('retryContributionImages').addEventListener('click',uploadImages);
   window.addEventListener('beforeunload',event=>{if((stagedImages.some(entry=>!entry.receipt)||[...privateImages.values()].some(saved=>saved.stagedImages.some(entry=>!entry.receipt)))){event.preventDefault();event.returnValue='';}});
   const placeTyped=()=>(byId('contributionPlace')?.value||'').trim().slice(0,300);
+  // Public credit is the one name that can leave the form. It is sent only with the box checked,
+  // remembered per account on this device, and offered from the event registration name first.
+  const creditStorageKey=()=>'hauntologies-public-credit:'+(privateActor||'anonymous');
+  function creditValue(){const consent=byId('publicCreditConsent').checked,label=consent?text(byId('publicCreditLabel').value).trim().replace(/\s+/g,' ').slice(0,120):'';return {consent:consent&&!!label,label};}
+  function setCreditFields(credit){byId('publicCreditConsent').checked=!!credit?.consent;byId('publicCreditLabel').value=typeof credit?.label==='string'?credit.label:'';byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;}
+  function rememberCredit(){if(!privateActor)return;try{localStorage.setItem(creditStorageKey(),JSON.stringify({consent:byId('publicCreditConsent').checked,label:byId('publicCreditLabel').value.slice(0,120)}));}catch{}}
+  function rememberedCredit(){try{const value=JSON.parse(localStorage.getItem(creditStorageKey())||'null');return value&&typeof value.consent==='boolean'&&typeof value.label==='string'?value:null;}catch{return null;}}
+  function restoreCreditFields(){const saved=rememberedCredit();setCreditFields(saved||{consent:true,label:byId('publicCreditLabel').value});}
+  let creditPrefill=0;
+  async function prefillCreditName(){
+    const request=++creditPrefill,actor=privateActor;if(!actor||rememberedCredit()?.label||byId('publicCreditLabel').value.trim())return;
+    try{const response=await fetch('/api/contributor-roster',{credentials:'same-origin',cache:'no-store'});if(!response.ok)return;const data=await response.json();
+      if(request!==creditPrefill||actor!==privateActor||byId('publicCreditLabel').value.trim()||typeof data?.you?.name!=='string')return;
+      byId('publicCreditLabel').value=data.you.name.slice(0,120);byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();
+    }catch{}
+  }
   function buildIntakeEnvelope(){
     const explanation=revisionOriginal&&byId('contributionSummary').value===openExplanationDisplayInitial?openExplanationInitial:byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
@@ -575,7 +591,8 @@
     const placeText=payload.geometry?text(byId('contributionPlaceName')?.textContent).trim().slice(0,300):placeTyped();if(!prior&&placeText&&!openTargets.length&&!openRequestedRecordId)payload.location_text=placeText;
     // Title is shown for new places only; a title typed before choosing an existing place is not sent.
     const title=(byId('freeformTitle')?.hidden?'':byId('contributionObjectTitle').value.trim())||prior?.title||'Contribution';
-    return prior?{...prior,title,summary:explanation,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title,summary:explanation,public_credit:{consent:false,label:''},sources:[],attachments:[],targets:structuredClone(openTargets),payload};
+    const public_credit=creditValue();
+    return prior?{...prior,title,summary:explanation,public_credit,targets:structuredClone(openTargets),payload}:{schema_version:'1.0',type:'open_proposal',task_ids:[...openTaskIds],title,summary:explanation,public_credit,sources:[],attachments:[],targets:structuredClone(openTargets),payload};
   }
   function buildEnvelope(){
     return buildIntakeEnvelope();
@@ -647,7 +664,7 @@
   function refList(refs){const list=el('ul',undefined,'workflow-refs');(refs||[]).forEach(ref=>{const li=el('li');const url=typeof ref==='string'?safeLink(ref):ref.kind==='url'?safeLink(ref.value):safeLink(ref.url);const label=typeof ref==='string'?ref:ref.label||ref.value||ref.url||pretty(ref);if(url){const a=el('a',label);a.href=url;a.target='_blank';a.rel='noopener';li.append(a);}else li.append(el('span',label));list.append(li);});return list;}
   function metadata(items){const dl=el('dl',undefined,'workflow-metadata');items.forEach(([k,v])=>{dl.append(el('dt',k),el('dd',v??'Unknown'));});return dl;}
   function labeledControl(label,input){const node=el('label');node.append(el('span',label),input);return node;}
-  function resetContributionForm(){byId('typedContributionForm').reset();['submissionSources','submissionTargets','submissionAttachments','targetSnapshot'].forEach(id=>byId(id).replaceChildren());byId('publicCreditLabel').disabled=true;byId('useContributionTarget').disabled=true;renderErrors([]);}
+  function resetContributionForm(){byId('typedContributionForm').reset();['submissionSources','submissionTargets','submissionAttachments','targetSnapshot'].forEach(id=>byId(id).replaceChildren());restoreCreditFields();byId('useContributionTarget').disabled=true;renderErrors([]);}
 
   // The contributor's own unpublished places, for the map layer only they see.
   function ownPlaces(submissions){
@@ -658,7 +675,8 @@
   }
   let dashboardLoadedAt=0;
   function applyDashboard(data){dashboard=data;sharedTasks=data.tasks||sharedTasks;connectionVersion++;dashboardLoadedAt=Date.now();
-    window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:ownPlaces(data.submissions||[])}}));
+    // Pointed places draw on the contributor's own layer; every own id marks notes as theirs too.
+    window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:ownPlaces(data.submissions||[]),ids:(data.submissions||[]).filter(s=>s.is_own).map(s=>s.id)}}));
     byId('workflowConnection').textContent=caps().can_submit?'':'Read-only';
     byId('reviewCapabilityNotice').textContent=caps().independent_review_available?'':'Independent reviewer required';
     const targetSelect=byId('contributionTargetPick');targetSelect.replaceChildren();const first=el('option',(data.targets||[]).length?'Choose a record':'No records');first.value='';targetSelect.append(first);(data.targets||[]).forEach((target,index)=>{const option=el('option',target.title);option.value=String(index);targetSelect.append(option);});byId('useContributionTarget').disabled=true;
@@ -667,7 +685,7 @@
     if(pendingWrite)showReconciliation();
   }
   async function loadDashboard(){if(!window.HauntologiesAccount?.canContribute())return null;const account=window.HauntologiesAccount.snapshot(),request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest||!window.HauntologiesAccount.isCurrent(account)||actor!==account.actor)return null;
-    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();for(const [id,value] of Object.entries(privateTaskDrafts.get(actor)||{}))byId(id).value=value;restorePendingTask();}
+    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();restoreCreditFields();prefillCreditName();for(const [id,value] of Object.entries(privateTaskDrafts.get(actor)||{}))byId(id).value=value;restorePendingTask();}
     const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
    }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
@@ -812,13 +830,35 @@
     openExplanationInitial=value.type==='open_proposal'?value.payload.explanation:value.summary||'';byId('contributionSummary').value=openExplanationInitial;openExplanationDisplayInitial=byId('contributionSummary').value;
     openTargets=structuredClone(value.targets||[]);openRequestedRecordId=openTargets[0]?.record_id||'';openTargetLabel=openRequestedRecordId;openTaskIds=[...(value.task_ids||[])];
     byId('contributionObjectTitle').value=value.title||'';byId('extraSources').replaceChildren();
+    // A revision keeps the credit the contributor chose, so a name can be added or taken off while revising.
+    if(value.type==='open_proposal')setCreditFields(value.public_credit);
     openSourcesInitial=value.type==='open_proposal'?value.payload.sources_text??'':'';byId('freeformSources').value=openSourcesInitial;openSourcesDisplayInitial=byId('freeformSources').value;
     for(const attribute of value.payload.attributes||[])addAttribute(attribute);
     for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
     byId('revisionContext').replaceChildren(el('span','Revising '+(submission.title||'this contribution')+', revision '+submission.revision));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   }
 
-  function renderQueue(){const items=dashboard?.submissions||[],visible=items;byId('queueSummary').textContent='';const root=byId('contributionQueue');root.replaceChildren();if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'No matches':'No submissions');return;}visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');const status=el('span',statusLabel(s.status),'queue-status');status.dataset.status=s.status;const when=whenText(s.updated_at||s.created_at);b.append(el('strong',s.title||'Untitled contribution'),status,...(when?[el('small','Updated '+when)]:[]));root.append(b);});}
+  // The queue is for recent work first: newest submissions at the top, filtered by default to what a
+  // reviewer can still act on. Each row says what kind of contribution it is and the credited name.
+  const OPEN_QUEUE=['submitted','approved'];
+  function queueKind(s){
+    if(s.type!=='open_proposal')return s.type==='record_update'?'Edit':statusLabel(s.type);
+    let recordId='';try{recordId=JSON.parse(s.raw_json).targets?.[0]?.record_id||'';}catch{}
+    if(!recordId)return 'New place';
+    const known=(dashboard?.targets||[]).find(t=>t.record_id===recordId)||(typeof allRecords==='function'?allRecords().find(r=>r.id===recordId):null);
+    return 'Note on '+(known?.title||'a mapped place');
+  }
+  function queueCredit(s){const credit=s.public_credit;return credit?.consent===true&&typeof credit.label==='string'&&credit.label.trim()?credit.label.trim():'';}
+  function renderQueue(){
+    const items=dashboard?.submissions||[],state=byId('queueState')?.value||'open';
+    const visible=items.filter(s=>state==='all'||(state==='open'?OPEN_QUEUE.includes(s.status):s.status===state)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    const awaiting=items.filter(s=>OPEN_QUEUE.includes(s.status)&&!s.is_own).length;
+    byId('queueSummary').textContent=!dashboard?'':awaiting?awaiting+(awaiting===1?' contribution from others awaits review':' contributions from others await review'):'Nothing from others awaits review';
+    const root=byId('contributionQueue');root.replaceChildren();
+    if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'Nothing in this state':'No submissions');return;}
+    visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');const status=el('span',statusLabel(s.status),'queue-status');status.dataset.status=s.status;const when=whenText(s.created_at||s.updated_at),credit=queueCredit(s);
+      b.append(el('strong',s.title||'Untitled contribution'),status,el('small',[queueKind(s),s.is_own?'Yours':credit?'By '+credit:'',when?'Sent '+when:''].filter(Boolean).join(' · ')));root.append(b);});
+  }
 
   async function loadSubmission(id){const request=++detailRequest,version=identityGeneration,root=byId('submissionDetail');root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const actor=await sessionActor(),data=await api('/submission?id='+encodeURIComponent(id)),confirmed=await sessionActor();if(request!==detailRequest||version!==identityGeneration||confirmed!==actor)return;if(privateActor&&privateActor!==actor){clearPrivateView('Account changed');return;}selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){if(request===detailRequest&&version===identityGeneration){empty(root,error.message);byId('contributionQueue').hidden=false;}}}
   // Review shows each viewer only what they can act on: owners see their contribution and its
@@ -827,6 +867,8 @@
     const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.dataset.submissionId=s.id;byId('contributionQueue').hidden=true;clearInterval(statusWatch?.timer);statusWatch=null;
     root.append(button('All submissions',()=>{root.hidden=true;root.replaceChildren();byId('contributionQueue').hidden=false;renderQueue();},'textbutton submission-back'));
     root.append(el('h3',s.title||'Untitled contribution','submission-title'),submissionProgress(s),validationView(s.validation));
+    // The credited name is the only identity a reviewer sees, and only when the contributor chose it.
+    {const credit=queueCredit(s),kind=queueKind(s);root.append(el('p',[kind,s.is_own?'Yours':credit?'By '+credit:'No public name'].join(' · '),'submission-meta'));}
     if(s.type==='open_proposal'){
       let original;try{original=JSON.parse(s.raw_json);}catch{}
       const p=original?.payload;
@@ -921,6 +963,8 @@
       comment.rows=2;comment.placeholder='Comment (optional to approve, required to send back)';comment.setAttribute('aria-label','Comment');
       const labels={evidence_check:'I checked the evidence and its limits.',geography_check:'I checked the location and uncertainty.',rights_check:'I checked rights and permitted reuse.',duplicate_check:'I checked for duplicate records.',privacy_check:'I checked privacy and public credit consent.'};
       for(const key of reviewKeys){const label=el('label',undefined,'consent-line'),input=el('input');input.type='checkbox';reviewInputs.set(key,input);label.append(input,document.createTextNode(labels[key]));form.append(label);}
+      // One control confirms every check at once; each still goes to the server as its own pass.
+      form.append(button('Confirm all five checks',()=>{for(const input of reviewInputs.values())input.checked=true;},'textbutton review-confirm-all'));
       form.append(el('p',s.application?.applicable?'After approving, you or another participant can verify the map and list preview to publish. The submitter cannot verify it.':'This contribution is review-only; approval does not publish it.','small'));
       if(caps().can_apply&&s.application?.applicable!==true)form.append(el('p','Approving records it, but this one cannot go on the map automatically.','small'));
       const actions=el('div',undefined,'decision-actions');actions.append(approve,revise);
@@ -952,7 +996,8 @@
   window.addEventListener('contributions-verification-ready',event=>{const {job,container}=event.detail||{};if(window.HauntologiesAccount?.isCurrent(event.detail?.account)&&job?.can_verify===true&&container?.isConnected)jobControls(container,job,false);});
   document.querySelectorAll('[data-workflow-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.workflowView)));
   byId('contributionType').addEventListener('change',()=>{renderPayload(byId('contributionType').value);invalidatePreview();});
-  byId('publicCreditConsent').addEventListener('change',()=>{byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;invalidatePreview();});
+  byId('publicCreditConsent').addEventListener('change',()=>{byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();invalidatePreview();});
+  byId('publicCreditLabel').addEventListener('input',rememberCredit);
   byId('typedContributionForm').addEventListener('input',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('change',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('submit',previewForm);
   byId('addSubmissionSource').addEventListener('click',()=>{if(simpleFlow()==='other')addRow('submissionSources',sourceSpecs);else addSimpleSource();invalidatePreview();});byId('addSubmissionTarget').addEventListener('click',()=>{addRow('submissionTargets',targetSpecs);invalidatePreview();});byId('addSubmissionAttachment').addEventListener('click',()=>{addRow('submissionAttachments',attachmentSpecs);invalidatePreview();});
   byId('contributionTargetPick').addEventListener('change',()=>{byId('useContributionTarget').disabled=byId('contributionTargetPick').value==='';});
@@ -983,6 +1028,9 @@
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
   window.addEventListener('contributions-refresh-requested',()=>loadDashboard());
+  // A reviewer with the queue open sees new submissions as the public Under review layer learns of them,
+  // at most once every 20 seconds; everyone else keeps the lighter manual Refresh.
+  window.addEventListener('contributions-pending-changed',()=>{if(privateActor&&!byId('reviewView').hidden&&!document.getElementById('researchSidecar')?.hidden&&document.visibilityState==='visible'&&Date.now()-dashboardLoadedAt>20000)loadDashboard();});
   window.addEventListener('contributions-review-requested',async event=>{
     if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;

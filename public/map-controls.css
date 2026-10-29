@@ -43,7 +43,19 @@
 #pendingPlacesList .pending-location{font-size:12px}
 #pendingPlacesList .pending-location>summary{min-height:44px;cursor:pointer;padding:10px 0}
 #pendingPlacesList .pending-location p{margin:0 0 8px;color:var(--muted)}
-#pendingPlacesList .pending-map-action{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:1px solid var(--line);background:none;color:var(--ink);font-size:12px}
+#pendingPlacesList .pending-contributor,.pending-place-popup .pending-place-contributor{margin:0 0 8px;font-size:12px;color:#e9caa1}
+#pendingPlacesList .pending-map-action,#pendingPlacesList .pending-review-action{display:block;width:100%;min-height:44px;padding:8px;text-align:left;white-space:normal;border:1px solid var(--line);background:none;color:var(--ink);font-size:12px}
+#pendingPlacesList .pending-review-action{margin-top:6px;border-color:#6f665a;color:#e9caa1}
+.pending-place-popup .pending-review-action{margin-top:8px;min-height:40px;padding:6px 12px;border:1px solid #6f665a;background:none;color:#e9caa1;font-size:12px}
+/* Contributions under review that add to a mapped place, listed on that place's card. */
+.place-pending{padding:0 16px 10px 33px;font-size:12px}
+.place-pending h4{margin:0 0 6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#8a63c9}
+.place-pending ul{margin:0;padding:0;list-style:none}
+.place-pending li{border-top:1px solid var(--line);padding:8px 0}
+.place-pending li strong{display:block;font-size:13px;line-height:1.4}
+.place-pending li p{margin:2px 0 0;color:var(--muted)}
+.place-pending .place-pending-text{color:#b3ac9f;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.place-pending .pending-review-action{margin-top:6px;min-height:40px;padding:6px 12px;border:1px solid #6f665a;background:none;color:#e9caa1;font-size:12px}
 #pendingPlacesList .pending-map-action:hover{background:#27231c}
 #pendingPlacesList :is(button,summary):focus-visible{outline:2px solid var(--orange);outline-offset:2px}
 #pendingPlacesStatus{margin-top:8px;color:var(--muted)}

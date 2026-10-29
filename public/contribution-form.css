@@ -255,6 +255,16 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .queue-item .queue-status[data-status="submitted"] { border-color:var(--orange); }
 .queue-item .queue-status[data-status="changes_requested"] { border-color:#d98b6a; color:#f0d6c8; }
 .queue-item .queue-status[data-status="approved"], .queue-item .queue-status[data-status="merged"] { border-color:#7fae86; color:#d7ead9; }
+.queue-controls { display:flex; flex-wrap:wrap; align-items:end; gap:8px 12px; margin:0 0 10px; }
+.queue-controls label { display:grid; gap:4px; flex:1 1 180px; margin:0; font-size:12px; }
+.queue-controls select { min-height:44px; font-size:13px; }
+.queue-controls button { min-height:44px; flex:0 0 auto; }
+.review-confirm-all { justify-self:start; min-height:36px; padding:4px 0; font-size:12px; color:#e9caa1; }
+/* The contributor's own name, kept visible in the Contribute form rather than behind a disclosure. */
+.contribution-credit { margin:14px 0 6px; }
+.contribution-credit .consent-line { margin:0 0 6px; }
+.contribution-credit input[type="text"], .contribution-credit input:not([type]) { width:100%; }
+.contribution-credit-hint { margin:6px 0 0; }
 .submission-back { min-height:32px; margin:0 0 10px; padding:0; font-size:12px; }
 .submission-meta { margin:6px 0 0; font-size:12px; line-height:1.5; color:#d9cfbf; overflow-wrap:anywhere; }
 .submission-ref { margin:16px 0 0; font-size:10px; color:#8e8577; overflow-wrap:anywhere; }

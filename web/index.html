@@ -111,6 +111,11 @@
       <div id="contributionDetails">
       <div id="freeformTitle" class="contribution-title"><label for="contributionObjectTitle">Title<input id="contributionObjectTitle" maxlength="300"></label></div>
       <details id="freeformDescription" class="workflow-details" data-hint="required" open><summary>Description</summary><label for="contributionSummary"><span class="sr-only">Description</span><textarea id="contributionSummary" rows="3" required></textarea></label></details>
+      <div id="freeformCredit" class="contribution-credit">
+        <label class="consent-line"><input id="publicCreditConsent" type="checkbox" checked> Show my name with this contribution</label>
+        <label for="publicCreditLabel" class="sr-only">Name shown on the map</label><input id="publicCreditLabel" placeholder="Your name, as shown on the map" maxlength="120" autocomplete="name" aria-describedby="publicCreditHint">
+        <p id="publicCreditHint" class="small contribution-credit-hint">Shown under review and once published. Uncheck to contribute without a name.</p>
+      </div>
       <details id="freeformContext" class="workflow-details" data-hint><summary>Sources</summary>
         <label for="freeformSources">Links or references<textarea id="freeformSources" rows="3"></textarea></label><div id="extraSources"></div><button id="addFreeformSource" type="button" class="outline">Add source</button>
       </details>
@@ -135,8 +140,6 @@
       <fieldset id="contributionSourcesGroup" class="workflow-fieldset"><legend>Sources</legend><div id="submissionSources"></div><button id="addSubmissionSource" type="button" class="outline">Add source</button></fieldset>
       <details id="contributionTargetsGroup" class="workflow-details"><summary>Targets</summary><label for="contributionTargetPick">Current hosted record<select id="contributionTargetPick"><option value="">No hosted targets available</option></select></label><button id="useContributionTarget" type="button" class="outline" disabled>Use record</button><div id="targetSnapshot"></div><div id="submissionTargets"></div><button id="addSubmissionTarget" type="button" class="outline">Add target</button></details>
       <details id="contributionAttachmentsGroup" class="workflow-details"><summary>Attachments</summary><div id="submissionAttachments"></div><button id="addSubmissionAttachment" type="button" class="outline">Add attachment</button></details>
-      <label class="consent-line"><input id="publicCreditConsent" type="checkbox"> Credit me with approved material.</label>
-      <label for="publicCreditLabel">Optional public credit<input id="publicCreditLabel" placeholder="Leave blank for no public credit" disabled autocomplete="off"></label>
         <button id="exportContribution" class="outline" type="button">Export</button>
       </div>
       <div class="buttonrow"><button id="previewContribution" class="primary" type="submit">Submit</button><button id="cancelRevision" class="textbutton" type="button" hidden>Cancel</button></div>
@@ -148,9 +151,8 @@
   <section id="reviewView" class="workflow-view" hidden aria-labelledby="reviewQueueTitle">
     <h3 id="reviewQueueTitle" class="sr-only" tabindex="-1">Review</h3>
     <p id="reviewCapabilityNotice" class="notice" hidden></p>
-    <button type="button" id="refreshContributions" class="outline" hidden>Refresh</button>
+    <div class="queue-controls"><label for="queueState">Show<select id="queueState"><option value="open">Awaiting review</option><option value="submitted">Submitted</option><option value="approved">Approved, not yet published</option><option value="changes_requested">Needs information</option><option value="merged">Published</option><option value="all">All review states</option></select></label><button type="button" id="refreshContributions" class="outline">Refresh</button></div>
     <p id="queueSummary" class="count" aria-live="polite"></p>
-    <label for="queueState" hidden>Status<select id="queueState"><option value="all">All review states</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="changes_requested">Needs information</option><option value="approved">Approved</option><option value="merged">Merged</option></select></label>
     <div id="contributionQueue" class="submission-queue"></div>
     <article id="submissionDetail" class="submission-detail" tabindex="-1" hidden></article>
     <section class="workflow-jobs" aria-labelledby="jobHeading"><h3 id="jobHeading">Verification</h3><div id="applicationJobs"></div></section>

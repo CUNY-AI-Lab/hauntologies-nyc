@@ -85,7 +85,12 @@ export async function contributorRoster(db, actorId = '') {
   const userId=String(actorId).startsWith('map_')?String(actorId).slice(4):'';
   if(!userId)return {registrants};
   const hidden=await db.prepare('SELECT 1 AS hidden FROM contributor_roster_hidden WHERE user_id=?').bind(userId).first();
-  return {registrants,you:{listed:!hidden}};
+  // The viewer's own registration name, offered back to them as a default public credit.
+  // It is theirs already; it still never reaches anyone else from here.
+  const own=await db.prepare(`SELECT g.name FROM event_registrations g JOIN hny_auth_user u ON lower(trim(g.email))=lower(u.email)
+    WHERE u.id=? ORDER BY g.created_at DESC LIMIT 1`).bind(userId).first();
+  const name=rosterName(own?.name);
+  return {registrants,you:{listed:!hidden,...(name?{name}:{})}};
 }
 
 // Registration names as people typed them: test sign-ups are dropped and a handle such as
