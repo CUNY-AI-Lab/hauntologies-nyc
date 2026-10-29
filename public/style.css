@@ -178,6 +178,10 @@ html,body,.workspace{overflow:clip}
 /* Metadata proposals are contained within the editor overlay. */
 .recordlist .place-card .place-contribute,.recordlist .place-card .place-edit{display:inline-flex;width:auto;align-items:center;justify-content:center;min-height:44px}
 .recordlist .place-card .place-edit{min-width:64px;margin:0 0 12px;padding:8px 12px;border:1px solid #625a4e;background:#151512}
+.recordlist .place-heading{display:flex;align-items:flex-start;gap:4px;padding-right:8px}
+.recordlist .place-heading .place-select{flex:1;min-width:0}
+#researchSidecar .recordlist .place-card .place-heading .place-edit{flex:none;min-width:44px;min-height:44px;margin:0;padding:8px 6px;border:0;background:transparent;color:var(--sun);font:400 14px/1.4 Arial,Helvetica,sans-serif;text-decoration:underline;text-underline-offset:3px}
+#researchSidecar .recordlist .place-card .place-heading .place-edit:hover{color:var(--ink);background:var(--paper)}
 #recordEditorDialog{width:min(460px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:0;background:var(--paper);color:var(--ink);overflow:auto;overscroll-behavior:contain}
 #recordEditorDialog .popout-head{position:sticky;top:0;z-index:2;background:var(--paper)}
 #recordEditorDialog h2{font:500 16px/1.4 Arial,Helvetica,sans-serif}

@@ -479,7 +479,8 @@ function renderRecords(){
  records.forEach(r=>{
   const n=AtlasModel.normalize(r),b=document.createElement('button');b.type='button';b.className='place-select';b.dataset.recordId=r.id;b.classList.toggle('active',selected===r.id);b.setAttribute('aria-pressed',String(selected===r.id));
   b.innerHTML=`<i class="dot ${esc(r.category||'draft')} ${esc(n.geoStatus)}" aria-hidden="true"></i><span class="place-title">${esc(r.title)}</span>`;
-  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;card.append(b);card.insertAdjacentHTML('beforeend',placeFacts(r));
+  const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;
+  const heading=document.createElement('div');heading.className='place-heading';heading.append(b);addPlaceEditAction(heading,r);card.append(heading);card.insertAdjacentHTML('beforeend',placeFacts(r));
   const pendingSlot=document.createElement('div');pendingSlot.className='place-pending';pendingSlot.dataset.recordId=r.id;pendingSlot.hidden=true;card.append(pendingSlot);
   const actions=document.createElement('div');actions.className='place-actions';appendPlaceRecord(actions,r);addContributionAction(actions,r);card.append(actions);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
@@ -523,8 +524,11 @@ function addContributionAction(card,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
  const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.requiresAccount='';button.hidden=!window.HauntologiesAccount?.canContribute();button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
  button.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
- const edit=document.createElement('button');edit.type='button';edit.className='outline place-edit';edit.dataset.requiresAccount='';edit.hidden=!window.HauntologiesAccount?.canContribute();edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
- edit.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}})));card.append(edit);
+}
+function addPlaceEditAction(heading,r){
+ if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
+ const edit=document.createElement('button');edit.type='button';edit.className='place-edit';edit.dataset.requiresAccount='';edit.hidden=!window.HauntologiesAccount?.canContribute();edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
+ edit.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}}))});heading.append(edit);
 }
 function placeFacts(r){
  const p=PlaceSummary.view(r),v=vicinityOf(r),near=v?[v.near,v.area].filter(Boolean).join(', '):'';
