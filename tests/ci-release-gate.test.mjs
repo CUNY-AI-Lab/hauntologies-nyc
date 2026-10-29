@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const sha = 'a'.repeat(40);
+const assets=['app.js','contributions.js','place-history.js','account.js','account-state.js','record-editor.js','edits.js','map-plot.js','contribution-preview.js','style.css','contribution-form.css','registration-policy.js'];
 const releaseScript = path.resolve('scripts/ci-release.sh');
 const checkScript = path.resolve('scripts/check-code-only-release.mjs');
 const expectedConfig = () => ({
@@ -42,7 +43,8 @@ else if (name === 'curl') {
   const url = args.find(x => x.startsWith('https://')) || '', output = args.indexOf('-o');
   if (url.endsWith('/api/access-status')) console.log(JSON.stringify({enabled:true,account_mode:'map',dashboard_enabled:false}));
   else if (url.endsWith('/api/contributor-roster')) { fs.writeFileSync(args[output+1], '{}'); process.stdout.write(process.env.CI_MOCK_ROSTER_OPEN?'200':'401'); }
-  else { const asset = path.basename(url); if(process.env.CI_MOCK_ASSET_CHANGED)fs.writeFileSync(args[output+1],'wrong');else fs.copyFileSync(path.join('dist','client',asset), args[output+1]); }
+  else if (url.endsWith('/')) { if(process.env.CI_MOCK_HTML_CHANGED)fs.writeFileSync(args[output+1],'wrong');else fs.copyFileSync(path.join('web','index.html'),args[output+1]); }
+  else { const asset = path.basename(url); if(process.env.CI_MOCK_ASSET_CHANGED||process.env.CI_MOCK_BAD_ASSET===asset)fs.writeFileSync(args[output+1],'wrong');else fs.copyFileSync(path.join('dist','client',asset), args[output+1]); }
 } else if (name === 'wrangler') {
   if (args[0] === 'deploy') { fs.writeFileSync(state, 'deployed'); if(process.env.CI_MOCK_DEPLOY_ERROR)process.exit(1); console.log('synthetic deploy'); }
   else if (args[0] === 'deployments') console.log(JSON.stringify({versions:[{version_id:fs.existsSync(state)?'after':'before',percentage:100}]}));
@@ -64,11 +66,12 @@ else if (name === 'curl') {
 `;
 function fixture() {
   const dir = mkdtempSync(path.join(tmpdir(), 'haunt-release-code-only-'));
-  for(const p of ['bin','node_modules/.bin','dist/client','dist/server','scripts']) mkdirSync(path.join(dir,p),{recursive:true});
+  for(const p of ['bin','node_modules/.bin','dist/client','dist/server','scripts','web']) mkdirSync(path.join(dir,p),{recursive:true});
   for(const name of ['gh','git','curl','sleep']) writeFileSync(path.join(dir,'bin',name),fake,{mode:0o755});
   writeFileSync(path.join(dir,'node_modules/.bin/wrangler'),fake,{mode:0o755});
   copyFileSync(checkScript,path.join(dir,'scripts/check-code-only-release.mjs'));
-  for(const asset of ['app.js','contributions.js','place-history.js']) writeFileSync(path.join(dir,'dist/client',asset),asset);
+  for(const asset of assets) writeFileSync(path.join(dir,'dist/client',asset),asset);
+  writeFileSync(path.join(dir,'web/index.html'),'Synthetic map HTML');
   const config=path.join(dir,'dist/server/wrangler.live.json');writeFileSync(config,JSON.stringify(expectedConfig()));
   const state=path.join(dir,'deployed'),summary=path.join(dir,'summary'),log=path.join(dir,'calls');
   const env={...process.env,PATH:`${path.join(dir,'bin')}:${process.env.PATH}`,GITHUB_REF:'refs/heads/main',GITHUB_SHA:sha,EXPECTED_MAIN_SHA:sha,GH_TOKEN:'synthetic',CLOUDFLARE_API_TOKEN:'synthetic-token',RUNNER_TEMP:dir,GITHUB_STEP_SUMMARY:summary,CI_MOCK_STATE:state,CI_MOCK_LOG:log,CI_MOCK_GH_COUNT:path.join(dir,'gh-count')};
@@ -93,6 +96,12 @@ test('code-only release checks versions, bindings, variables and assets without 
     assert.match(summary,/No D1 schema, table counts, or Time Travel bookmark were checked/);
     assert.match(summary,/Serving Worker version: `after`/);assert.doesNotMatch(summary,/synthetic-token|original/);
   }finally{f.cleanup();}
+});
+
+test('changed map HTML or an affected UI asset fails release readback',()=>{
+  for(const [overrides,pattern] of [[{CI_MOCK_HTML_CHANGED:'1'},/Delivered map HTML differs/],...['account.js','account-state.js','record-editor.js','registration-policy.js','contribution-form.css'].map(name=>[{CI_MOCK_BAD_ASSET:name},new RegExp('Delivered '+name.replaceAll('.','\\.')+' differs')])]){
+    const f=fixture();try{const r=f.run(overrides);assert.notEqual(r.status,0);assert.match(r.stderr,pattern);assert.equal(existsSync(f.state),true);}finally{f.cleanup();}
+  }
 });
 
 test('migration drift, changed main, wrong checkout or binding stop before deploy',()=>{

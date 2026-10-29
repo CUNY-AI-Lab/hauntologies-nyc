@@ -63,7 +63,9 @@ curl --fail --silent --show-error --max-time 20 "$origin/api/access-status" > "$
 jq -e '.enabled == true and .account_mode == "map" and .dashboard_enabled == false' "$workdir/access.json" >/dev/null || fail 'Account readiness did not match the release contract.'
 code=$(curl --silent --show-error --max-time 20 -o "$workdir/signed-out.json" -w '%{http_code}' "$origin/api/contributor-roster")
 [[ "$code" == 401 ]] || fail 'Signed-out roster protection did not return 401.'
-for asset in app.js contributions.js place-history.js; do
+curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "$origin/" -o "$workdir/root.html"
+cmp -s web/index.html "$workdir/root.html" || fail 'Delivered map HTML differs from the prepared source.'
+for asset in app.js contributions.js place-history.js account.js account-state.js record-editor.js edits.js map-plot.js contribution-preview.js style.css contribution-form.css registration-policy.js; do
   curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "$origin/$asset" -o "$workdir/$asset"
   cmp -s "dist/client/$asset" "$workdir/$asset" || fail "Delivered $asset differs from the prepared asset."
 done
