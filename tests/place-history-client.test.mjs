@@ -16,25 +16,33 @@ class Element {
  find(fn){for(const child of this.children){if(fn(child))return child;const found=child.find(fn);if(found)return found;}}
  emit(event){return this.handlers[event]?.({preventDefault(){}});}
 }
-function fixture(respond,record={id:'synthetic-place'}){
+function fixture(respond,record={id:'synthetic-place'},historyRecord=record.id){
  const values=new Map(),posts=[],targets=[],events=[],listeners=new Map(),account={actor:'synthetic-a',generation:1};let uuid=0;
  const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
  const window={HauntologiesAccount:{snapshot:()=>({...account}),canContribute:()=>true,isCurrent:a=>a.actor===account.actor&&a.generation===account.generation},addEventListener:(event,fn)=>listeners.set(event,fn),removeEventListener:event=>listeners.delete(event),dispatchEvent:event=>events.push(event.type)};
  const context=vm.createContext({document:{createElement:tag=>new Element(tag)},window,sessionStorage:storage,localStorage:{getItem:()=>null},crypto:{randomUUID:()=>`request-${++uuid}`},AbortController,setTimeout,clearTimeout,CustomEvent:class{constructor(type){this.type=type;}},fetch:async(path,options)=>{
-  if(path.startsWith('/api/place-history'))return Response.json({items:[{id:'event-1',summary:'Synthetic change',moniker:'night.owl',created_at:'2026-10-29T00:00:00Z',changes:[]}]});
-  if(path.startsWith('/api/contributions/target')){const target={expected_version:targets.length+1,expected_hash:'hash-'+(targets.length+1)};targets.push(target);return Response.json({target});}
+  if(path.startsWith('/api/place-history'))return Response.json({items:[{id:'event-1',record_id:historyRecord,summary:'Synthetic change',moniker:'night.owl',created_at:'2026-10-29T00:00:00Z',changes:[]}]});
+  if(path.startsWith('/api/contributions/target')){const target={record_id:'synthetic-place',expected_version:targets.length+1,expected_hash:'hash-'+(targets.length+1)};targets.push(target);return Response.json({target});}
   const body=JSON.parse(options.body);posts.push(body);return respond(body,posts.length);
  }});
  vm.runInContext(source,context);const card=new Element('div');card.root=true;window.PlaceHistory.append(card,record);
  const details=card.find(e=>e.className==='workflow-details place-history');
- return {card,values,posts,targets,events,storage,account,listeners,async open(){details.open=true;await details.emit('toggle');await new Promise(setImmediate);const row=details.find(e=>e.className==='history-entry');await row.find(e=>e.tag==='button'&&e.textContent==='Undo').emit('click');const form=row.querySelector('form'),inputs=form.children.filter(e=>e.tag==='label').map(e=>e.children[0]);inputs[0].value='night.owl';inputs[1].value='Undo this change';return{form,name:inputs[0],summary:inputs[1],send:form.find(e=>e.tag==='button'&&e.type==='submit'),notice:form.children.at(-1),submit:()=>form.emit('submit')};}};
+ return {card,values,posts,targets,events,storage,account,listeners,details,async open(){details.open=true;await details.emit('toggle');await new Promise(setImmediate);const row=details.find(e=>e.className==='history-entry');await row.find(e=>e.tag==='button'&&e.textContent==='Undo').emit('click');const form=row.querySelector('form'),inputs=form.children.filter(e=>e.tag==='label').map(e=>e.children[0]);inputs[0].value='night.owl';inputs[1].value='Undo this change';return{form,name:inputs[0],summary:inputs[1],send:form.find(e=>e.tag==='button'&&e.type==='submit'),notice:form.children.at(-1),submit:()=>form.emit('submit')};}};
 }
-const success=()=>Response.json({receipt:{action:'undo',result:{published:true}}});
+const success=()=>Response.json({receipt:{action:'undo',result:{published:true,record_id:'synthetic-place'}}});
+test('history from a different place cannot show an undo action',async()=>{
+ const h=fixture(success,{id:'synthetic-place'},'other-place');h.details.open=true;await h.details.emit('toggle');await new Promise(setImmediate);
+ assert.equal(h.details.find(e=>e.className==='history-entry'),undefined);assert.equal(h.details.find(e=>e.textContent==='History unavailable').textContent,'History unavailable');assert.equal(h.posts.length,0);
+});
+test('an undo receipt for another place is not accepted as success',async()=>{
+ const h=fixture(()=>Response.json({receipt:{action:'undo',result:{published:true,record_id:'other-place'}}})),form=await h.open();await form.submit();
+ assert.equal(h.values.size,1);assert.equal(form.send.textContent,'Retry / confirm');assert.deepEqual(h.events,[]);
+});
 
 test('a note without description still displays its source, fact and attribution without an empty paragraph',()=>{
  const h=fixture(success,{id:'synthetic-place',notes:[{text:'',moniker:'night.owl',sources:'Synthetic archive',attributes:[{name:'Opening date',value:'1901'}]}]});
  const section=h.card.find(e=>e.className==='workflow-details place-notes').find(e=>e.tag==='section');
- assert.deepEqual(section.children.map(e=>[e.tag,e.textContent]),[['small','night.owl'],['p','Sources: Synthetic archive'],['p','Opening date: 1901']]);
+ assert.deepEqual(section.children.map(e=>[e.tag,e.textContent]),[['small','By night.owl'],['p','Sources: Synthetic archive'],['p','Opening date: 1901']]);
 });
 
 for(const [status,error,reopen] of [[400,'public_moniker_required',false],[400,'public_moniker_required',true],[409,'stale_target',false],[409,'undo_conflict',true]])test(`Undo ${error} (${reopen?'reopened History':'same form'}) permits a corrected new request`,async()=>{
@@ -64,4 +72,12 @@ for(const [outcome,response] of [['rejection',()=>Response.json({error:'stale_ta
 test('an obsolete response cannot clear a newer saved request for the same event',async()=>{
  let resolve,arrive;const arrived=new Promise(r=>arrive=r),held=new Promise(r=>resolve=r),h=fixture(()=>{arrive();return held;}),f=await h.open(),submitted=f.submit();await arrived;
  const [storage]=h.values.keys(),newer={...h.posts[0],idempotency_key:'newer-request'};h.storage.setItem(storage,JSON.stringify(newer));resolve(Response.json({error:'stale_target'},{status:409}));await submitted;assert.equal(h.storage.getItem(storage),JSON.stringify(newer));
+});
+test('published notes display only their supplied moniker as text on the place card',()=>{
+ const elements=[];const context=vm.createContext({document:{createElement:tag=>{const e=new Element(tag);elements.push(e);return e;}},window:{},localStorage:{getItem:()=>null},sessionStorage:{},AbortController,setTimeout,clearTimeout});
+ vm.runInContext(source,context);const card=new Element('article');card.root=true;
+ context.window.PlaceHistory.append(card,{id:'synthetic',notes:[{text:'A note',moniker:'night <owl>'},{text:'Uncredited'},{text:'Unsafe legacy value',moniker:'nobody@example.test'}]});
+ const notes=card.find(e=>e.className==='workflow-details place-notes');assert.equal(notes.open,true);assert.equal(notes.find(e=>e.tag==='small').textContent,'By night <owl>');
+ assert.equal(notes.children.filter(e=>e.tag==='section')[1].find(e=>e.tag==='small'),undefined);
+ assert.equal(notes.children.filter(e=>e.tag==='section')[2].find(e=>e.tag==='small'),undefined);
 });

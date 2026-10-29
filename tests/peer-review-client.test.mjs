@@ -20,7 +20,7 @@ function setup(){
  const nodes={applicationJobs:new Node('div')},section=new Node('section');section.className='workflow-jobs';section.append(nodes.applicationJobs);
  const calls=[],events=[],listeners={};let sequence=0;
  const caps={can_review:true,can_apply:true,independent_review_available:true,is_admin:false,can_triage:true};
- const context=vm.createContext({dashboard:{jobs:[],submissions:[]},selectedSubmission:null,
+ const context=vm.createContext({dashboard:{jobs:[],submissions:[]},selectedSubmission:{id:'s'},
   caps:()=>caps,byId:id=>nodes[id],el:(tag,text,cls)=>{const n=new Node(tag,text);n.className=cls;return n;},
   button:(text,action,cls)=>{const n=new Node('button',text);n.className=cls;n.listeners.click=action;return n;},
   document:{createTextNode:text=>new Node('#text',text)},metadata:()=>new Node('dl'),rawDisclosure:()=>new Node('details','Receipt'),statusLabel:s=>s,
@@ -37,6 +37,7 @@ const approved={id:'s',title:'Synthetic place',revision:1,status:'approved',is_o
 test('retired verification jobs stay hidden in direct-publication UI',()=>{
  const h=setup();h.context.dashboard.jobs=[{id:'eligible',submission_id:'s',status:'verification_pending',can_verify:true},{id:'own',status:'verification_pending',can_verify:false}];h.context.dashboard.submissions=[approved];h.ui.renderJobs();
  assert.equal(h.section.hidden,true);assert.equal(h.nodes.applicationJobs.children.length,0);
+ assert.match(readFileSync(new URL('../web/index.html',import.meta.url),'utf8'),/<section class="workflow-jobs"[^>]* hidden>/);
 });
 test('no admin exception exposes a self-review or self-verification button',()=>{
  const h=setup();h.caps.is_admin=true;h.caps.can_self_approve=true;
@@ -65,6 +66,12 @@ test('verification requires a rendered preview, explicit check and evidence befo
 });
 test('an author/noneligible preview never receives a verification form',()=>{
  const h=setup(),container=new Node('section');h.listeners['contributions-verification-ready']({detail:{job:{status:'verification_pending',can_verify:false},container}});assert.equal(container.children.length,0);
+});
+test('a job for a different selection never shows controls, and a stale rollback cannot run',async()=>{
+ const h=setup(),other=new Node('section');h.caps.can_rollback=true;
+ h.ui.jobControls(other,{id:'shoe-job',submission_id:'shoe',status:'verified'},false);assert.equal(other.children.length,0);
+ h.context.selectedSubmission={id:'shoe'};const card=new Node('section');h.ui.jobControls(card,{id:'shoe-job',submission_id:'shoe',status:'verified'},false);
+ const form=walk(card).find(n=>n.tag==='form');assert.ok(form);h.context.selectedSubmission={id:'astor'};await form.listeners.submit({preventDefault(){}});assert.equal(h.calls.length,0);
 });
 test('preview markup exposes verification only for persisted eligible snapshots',()=>{
  const preview=readFileSync(new URL('../public/contribution-preview.js',import.meta.url),'utf8');

@@ -303,3 +303,5 @@ details[open]:not([data-closing])>summary>.disclosure-hint{visibility:hidden}
 
 /* Private affordances never flash while the session is unknown or unavailable. */
 html:not([data-account-state="signed_in"]) [data-requires-account]{display:none!important}
+html:not([data-account-state="signed_in"]) #recordEditorDialog{visibility:hidden}
+html[data-account-paused="true"] :is(#accountDialog,#ownEditsDialog,#contributorsDialog,#candidateDialog){visibility:hidden}

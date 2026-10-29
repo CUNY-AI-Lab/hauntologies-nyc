@@ -17,6 +17,7 @@
 .contribution-attribute label, .staged-image label { display: block; margin-bottom: 10px; }
 .staged-image > p { margin: 0 0 8px; overflow-wrap: anywhere; }
 .staged-image details { margin-block: 4px; }
+.private-image-preview { display:block; max-width:100%; max-height:320px; width:auto; height:auto; margin:8px 0; object-fit:contain; }
 #contributionImages { padding: 8px; }
 #contributionImageLimits, #contributionImageError { margin: 8px 0; }
 #contributionImageError { color: #ffba9a; }

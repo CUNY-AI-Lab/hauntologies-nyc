@@ -75,7 +75,7 @@
   function clear(){generation++;loaded=false;page=1;totalPages=1;scroll=0;returnFocus=null;actor=null;list.replaceChildren();status.textContent='';back.hidden=true;if(dialog.open)dialog.close();}
   window.addEventListener('contributions-session-ended',clear);window.addEventListener('contributions-session-started',clear);
   window.addEventListener('record-edit-saved',()=>{loaded=false;});
-  window.addEventListener('focus',()=>{if(dialog.open){list.replaceChildren();loaded=false;open(true);}});
+  window.addEventListener('focus',()=>{if(dialog.open&&window.HauntologiesAccount?.canContribute()){list.replaceChildren();loaded=false;open(true);}});
 
   const feed=byId('publishedEditsFeed'),feedList=byId('publishedEditsList'),feedStatus=byId('publishedEditsStatus');
   let timer=null,lastFeed='',feedGeneration=0;

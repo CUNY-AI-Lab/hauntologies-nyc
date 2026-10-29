@@ -74,10 +74,10 @@
     window.dispatchEvent(new CustomEvent('contributions-plot-confirmed', {detail: {latitude, longitude, name}}));
   }
 
-  window.addEventListener('hauntologies-auth-changed', () => { if(armed) arm(false); else clearSpot(); });
+  window.addEventListener('hauntologies-auth-changed', event => { if(window.HauntologiesAccount?.isTemporaryTransition?.(event?.detail))return; if(armed) arm(false); else clearSpot(); });
   button.addEventListener('click', () => arm(!armed));
   map.on('click', event => {
-    if (!armed) return;
+    if (!armed || !window.HauntologiesAccount?.canContribute()) return;
     if (typeof emptyMapTarget === 'function' && !emptyMapTarget(event.originalEvent?.target)) return;
     L.DomEvent.stop(event.originalEvent);
     plot(event.latlng);

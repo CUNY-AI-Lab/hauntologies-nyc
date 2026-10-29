@@ -84,7 +84,7 @@ let ownPlacesLayer=null,ownPlaces=[],ownIds=new Set();
 function renderOwnPlaces(){
  if(!map)return;ownPlacesLayer??=L.layerGroup().addTo(map);ownPlacesLayer.clearLayers();
  for(const place of ownPlaces){
-  const label=place.status==='changes_requested'?'Sent back to you':place.status==='approved'?'Approved, not yet on the map':place.status==='draft'?'Draft':'Waiting for review';
+  const label=place.status==='draft'?'Draft':'Saved privately';
   const marker=L.marker([place.latitude,place.longitude],{pane:'researchPoints',zIndexOffset:700,title:place.title+', '+label,icon:L.divIcon({className:'own-place',html:'<span aria-hidden="true"></span>',iconSize:[26,26],iconAnchor:[13,13]})});
   const tip=document.createElement('span');tip.append(document.createTextNode(place.title),document.createElement('br'),document.createTextNode(label));bindHoverTip(marker,tip,{direction:'top',offset:[0,-12]});
   marker.on('add',()=>marker.getElement()?.setAttribute('data-status',place.status));
@@ -104,7 +104,8 @@ function pendingWhere(place,record){
  return place.location_text||'';
 }
 // The contributor's public name, when they chose one; the server sends nothing else about them.
-const pendingBy=place=>typeof place.contributor==='string'&&place.contributor.trim()?place.contributor.trim():'';
+function publicMoniker(value){if(typeof value!=='string'||/[@\u0000-\u001f\u007f]/.test(value))return '';const label=value.trim().replace(/\s+/g,' ');return label.length<=120?label:'';}
+const pendingBy=place=>publicMoniker(place.contributor);
 // A signed-in participant can open someone else's submitted or approved contribution in Review from here.
 const mine=place=>ownIds.has(place.id)||ownPlaces.some(p=>p.id===place.id);
 const reviewable=place=>Boolean(window.HauntologiesAccount?.canContribute())&&['submitted','approved'].includes(place.status)&&!mine(place);
@@ -532,10 +533,11 @@ function addPlaceEditAction(heading,r){
 }
 function placeFacts(r){
  const p=PlaceSummary.view(r),v=vicinityOf(r),near=v?[v.near,v.area].filter(Boolean).join(', '):'';
+ const contributors=Array.isArray(r.contributors)?r.contributors.map(publicMoniker).filter(Boolean):[];
  const coordinates=p.latitude===null||p.longitude===null
   ? '<p class="place-coordinate-note">Location unresolved</p>'
   : `<dl class="place-coordinates"><dt>Coordinates</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
- return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+ return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${contributors.length?`<p class="place-contributors">Contributors: ${contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
 }
 
 function appendPlaceRecord(card,r){
@@ -634,6 +636,6 @@ function setupPlaceLayout(){
 }
 placeLayout=setupPlaceLayout();
 
-window.addEventListener('hauntologies-auth-changed',event=>{editRequest++;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();
+window.addEventListener('hauntologies-auth-changed',event=>{editRequest++;if(window.HauntologiesAccount?.isTemporaryTransition?.(event?.detail))return;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();
  // Review shortcuts on pending places follow the signed-in state.
  if(event.detail?.previous?.actor!==event.detail?.current?.actor)renderPendingPlaces();});

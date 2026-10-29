@@ -115,12 +115,12 @@
     if(!valid||action==='publish'&&result.published!==true)throw uncertain();
     if(['submit','revise','publish'].includes(action)){
       const expected=request.body.submission_id?request.body.expected_revision+1:1,submission=response.submission;
-      if(typeof result.submission_id!=='string'||result.revision!==expected||submission?.id!==result.submission_id||!Number.isInteger(submission.revision)||submission.revision<expected||action==='revise'&&result.submission_id!==request.body.submission_id)throw uncertain();
+      if(typeof result.submission_id!=='string'||result.revision!==expected||submission?.id!==result.submission_id||!Number.isInteger(submission.revision)||submission.revision<expected||request.body.submission_id&&result.submission_id!==request.body.submission_id)throw uncertain();
     }
     for(const key of ['submission_id','job_id','task_id'])if(request.body[key]&&result[key]!==request.body[key])throw uncertain();
     return response;
   }
-  const statusLabel=value=>({submitted:'Saved privately',changes_requested:'Revision requested',in_progress:'In progress',verification_pending:'Verification pending',rolled_back:'Rolled back',ready_for_review:'Ready for review'})[value]||text(value).replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());
+  const statusLabel=value=>({submitted:'Saved privately',approved:'Saved privately',changes_requested:'Revision requested',in_progress:'In progress',verification_pending:'Saved privately',rolled_back:'Rolled back',ready_for_review:'Saved privately'})[value]||text(value).replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());
   function disclosure(title,...content){const details=el('details',undefined,'workflow-details');details.append(el('summary',title),...content);return details;}
 
   const getPath = (object, path) => path.split('.').reduce((v,k) => v?.[k], object);
@@ -503,7 +503,7 @@
     try{
       const response=await fetch(apiRoot+'/attachment',{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',headers:{'X-Hauntologies-Actor':batch.actor_id},body,signal:controller.signal});
       let data;try{data=await response.json();}catch{throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});}
-      if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&batch.actor_id===privateActor){if(response.status===401)window.HauntologiesAccount?.invalidate(account);clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)await accessActions(byId('workflowConnection'));}throw Object.assign(new Error(typeof data.error==='string'?data.error:'Image not saved'),{status:response.status});}
+      if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&batch.actor_id===privateActor&&window.HauntologiesAccount?.isCurrent(account)){if(response.status===401)window.HauntologiesAccount?.invalidate(account);clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)await accessActions(byId('workflowConnection'));}throw Object.assign(new Error(typeof data.error==='string'?data.error:'Image not saved'),{status:response.status});}
       const confirmedActor=await sessionActor();if(imageBatch!==batch||privateActor!==batch.actor_id||confirmedActor!==batch.actor_id)throw Object.assign(new Error('Account changed'),{status:409});
       const receipt=data.receipt,result=receipt?.result;
       if(typeof receipt?.id!=='string'||!receipt.id||receipt.action!=='attachment'||result?.submission_id!==batch.submission_id||result.revision!==pending.expected_revision+1||!attachmentId(result.attachment_id)||data.submission?.id!==batch.submission_id||!Number.isInteger(data.submission.revision)||data.submission.revision<result.revision)throw Object.assign(new Error('Image receipt unavailable'),{uncertain:true});
@@ -553,7 +553,7 @@
   }
   function renderPrivateImages(root,attachments){
     const list=el('div');for(const [index,ref] of (attachments||[]).entries()){
-      if(!attachmentId(ref?.attachment_id))continue;const section=el('section'),link=el('a','Image '+(index+1));link.href=apiRoot+'/attachment?id='+encodeURIComponent(ref.attachment_id);link.target='_blank';link.rel='noopener noreferrer';section.append(link);
+      if(!attachmentId(ref?.attachment_id))continue;const section=el('section'),link=el('a','Image '+(index+1)),image=el('img');link.href=apiRoot+'/attachment?id='+encodeURIComponent(ref.attachment_id);link.target='_blank';link.rel='noopener noreferrer';image.src=link.href;image.alt=typeof ref.metadata?.alt==='string'?ref.metadata.alt:'';image.loading='lazy';image.decoding='async';image.className='private-image-preview';image.addEventListener('error',()=>{image.hidden=true;});section.append(image,link);
       const values=imageFields.filter(([key])=>typeof ref.metadata?.[key]==='string'&&ref.metadata[key]).map(([key,label])=>[label,ref.metadata[key]]);if(values.length)section.append(metadata(values));list.append(section);
     }if(list.childElementCount)root.append(disclosure('Images',list));
   }
@@ -656,7 +656,7 @@
     try{
     const response=await fetch(apiRoot+path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'content-type':'application/json',...(expectedActor?{'X-Hauntologies-Actor':expectedActor}:{})}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:controller.signal});
     let data;try{data=await response.json();}catch{throw Object.assign(new Error('The contribution service returned an unreadable response.'),{status:response.status,uncertain:true});}
-    if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&actor===privateActor){if(response.status===401)window.HauntologiesAccount?.invalidate(account);clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
+    if(!response.ok){if((response.status===401||response.status===403)&&generation===identityGeneration&&actor===privateActor&&window.HauntologiesAccount?.isCurrent(account)){if(response.status===401)window.HauntologiesAccount?.invalidate(account);clearPrivateView(response.status===401?'Submissions unavailable':'Submission not permitted');if(response.status===401)accessActions(byId('workflowConnection'));}const err=data.error;throw Object.assign(new Error(typeof err==='string'?err:err?.message||data.message||'Contribution request failed.'),{status:response.status,data});}return data;
     }finally{clearTimeout(timeout);}
   }
   function empty(container,message){container.replaceChildren(el('p',message,'empty'));}
@@ -672,7 +672,7 @@
 
   // The contributor's own unpublished places, for the map layer only they see.
   function ownPlaces(submissions){
-    return submissions.filter(s=>s.is_own&&!['withheld','merged'].includes(s.status)).flatMap(s=>{
+    return submissions.filter(s=>s.is_own&&!['withheld','merged','published','revoked'].includes(s.status)).flatMap(s=>{
       try{const g=JSON.parse(s.raw_json).payload?.geometry;const c=g?.type==='Point'?g.coordinates:null;
         return Array.isArray(c)&&c.length===2&&c.every(Number.isFinite)?[{id:s.id,title:s.title||'Your contribution',status:s.status,latitude:c[1],longitude:c[0]}]:[];}catch{return [];}
     });
@@ -690,8 +690,8 @@
   }
   async function loadDashboard(){if(!window.HauntologiesAccount?.canContribute())return null;const account=window.HauntologiesAccount.snapshot(),request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest||!window.HauntologiesAccount.isCurrent(account)||actor!==account.actor)return null;
     if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();restoreCreditFields();syncCreditState();for(const [id,value] of Object.entries(privateTaskDrafts.get(actor)||{}))byId(id).value=value;restorePendingTask();}
-    const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
-   }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Saved work unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
+    const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||!window.HauntologiesAccount.isCurrent(account)||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
+   }catch(error){if(request!==dashboardRequest||!window.HauntologiesAccount.isCurrent(account))return null;clearPrivateView(error.status===401?'Sign in to contribute':'Saved work unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
   // Only problems a person can act on; a valid submission shows nothing, and the server's
   // standing review notice is not repeated on every screen.
@@ -730,7 +730,7 @@
   let previewInFlight=false;
   async function previewForm(event){
     event.preventDefault();if(!window.HauntologiesAccount?.canContribute()||previewInFlight||busy||imageProcessing||imageBusy)return;
-    const account=window.HauntologiesAccount.snapshot();previewInFlight=true;
+    const account=window.HauntologiesAccount.snapshot(),startedGeneration=identityGeneration;previewInFlight=true;
     try{if(pendingWrite){renderErrors(['Save outcome unknown. Check My edits before retrying.']);showReconciliation();return;}
     renderErrors([]);const errors=[],explanation=byId('contributionSummary').value,attributes=attributeValues();
     if(isOpenForm()&&!byId('contributionChangeSummary').value.trim())errors.push({field:'change_summary',message:'Briefly describe your change'});
@@ -770,8 +770,8 @@
       if(error.status===401){if(!owner)local('sign-in');return;}
       if(generation!==identityGeneration||owner!==privateActor)return;local('unavailable');serviceFailure(error,()=>byId('previewContribution').click());}
     // Preview must never stay disabled after a failed check, whatever happened to the session.
-    finally{if(window.HauntologiesAccount.isCurrent(account))byId('previewContribution').disabled=false;}
-    }finally{if(window.HauntologiesAccount.isCurrent(account))previewInFlight=false;}
+    finally{if(generation===identityGeneration&&owner===privateActor)byId('previewContribution').disabled=false;}
+    }finally{if(startedGeneration===identityGeneration&&privateActor===account.actor)previewInFlight=false;}
   }
 
   async function submitPreview(){
@@ -808,7 +808,7 @@
       if(!current()){clearInterval(watch.timer);return;}
       if(document.visibilityState!=='visible'||watch.loading)return;
       watch.loading=true;
-      try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!current()||!s||s.status===watch.status)return;watch.status=s.status;
+      try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!current()||s?.id!==id||s.status===watch.status)return;watch.status=s.status;
         root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','published','withheld','revoked'].includes(s.status))clearInterval(watch.timer);}catch{}finally{watch.loading=false;}
     },30000)};statusWatch=watch;
   }
@@ -861,12 +861,12 @@
       b.append(el('strong',s.title||'Untitled contribution'),status,el('small',[queueKind(s),s.is_own?'Yours':credit?'By '+credit:'',when?'Sent '+when:''].filter(Boolean).join(' · ')));root.append(b);});
   }
 
-  async function loadSubmission(id){const request=++detailRequest,version=identityGeneration,root=byId('submissionDetail');root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const actor=await sessionActor(),data=await api('/submission?id='+encodeURIComponent(id)),confirmed=await sessionActor();if(request!==detailRequest||version!==identityGeneration||confirmed!==actor)return;if(privateActor&&privateActor!==actor){clearPrivateView('Account changed');return;}selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){if(request===detailRequest&&version===identityGeneration){empty(root,error.message);byId('contributionQueue').hidden=false;}}}
+  async function loadSubmission(id){const request=++detailRequest,version=identityGeneration,root=byId('submissionDetail');selectedSubmission=null;root.hidden=false;root.replaceChildren(el('p','Loading…','small'));try{const actor=await sessionActor(),data=await api('/submission?id='+encodeURIComponent(id)),confirmed=await sessionActor();if(request!==detailRequest||version!==identityGeneration||confirmed!==actor)return;if(privateActor&&privateActor!==actor){clearPrivateView('Account changed');return;}if(data.submission?.id!==id)throw new Error('The selected contribution could not be confirmed.');selectedSubmission=data.submission;renderSubmission(selectedSubmission);root.focus();}catch(error){if(request===detailRequest&&version===identityGeneration){empty(root,error.message);byId('contributionQueue').hidden=false;}}}
   // Review shows each viewer only what they can act on: owners see their contribution and its
   // progress; reviewers get one checklist; publishers see Apply only when something can be applied.
   function renderSubmission(s){
     const root=byId('submissionDetail');root.replaceChildren();root.hidden=false;root.dataset.submissionId=s.id;byId('contributionQueue').hidden=true;clearInterval(statusWatch?.timer);statusWatch=null;
-    root.append(button('All submissions',()=>{root.hidden=true;root.replaceChildren();byId('contributionQueue').hidden=false;renderQueue();},'textbutton submission-back'));
+    root.append(button('All submissions',()=>{selectedSubmission=null;detailRequest++;root.hidden=true;root.replaceChildren();byId('contributionQueue').hidden=false;renderQueue();},'textbutton submission-back'));
     root.append(el('h3',s.title||'Untitled contribution','submission-title'),submissionProgress(s),validationView(s.validation));
     // The credited name is the only identity a reviewer sees, and only when the contributor chose it.
     {const credit=queueCredit(s),kind=queueKind(s);root.append(el('p',[kind,s.is_own?'Yours':credit?'By '+credit:'No public name'].join(' · '),'submission-meta'));}
@@ -916,43 +916,46 @@
       }
     },'outline');retry.dataset.reconciliationAction=ready?'retry':'check';controls.append(retry);
   }
-  async function safeMutation(path,body){
+  async function safeMutation(path,body,expectedSubmissionId=null){
     if(pendingWrite)throw new Error('Previous save unresolved; check My edits');
     const generation=identityGeneration,owner=privateActor;
     const actor_id=await sessionActor();
     if(generation!==identityGeneration||owner!==privateActor||actor_id!==owner)throw Object.assign(new Error('Account changed; reopen this action.'),{status:409});
-    if(pendingWrite)throw new Error('Previous save unresolved; check My edits');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(generation!==identityGeneration||privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(generation!==identityGeneration||owner!==privateActor)throw error;if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check My edits before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
+    if(expectedSubmissionId&&selectedSubmission?.id!==expectedSubmissionId)throw Object.assign(new Error('The selected contribution changed; reopen this action.'),{status:409});
+    if(pendingWrite)throw new Error('Previous save unresolved; check My edits');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);if(expectedSubmissionId&&result?.receipt?.result?.submission_id!==expectedSubmissionId)throw Object.assign(new Error('The contribution in the receipt could not be confirmed.'),{uncertain:true});await requireOriginalActor(request);if(generation!==identityGeneration||privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(generation!==identityGeneration||owner!==privateActor)throw error;if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check My edits before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
   }
   const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
   // Approval, staging and map/list verification are separate, observable decisions.
   async function stageForVerification(s){
     const account=window.HauntologiesAccount?.snapshot();
-    if(!window.HauntologiesAccount?.isCurrent(account))return;
-    const staged=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash});
+    if(!window.HauntologiesAccount?.isCurrent(account)||selectedSubmission?.id!==s.id)return;
+    const staged=await safeMutation('/apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:s.approval.approval_hash},s.id);
     await loadDashboard();
-    if(!window.HauntologiesAccount.isCurrent(account))return;
+    if(!window.HauntologiesAccount.isCurrent(account)||selectedSubmission?.id!==s.id)return;
     window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:{...staged.job,uiAccount:account}}));
   }
   const publishable=s=>!!caps().can_apply&&!s.is_own&&s.status==='approved'&&s.approval?.independent===true&&s.approval?.revision===s.revision&&s.application?.applicable===true;
   // One decision: approve, with an optional comment, or send back to revise, with a required one.
   function renderReviewControls(root,s){
     const account=window.HauntologiesAccount?.snapshot();
+    const current=()=>window.HauntologiesAccount?.isCurrent(account)&&selectedSubmission?.id===s.id;
+    if(!current())return;
     const canReview=!!caps().can_review&&!!caps().independent_review_available&&!s.is_own&&s.status==='submitted'&&s.validation?.valid===true;
     const out=el('p',undefined,'small');out.setAttribute('role','status');
-    const refresh=async()=>{if(!window.HauntologiesAccount?.isCurrent(account))return;await loadDashboard();if(window.HauntologiesAccount.isCurrent(account))await loadSubmission(s.id);};
+    const refresh=async()=>{if(!current())return;await loadDashboard();if(current())await loadSubmission(s.id);};
     if(canReview){
       const form=el('div',undefined,'decision-form'),comment=el('textarea'),reviewInputs=new Map(),approve=button('Approve review',async()=>{
-        if([...reviewInputs.values()].some(input=>!input.checked)){out.textContent='Confirm each review check before approving.';return;}
+        if(!current())return;if([...reviewInputs.values()].some(input=>!input.checked)){out.textContent='Confirm each review check before approving.';return;}
         approve.disabled=revise.disabled=true;out.textContent='Approving…';
         try{
-          const result=await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries([...reviewInputs].map(([key,input])=>[key,input.checked?'pass':'not_tested'])),rationale:comment.value.trim()||'Approved.'});
+          const result=await safeMutation('/review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries([...reviewInputs].map(([key,input])=>[key,input.checked?'pass':'not_tested'])),rationale:comment.value.trim()||'Approved.'},s.id);
           out.textContent='Review approved. Verify the map and list preview next.';
           await refresh();
         }catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
       },'primary'),revise=button('Revise and resubmit',async()=>{
-        if(!comment.value.trim()){out.textContent='Say what to change.';comment.focus();return;}
+        if(!current())return;if(!comment.value.trim()){out.textContent='Say what to change.';comment.focus();return;}
         approve.disabled=revise.disabled=true;
-        try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'request_information',rationale:comment.value.trim()});await refresh();}
+        try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'request_information',rationale:comment.value.trim()},s.id);await refresh();}
         catch(error){out.textContent=error.message;approve.disabled=revise.disabled=false;}
       },'outline');
       comment.rows=2;comment.placeholder='Comment (optional to approve, required to send back)';comment.setAttribute('aria-label','Comment');
@@ -971,21 +974,22 @@
       root.append(el('p','Another participant must verify your submission.','small'));
     }else if(caps().can_triage&&s.status==='draft'){
       // Sending a revision back to the queue is not a decision on it, so it may be one's own.
-      const start=button(s.is_own?'Send for review':'Start review',async()=>{start.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'ready_for_review',rationale:'Revision ready for review.'});await refresh();}catch(error){out.textContent=error.message;start.disabled=false;}},'outline');
+      const start=button(s.is_own?'Send for review':'Start review',async()=>{if(!current())return;start.disabled=true;try{await safeMutation('/triage',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,action:'ready_for_review',rationale:'Revision ready for review.'},s.id);await refresh();}catch(error){out.textContent=error.message;start.disabled=false;}},'outline');
       root.append(start,out);
     }
   }
   function jobControls(card,job,includePreview=true){
     const account=window.HauntologiesAccount?.snapshot();
-    if(!window.HauntologiesAccount?.isCurrent(account))return;
-    if(includePreview&&job.status==='verification_pending')card.append(button('Verify',()=>window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:{...job,uiAccount:account}})),'outline'));
+    const current=()=>window.HauntologiesAccount?.isCurrent(account)&&!!job.submission_id&&selectedSubmission?.id===job.submission_id;
+    if(!current())return;
+    if(includePreview&&job.status==='verification_pending')card.append(button('Verify',()=>{if(current())window.dispatchEvent(new CustomEvent('contributions-preview-requested',{detail:{...job,uiAccount:account}}));},'outline'));
     if(!caps().can_apply)return;
     if(!includePreview&&job.status==='verification_pending'&&job.can_verify===true){
       const form=el('form',undefined,'job-action-form');form.append(el('h4','Verify'));
-      const label=el('label','Result');const status=el('select');status.setAttribute('aria-label','Map/list verification outcome');['not_tested','pass','fail'].forEach(value=>{const option=el('option',statusLabel(value));option.value=value;status.append(option);});label.append(status);const evidenceLabel=el('label','Evidence');const evidence=el('textarea');evidence.rows=3;evidence.required=true;evidence.setAttribute('aria-label','Map/list verification evidence');evidenceLabel.append(evidence);const confirmLabel=el('label',undefined,'consent-line'),confirm=el('input');confirm.type='checkbox';confirmLabel.append(confirm,document.createTextNode('I checked that the map and list preview match the approved contribution.'));const submit=el('button','Verify and publish','primary');submit.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(label,evidenceLabel,confirmLabel,submit,output);form.addEventListener('submit',async event=>{event.preventDefault();if(!window.HauntologiesAccount.isCurrent(account))return;if(status.value==='not_tested'||!evidence.value.trim()){output.textContent='Choose a result and describe what you checked.';return;}if(status.value==='pass'&&(!confirm.checked||card.closest('dialog')?.dataset.previewReady!=='true')){output.textContent='Inspect the rendered map and list preview and confirm the check before publishing.';return;}submit.disabled=true;try{const result=await safeMutation('/verify',{idempotency_key:crypto.randomUUID(),job_id:job.id,map_list_check:{status:status.value,evidence:evidence.value}});output.textContent=statusLabel(result.job.status);if(['verified','rolled_back'].includes(result.job.status))window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();if(selectedSubmission?.id===job.submission_id)await loadSubmission(job.submission_id);if(result.job.status==='verified')card.closest('dialog')?.close();}catch(error){output.textContent=error.message;submit.disabled=false;}});card.append(form);
+      const label=el('label','Result');const status=el('select');status.setAttribute('aria-label','Map/list verification outcome');['not_tested','pass','fail'].forEach(value=>{const option=el('option',statusLabel(value));option.value=value;status.append(option);});label.append(status);const evidenceLabel=el('label','Evidence');const evidence=el('textarea');evidence.rows=3;evidence.required=true;evidence.setAttribute('aria-label','Map/list verification evidence');evidenceLabel.append(evidence);const confirmLabel=el('label',undefined,'consent-line'),confirm=el('input');confirm.type='checkbox';confirmLabel.append(confirm,document.createTextNode('I checked that the map and list preview match the approved contribution.'));const submit=el('button','Verify and publish','primary');submit.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(label,evidenceLabel,confirmLabel,submit,output);form.addEventListener('submit',async event=>{event.preventDefault();if(!current())return;if(status.value==='not_tested'||!evidence.value.trim()){output.textContent='Choose a result and describe what you checked.';return;}if(status.value==='pass'&&(!confirm.checked||card.closest('dialog')?.dataset.previewReady!=='true')){output.textContent='Inspect the rendered map and list preview and confirm the check before publishing.';return;}submit.disabled=true;try{const result=await safeMutation('/verify',{idempotency_key:crypto.randomUUID(),job_id:job.id,map_list_check:{status:status.value,evidence:evidence.value}},job.submission_id);output.textContent=statusLabel(result.job.status);if(['verified','rolled_back'].includes(result.job.status))window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();if(selectedSubmission?.id===job.submission_id)await loadSubmission(job.submission_id);if(result.job.status==='verified')card.closest('dialog')?.close();}catch(error){output.textContent=error.message;submit.disabled=false;}});card.append(form);
     }
     if(caps().can_rollback&&job.status==='verified'){
-      const form=el('form',undefined,'job-action-form');form.append(el('h4','Rollback'));const label=el('label','Reason');const reason=el('textarea');reason.rows=3;reason.required=true;reason.setAttribute('aria-label','Rollback reason');label.append(reason);const submit=el('button','Rollback','outline');submit.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(label,submit,output);form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;try{const result=await safeMutation('/rollback',{idempotency_key:crypto.randomUUID(),job_id:job.id,rationale:reason.value});output.textContent=statusLabel(result.job.status);if(result.job.status==='rolled_back')window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();}catch(error){output.textContent=error.message;submit.disabled=false;}});card.append(form);
+      const form=el('form',undefined,'job-action-form');form.append(el('h4','Rollback'));const label=el('label','Reason');const reason=el('textarea');reason.rows=3;reason.required=true;reason.setAttribute('aria-label','Rollback reason');label.append(reason);const submit=el('button','Rollback','outline');submit.type='submit';const output=el('p',undefined,'small');output.setAttribute('role','status');form.append(label,submit,output);form.addEventListener('submit',async event=>{event.preventDefault();if(!current())return;submit.disabled=true;try{const result=await safeMutation('/rollback',{idempotency_key:crypto.randomUUID(),job_id:job.id,rationale:reason.value},job.submission_id);output.textContent=statusLabel(result.job.status);if(result.job.status==='rolled_back')window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();}catch(error){output.textContent=error.message;submit.disabled=false;}});card.append(form);
     }
   }
   window.addEventListener('contributions-verification-ready',event=>{const {job,container}=event.detail||{};if(window.HauntologiesAccount?.isCurrent(event.detail?.account)&&job?.can_verify===true&&container?.isConnected)jobControls(container,job,false);});
@@ -1051,7 +1055,9 @@
   // Signing in from a preview carries straight on to the checked preview.
   let resumePreviewAfterSignIn=false;
   window.addEventListener('contributions-edit-deleted',()=>{if(privateActor)loadDashboard();});
+  window.addEventListener('hauntologies-public-moniker-changed',event=>{if(privateActor===event.detail?.actor&&!revisionOf){setCreditFields({label:event.detail.label});invalidatePreview();saveDraft();}});
   window.addEventListener('contributions-session-started',async()=>{const data=await loadDashboard();if(data&&openRequestedRecordId&&openTargetFailed&&!draftRevisionBlocked)await chooseOpenReference(openRequestedRecordId,openTargetLabel);if(resumePreviewAfterSignIn&&data){resumePreviewAfterSignIn=false;byId('previewContribution').click();}});
+  window.addEventListener('hauntologies-auth-changed',event=>{if(window.HauntologiesAccount?.isTemporaryTransition?.(event?.detail)&&event.detail.current.status==='signed_in'&&privateActor===event.detail.current.actor){if(openRequestedRecordId&&openTargetFailed&&!draftRevisionBlocked)chooseOpenReference(openRequestedRecordId,openTargetLabel);if(Date.now()-dashboardLoadedAt>30000)loadDashboard();}});
   // Returning to the tab picks up review decisions made elsewhere.
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&privateActor&&Date.now()-dashboardLoadedAt>30000)loadDashboard();});
   window.addEventListener('storage',event=>{if(privateActor&&event.key===signedOutMarker(privateActor)&&event.newValue)window.dispatchEvent(new CustomEvent('contributions-session-ended',{detail:{signedOut:true}}));});
