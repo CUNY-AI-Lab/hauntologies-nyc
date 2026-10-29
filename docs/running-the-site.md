@@ -95,15 +95,17 @@ Admission documents its side in `apps/admission/docs/HAUNTOLOGIES-ACCOUNT-MAIL.m
 
 ## Release
 
+For a reviewed release that changes code but no migrations, use the separate [code-only release procedure](code-only-release.md). The database procedure below is separate and requires its own authorization.
+
 Work through these steps in order, and stop at any step that does not check out.
 
-1. Record the current Worker version, a D1 Time Travel bookmark and the row counts of the existing tables, then inspect the schema before applying anything, using the `d1_migrations` table to see which migrations have already run.
-2. Apply, in order, the reviewed migrations in `drizzle/` that the database has not seen, where `0005_contribution_media.sql` adds private image storage and `0006_map_accounts.sql` adds the account tables, named with the prefix `hny_auth_`, along with the rate counters, and neither touches existing rows.
-3. Build and prepare with `npm run build` and `node scripts/prepare-account-release.mjs`, which sets `MAP_ACCOUNTS_ENABLED` and `REGISTRATION_ELIGIBILITY_ENABLED`, adds the mail binding, enables the public `workers.dev` route and keeps preview URLs off, and then run `node --test tests/*.test.mjs`.
-4. Set `MAP_AUTH_SECRET`, `REGISTRATION_GUEST_CODE` and, once people are named, `CONTRIBUTIONS_REVIEWER_IDS`, `CONTRIBUTIONS_PUBLISHER_IDS` and `CONTRIBUTIONS_ADMIN_IDS` as Worker secrets without writing any of them to a file or to output, and release the Admission mail entrypoint through its own deployment workflow before you activate the binding.
-5. Production release is currently blocked. This repository has no configured CI deployment path. A future approved CI path must build and prepare the release, deploy the prepared file, and read back the serving version, `/api/access-status` (`enabled` with `account_mode: map`), signed-out protection, delivered assets and table counts. Separately, an authorized human must perform the verification and reset round trip with a mailbox they control and record rollout acceptance; CI must not receive mailbox credentials.
+1. Record the current Worker version, a D1 Time Travel bookmark and counts for existing tables. Compare the actual schema with `d1_migrations`: a table can exist even when the corresponding migration is absent from the ledger. Do not blindly reapply a migration.
+2. Consider only separately reviewed and authorized migrations in `drizzle/`, in order. `0005_contribution_media.sql` adds private image storage and `0006_map_accounts.sql` adds account tables and rate counters. The direct-publication change itself adds no migration.
+3. Build and prepare with `npm run build` and `node scripts/prepare-account-release.mjs`, then run `node --test tests/*.test.mjs`. Preparation sets account eligibility, adds the mail binding, enables the public `workers.dev` route and keeps preview URLs off.
+4. Keep `MAP_AUTH_SECRET` and `REGISTRATION_GUEST_CODE` in Worker secret storage without writing them to a file or output. Release the Admission mail entrypoint through its own deployment workflow before activating the binding. Preserve existing variables and bindings and verify them after deployment.
+5. For a release requiring database work, obtain separate authorization for the database procedure and release, then record the serving version, `/api/access-status` (`enabled` with `account_mode: map`), signed-out protection, delivered assets and the authorized database checks. Separately, an authorized human must perform the verification and reset round trip with a mailbox they control and record rollout acceptance; CI must not receive mailbox credentials.
 
-The existing manual deployment notes are historical, not a currently approved release path. Do not run a local `wrangler deploy` from this repository. A separate access grant and a configured CI deployment path are required before production release.
+The existing manual deployment notes are historical, not a currently approved release path. Do not run a local `wrangler deploy` from this repository. The required release approvals and configured CI deployment credential are needed before production release.
 
 To roll back, switch to the previous Worker version after confirming that its bindings are still in place, and leave the added tables as they are so that account data and audit history survive. D1 Time Travel is the recovery path for a database problem that someone has verified independently, and it is a poor way to undo an ordinary code release.
 
