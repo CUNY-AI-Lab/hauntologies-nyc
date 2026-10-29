@@ -69,6 +69,34 @@ test('separate notes and typed source/field edits publish and preserve unrelated
  await publish(h,e,'other');
  const [record]=await publishedRecords(h.db);assert.equal(record.title,'New title');assert.equal(record.description,'A synthetic description.');assert.equal(record.notes[0].text,'An independently owned note.');assert.equal(record.sources[0].title,'New source');
 });
+test('existing places accept facts or sources without a description and keep their original wording and history',async t=>{
+ const h=harness(t);
+ const factTarget=await target(h),fact={...proposal('Fact'),summary:'',targets:[{record_id:factTarget.record_id,expected_version:factTarget.expected_version,expected_hash:factTarget.expected_hash}],payload:{explanation:'',attributes:[{name:'Opening date',value:'1901'}]}};
+ await publish(h,fact,'author',{change_summary:'Add opening date'});
+ let [record]=await publishedRecords(h.db);assert.equal(record.description,place.description);assert.deepEqual(record.notes[0].attributes,[{name:'Opening date',value:'1901'}]);assert.equal(record.notes[0].text,'');
+ const sourceTarget=await target(h),source={...proposal('Source'),targets:[{record_id:sourceTarget.record_id,expected_version:sourceTarget.expected_version,expected_hash:sourceTarget.expected_hash}],sources:[{citation:'Synthetic archive',url:'https://example.org/archive'}],payload:{}};
+ delete source.summary;
+ await publish(h,source,'other',{change_summary:'Add a source'});
+ [record]=await publishedRecords(h.db);assert.equal(record.description,place.description);assert.equal(record.notes[1].text,'');assert.equal(record.notes[1].source_references[0].citation,'Synthetic archive');
+ const textTarget=await target(h),freeform={...proposal('Source text'),summary:null,targets:[{record_id:textTarget.record_id,expected_version:textTarget.expected_version,expected_hash:textTarget.expected_hash}],payload:{explanation:null,sources_text:'Synthetic notebook'}};
+ await publish(h,freeform,'author',{change_summary:'Add notebook'});
+ [record]=await publishedRecords(h.db);assert.equal(record.description,place.description);assert.equal(record.notes[2].sources,'Synthetic notebook');
+ const history=await directHistory(h.db,place.id);assert.deepEqual(history.items.map(item=>item.summary),['Add notebook','Add a source','Add opening date']);assert.deepEqual(history.items.map(item=>item.moniker),[moniker,moniker,moniker]);
+});
+test('empty existing contributions fail, and new places, attribution and change history stay required',async t=>{
+ const h=harness(t),resolved=await target(h),existing={...proposal('Empty'),summary:'',targets:[{record_id:resolved.record_id,expected_version:resolved.expected_version,expected_hash:resolved.expected_hash}],payload:{explanation:'  ',sources_text:'  ',attributes:[]}};
+ existing.summary='  ';
+ const response=await call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(existing),moniker,change_summary:'No content'});assert.equal(response.status,409);assert.equal(response.body.error,'contribution_content_required');
+ const populated={...existing,summary:'',payload:{explanation:'',sources_text:'Synthetic source'}};
+ assert.equal((await call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(populated),moniker:'',change_summary:'Add source'})).body.error,'public_moniker_required');
+ assert.equal((await call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(populated),moniker,change_summary:''})).body.error,'change_summary_required');
+ const invalidFact={...populated,payload:{explanation:'',sources_text:'Synthetic source',attributes:[{name:'Date',value:''}]}};
+ const invalid=await call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(invalidFact),moniker,change_summary:'Add fact'});assert.equal(invalid.status,409);assert.equal(invalid.body.error,'attribute_value_required');
+ const invalidSource={...populated,sources:[{url:'javascript:alert(1)'}]};assert.equal((await call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(invalidSource),moniker,change_summary:'Add source'})).status,400);
+ const fresh={...proposal(),summary:'',payload:{explanation:'',geometry:{type:'Point',coordinates:[-74,40.72]},attributes:[{name:'Date',value:'1901'}]}};
+ const rejected=await call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(fresh),moniker,change_summary:'New place'});assert.equal(rejected.status,400);assert.equal(rejected.body.error,'invalid_envelope');
+ assert.equal((await publishedRecords(h.db)).length,0);assert.equal(count(h,'workflow_submissions'),0);
+});
 test('stale/concurrent writes and forged originals fail atomically; retry is exactly once',async t=>{
  const h=harness(t),resolved=await target(h),one=edit(resolved,{title:'One'}),two=edit(resolved,{title:'Two'});
  const results=await Promise.all([call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(one),moniker,change_summary:'one'}),call(h,'publish',{idempotency_key:key(),submission_json:JSON.stringify(two),moniker,change_summary:'two'})]);
