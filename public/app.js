@@ -329,7 +329,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.defaultPrevented
 // A tool is a keyboard surface. Keep its controls reachable without tabbing into obscured pins.
 document.addEventListener('keydown',e=>{
  if(e.key!=='Tab'||document.querySelector('dialog[open]'))return;
- const panel=toolPanels.map($).find(n=>!n.hidden);if(!panel)return;
+ const panel=toolPanels.map($).find(n=>!n.hidden&&n.getAttribute('aria-modal')==='true');if(!panel)return;
  const controls=[...panel.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex="0"]')].filter(n=>n.getClientRects().length);
  if(!controls.length)return;const first=controls[0],last=controls.at(-1);
  if(e.shiftKey&&(document.activeElement===first||!controls.includes(document.activeElement))){e.preventDefault();last.focus()}
@@ -482,7 +482,7 @@ function renderRecords(){
   const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;
   const heading=document.createElement('div');heading.className='place-heading';heading.append(b);addPlaceEditAction(heading,r);card.append(heading);card.insertAdjacentHTML('beforeend',placeFacts(r));
   const pendingSlot=document.createElement('div');pendingSlot.className='place-pending';pendingSlot.dataset.recordId=r.id;pendingSlot.hidden=true;card.append(pendingSlot);
-  const actions=document.createElement('div');actions.className='place-actions';appendPlaceRecord(actions,r);addContributionAction(actions,r);card.append(actions);
+  const actions=document.createElement('div');actions.className='place-actions';addContributionAction(actions,r);card.append(actions);window.PlaceHistory?.append(card,r);appendPlaceRecord(card,r);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
    const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+whereLabel(r,n),keyboard:true,riseOnHover:true});
@@ -528,7 +528,7 @@ function addContributionAction(card,r){
 function addPlaceEditAction(heading,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
  const edit=document.createElement('button');edit.type='button';edit.className='place-edit';edit.dataset.requiresAccount='';edit.hidden=!window.HauntologiesAccount?.canContribute();edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
- edit.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}}))});heading.append(edit);
+ edit.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;window.dispatchEvent(new CustomEvent('record-edit-requested',{detail:{recordId:r.id,record:structuredClone(r),opener:edit}}))});heading.append(edit);const history=window.PlaceHistory?.button(r);if(history)heading.append(history);
 }
 function placeFacts(r){
  const p=PlaceSummary.view(r),v=vicinityOf(r),near=v?[v.near,v.area].filter(Boolean).join(', '):'';

@@ -34,9 +34,9 @@ function setup(){
  return{context,caps,nodes,section,calls,events,listeners,ui:context.ui};
 }
 const approved={id:'s',title:'Synthetic place',revision:1,status:'approved',is_own:false,approval:{independent:true,revision:1,approval_hash:'synthetic'},application:{applicable:true}};
-test('ordinary eligible participant sees Verify jobs; author-only jobs remain hidden',()=>{
+test('retired verification jobs stay hidden in direct-publication UI',()=>{
  const h=setup();h.context.dashboard.jobs=[{id:'eligible',submission_id:'s',status:'verification_pending',can_verify:true},{id:'own',status:'verification_pending',can_verify:false}];h.context.dashboard.submissions=[approved];h.ui.renderJobs();
- assert.equal(h.section.hidden,false);assert.equal(h.nodes.applicationJobs.children.length,1);assert.equal(walk(h.nodes.applicationJobs).filter(n=>n.tag==='button'&&n.text==='Verify').length,1);
+ assert.equal(h.section.hidden,true);assert.equal(h.nodes.applicationJobs.children.length,0);
 });
 test('no admin exception exposes a self-review or self-verification button',()=>{
  const h=setup();h.caps.is_admin=true;h.caps.can_self_approve=true;
@@ -70,7 +70,7 @@ test('preview markup exposes verification only for persisted eligible snapshots'
  const preview=readFileSync(new URL('../public/contribution-preview.js',import.meta.url),'utf8');
  assert.match(preview,/if\(job\.can_verify===true\).*contributions-verification-ready/s);
  assert.match(preview,/previewReady=String\(records\.length>0\)/);
- const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');assert.match(html,/>Submit<\/button>/);assert.match(html,/<h3 id="jobHeading">Verification<\/h3>/);
+ const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');assert.match(html,/>Publish<\/button>/);assert.match(html,/<h3 id="jobHeading">Verification<\/h3>/);
 });
 test('logout during dashboard refresh cannot reopen an old verification preview',async()=>{
  const h=setup(),root=new Node('section');let release,started,current=true;const ready=new Promise(resolve=>started=resolve);

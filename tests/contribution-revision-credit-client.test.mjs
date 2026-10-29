@@ -30,11 +30,11 @@ function fixture(){
  const contributeTo=(recordId,title)=>handlers['contributions-clarify-requested']({detail:{recordId,title}});
  return {controls,envelope,cancelRevision,contributeTo,chosen,isRevising:()=>!!context.revisionOriginal,...context.out};
 }
-const typed=(type,extra={})=>({id:'s1',revision:2,title:'Cold spot',raw_json:JSON.stringify({schema_version:'1.0',type,task_ids:[],title:'Cold spot',summary:'Original summary.',public_credit:{consent:true,label:'Ada Example'},sources:[],attachments:[],targets:[{record_id:'synthetic_place',expected_version:0,expected_hash:null}],payload:{annotation_kind:'addition',text:'A draft moves through the hall.',original_wording:'',uncertainty_note:'Reported.',dates:null,...extra}})});
+const typed=(type,extra={})=>({id:'s1',revision:2,title:'Cold spot',raw_json:JSON.stringify({schema_version:'1.0',type,task_ids:[],title:'Cold spot',summary:'Original summary.',public_credit:{consent:true,label:'Ada Example',identity:'moniker'},sources:[],attachments:[],targets:[{record_id:'synthetic_place',expected_version:0,expected_hash:null}],payload:{annotation_kind:'addition',text:'A draft moves through the hall.',original_wording:'',uncertainty_note:'Reported.',dates:null,...extra}})});
 test('a fresh form shows the credit editor and sends what it says',()=>{
  const f=fixture();f.resetOpenContext();f.controls.publicCreditLabel.value='Ada Example';
  assert.equal(f.controls.freeformCredit.hidden,false);
- const e=f.envelope();assert.equal(e.type,'open_proposal');assert.deepEqual(e.public_credit,{consent:true,label:'Ada Example'});
+ const e=f.envelope();assert.equal(e.type,'open_proposal');assert.deepEqual(e.public_credit,{consent:true,label:'Ada Example',identity:'moniker'});
 });
 for(const type of ['record_annotation','entry_bundle','area_proposal'])test(`a ${type} revision hides the credit editor and keeps its original credit`,()=>{
  const f=fixture();f.resetOpenContext();f.controls.publicCreditLabel.value='Ada Example';
@@ -43,22 +43,22 @@ for(const type of ['record_annotation','entry_bundle','area_proposal'])test(`a $
  assert.equal(f.controls.revisionContext.hidden,false);
  // Even if the hidden box were changed, the envelope is the original with only its summary edited.
  f.controls.publicCreditConsent.checked=false;f.controls.contributionSummary.value='Revised summary.';
- const e=f.envelope();assert.equal(e.type,type);assert.equal(e.summary,'Revised summary.');assert.deepEqual(e.public_credit,{consent:true,label:'Ada Example'});
+ const e=f.envelope();assert.equal(e.type,type);assert.equal(e.summary,'Revised summary.');assert.deepEqual(e.public_credit,{consent:true,label:'Ada Example',identity:'moniker'});
  // Returning to a fresh proposal brings the editor back and the fresh envelope follows it.
  f.cancelRevision();
  assert.equal(f.controls.freeformCredit.hidden,false);assert.equal(f.controls.revisionContext.hidden,true);
  f.controls.publicCreditConsent.checked=false;
- assert.deepEqual(f.envelope().public_credit,{consent:false,label:''});
+ f.controls.publicCreditLabel.value='chosen.handle';assert.equal(f.envelope().public_credit.label,'chosen.handle');
  f.controls.publicCreditConsent.checked=true;f.controls.publicCreditLabel.value='Ada Example';
- assert.deepEqual(f.envelope().public_credit,{consent:true,label:'Ada Example'});
+ assert.deepEqual(f.envelope().public_credit,{consent:true,label:'Ada Example',identity:'moniker'});
 });
 test('an open proposal revision shows the editor, restores its credit, and sends a change to it',()=>{
  const f=fixture();f.resetOpenContext();
  f.loadRevision({id:'s2',revision:1,title:'Lantern',raw_json:JSON.stringify({schema_version:'1.0',type:'open_proposal',task_ids:[],title:'Lantern',summary:'Old.',public_credit:{consent:false,label:''},sources:[],attachments:[],targets:[],payload:{explanation:'Old.',geometry:null}})});
- assert.equal(f.controls.freeformCredit.hidden,false);assert.equal(f.controls.publicCreditConsent.checked,false);
+ assert.equal(f.controls.freeformCredit.hidden,false);assert.equal(f.controls.publicCreditLabel.value,'');
  f.controls.publicCreditConsent.checked=true;f.controls.publicCreditLabel.value='Ada Example';
- const e=f.envelope();assert.equal(e.type,'open_proposal');assert.deepEqual(e.public_credit,{consent:true,label:'Ada Example'});
- f.controls.publicCreditConsent.checked=false;assert.deepEqual(f.envelope().public_credit,{consent:false,label:''});
+ const e=f.envelope();assert.equal(e.type,'open_proposal');assert.deepEqual(e.public_credit,{consent:true,label:'Ada Example',identity:'moniker'});
+ f.controls.publicCreditLabel.value='chosen.handle';assert.equal(f.envelope().public_credit.label,'chosen.handle');
 });
 for(const type of ['record_annotation','entry_bundle','area_proposal'])test(`contributing to a mapped place from a ${type} revision leaves the revision before showing the open form`,()=>{
  const f=fixture();f.resetOpenContext();f.controls.publicCreditLabel.value='Ada Example';
@@ -66,14 +66,14 @@ for(const type of ['record_annotation','entry_bundle','area_proposal'])test(`con
  f.contributeTo('synthetic_place','Hall');
  assert.equal(f.isRevising(),false,'the typed revision is left, as Cancel leaves it');assert.equal(f.controls.revisionContext.hidden,true);
  assert.equal(f.controls.freeformCredit.hidden,false,'the editor shown is the open form\'s');assert.deepEqual(f.chosen,[['synthetic_place','Hall']]);
- f.controls.publicCreditConsent.checked=false;
- const e=f.envelope();assert.equal(e.type,'open_proposal','what is sent is a new open proposal');assert.deepEqual(e.public_credit,{consent:false,label:''},'and it follows the visible box');
- f.controls.publicCreditConsent.checked=true;f.controls.publicCreditLabel.value='Ada Example';assert.deepEqual(f.envelope().public_credit,{consent:true,label:'Ada Example'});
+ f.controls.publicCreditLabel.value='chosen.handle';
+ const e=f.envelope();assert.equal(e.type,'open_proposal','what is sent is a new open proposal');assert.equal(e.public_credit.label,'chosen.handle');
+ f.controls.publicCreditConsent.checked=true;f.controls.publicCreditLabel.value='Ada Example';assert.deepEqual(f.envelope().public_credit,{consent:true,label:'Ada Example',identity:'moniker'});
 });
 test('contributing to a mapped place from an open-proposal revision keeps that revision and its visible editor',()=>{
  const f=fixture();f.resetOpenContext();
- f.loadRevision({id:'s2',revision:1,title:'Lantern',raw_json:JSON.stringify({schema_version:'1.0',type:'open_proposal',task_ids:[],title:'Lantern',summary:'Old.',public_credit:{consent:true,label:'Ada Example'},sources:[],attachments:[],targets:[],payload:{explanation:'Old.',geometry:null}})});
+ f.loadRevision({id:'s2',revision:1,title:'Lantern',raw_json:JSON.stringify({schema_version:'1.0',type:'open_proposal',task_ids:[],title:'Lantern',summary:'Old.',public_credit:{consent:true,label:'Ada Example',identity:'moniker'},sources:[],attachments:[],targets:[],payload:{explanation:'Old.',geometry:null}})});
  f.contributeTo('synthetic_place','Hall');
  assert.equal(f.isRevising(),true);assert.equal(f.controls.revisionContext.hidden,false);assert.equal(f.controls.freeformCredit.hidden,false);
- f.controls.publicCreditConsent.checked=false;const e=f.envelope();assert.equal(e.type,'open_proposal');assert.deepEqual(e.public_credit,{consent:false,label:''},'the editor is live for an open revision');
+ f.controls.publicCreditConsent.checked=false;const e=f.envelope();assert.equal(e.type,'open_proposal');assert.equal(e.public_credit.label,'Ada Example');
 });

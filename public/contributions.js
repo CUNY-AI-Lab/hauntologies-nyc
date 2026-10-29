@@ -56,7 +56,7 @@
   let dashboard = null, selectedSubmission = null, revisionOf = null, revisionOriginal = null, preview = null, pendingWrite = readPendingWrite(), busy = false, rowCounter = 0, connectionVersion = 0, privateActor = null, dashboardRequest = 0, detailRequest = 0, identityGeneration = 0;
   const privateImages=new Map(),privateTaskDrafts=new Map();
   const taskFields=['newTaskTitle','newTaskDescription','newTaskSection','newTaskSkill','newTaskStatus'];
-  function readPendingWrite(actor){try{const value=JSON.parse(sessionStorage.getItem(actor?'hauntologies-pending-contribution-write:'+actor:'hauntologies-pending-contribution-write')||'null');return value&&/^\/(submit|revise|triage|task|review|apply|verify|rollback)$/.test(value.path)&&typeof value.body?.idempotency_key==='string'?value:null;}catch{return null;}}
+  function readPendingWrite(actor){try{const value=JSON.parse(sessionStorage.getItem(actor?'hauntologies-pending-contribution-write:'+actor:'hauntologies-pending-contribution-write')||'null');return value&&/^\/(submit|revise|publish|triage|task|review|apply|verify|rollback)$/.test(value.path)&&typeof value.body?.idempotency_key==='string'?value:null;}catch{return null;}}
   function retainWrite(value){pendingWrite=value;try{if(value)sessionStorage.setItem('hauntologies-pending-contribution-write:'+value.actor_id,JSON.stringify(value));else if(privateActor)sessionStorage.removeItem('hauntologies-pending-contribution-write:'+privateActor);}catch{}}
   const caps = () => dashboard?.capabilities || {};
   async function accessActions(root){
@@ -112,15 +112,15 @@
     const receipt=response?.receipt,action=request.path.slice(1),result=receipt?.result;
     const valid=typeof receipt?.id==='string'&&receipt.id.length>0&&receipt.action===action&&result&&typeof result==='object'&&!Array.isArray(result);
     const uncertain=()=>Object.assign(new Error('Save receipt could not be confirmed'),{uncertain:true});
-    if(!valid)throw uncertain();
-    if(['submit','revise'].includes(action)){
-      const expected=action==='revise'?request.body.expected_revision+1:1,submission=response.submission;
+    if(!valid||action==='publish'&&result.published!==true)throw uncertain();
+    if(['submit','revise','publish'].includes(action)){
+      const expected=request.body.submission_id?request.body.expected_revision+1:1,submission=response.submission;
       if(typeof result.submission_id!=='string'||result.revision!==expected||submission?.id!==result.submission_id||!Number.isInteger(submission.revision)||submission.revision<expected||action==='revise'&&result.submission_id!==request.body.submission_id)throw uncertain();
     }
     for(const key of ['submission_id','job_id','task_id'])if(request.body[key]&&result[key]!==request.body[key])throw uncertain();
     return response;
   }
-  const statusLabel=value=>({submitted:'Submitted for review',changes_requested:'Revision requested',in_progress:'In progress',verification_pending:'Verification pending',rolled_back:'Rolled back',ready_for_review:'Ready for review'})[value]||text(value).replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());
+  const statusLabel=value=>({submitted:'Saved privately',changes_requested:'Revision requested',in_progress:'In progress',verification_pending:'Verification pending',rolled_back:'Rolled back',ready_for_review:'Ready for review'})[value]||text(value).replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());
   function disclosure(title,...content){const details=el('details',undefined,'workflow-details');details.append(el('summary',title),...content);return details;}
 
   const getPath = (object, path) => path.split('.').reduce((v,k) => v?.[k], object);
@@ -241,7 +241,7 @@
   }
   function buildSimpleEnvelope(){
     rememberSimple();const clarify=simpleFlow()==='clarify',area=!clarify&&simpleValue('geometry_kind')==='area',point=!clarify&&simpleValue('geometry_kind')==='point';
-    const type=clarify?'record_annotation':area?'area_proposal':'entry_bundle',credit={consent:byId('publicCreditConsent').checked,label:byId('publicCreditConsent').checked?byId('publicCreditLabel').value:''};
+    const type=clarify?'record_annotation':area?'area_proposal':'entry_bundle',credit=creditValue();
     const canonicalSources=rows('submissionSources').map(source=>{const row={...source};delete row.source_type;return row;}),proposalSources=rows('submissionSources').map(source=>{const row={...source};delete row.role;return row;});
     const title=byId('contributionTitle').value,summary=byId('contributionSummary').value,dates=simpleDates(),prior=revisionOriginal?.type===type?revisionOriginal:null;
     const bodyText=prior&&['area_proposal','record_annotation'].includes(type)?simpleValue('payload_wording'):summary;
@@ -347,18 +347,18 @@
     }
   });
   function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
-  function draftValue(){return {version:1,place_text:byId('contributionPlace')?.value||'',object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
+  function draftValue(){return {version:1,place_text:byId('contributionPlace')?.value||'',object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,change_summary:byId('contributionChangeSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
   function saveDraft(){if(!privateActor||!isOpenForm())return;try{const value=draftValue();if(value.place_text||value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
       const now=buildEnvelope();if(now.summary===saved.summary&&JSON.stringify(now.payload)===JSON.stringify(saved.payload)&&JSON.stringify(now.targets)===JSON.stringify(saved.targets)){forgetDraft(draftStorageKey);forgetDraft(anonymousDraftKey);draftNotice('');
         // A saved new place leaves an empty form, so the next one cannot inherit its title or place.
-        if(!revisionOf){resetOpenContext();byId('contributionSummary').value='';if(byId('contributionPlace'))byId('contributionPlace').value='';}}
+        if(!revisionOf){resetOpenContext();byId('contributionSummary').value='';byId('contributionChangeSummary').value='';if(byId('contributionPlace'))byId('contributionPlace').value='';}}
     }catch{}
   }
   function restoreDraftFields(value){
     byId('contributionObjectTitle').value=typeof value.object_title==='string'?value.object_title:'';byId('extraSources').replaceChildren();
-    byId('contributionSummary').value=value.explanation;byId('freeformSources').value=value.sources;byId('contributionAttributes').replaceChildren();for(const attribute of value.attributes)addAttribute(attribute);
+    byId('contributionSummary').value=value.explanation;byId('contributionChangeSummary').value=typeof value.change_summary==='string'?value.change_summary:'';byId('freeformSources').value=value.sources;byId('contributionAttributes').replaceChildren();for(const attribute of value.attributes)addAttribute(attribute);
     const coordinates=value.geometry?.type==='Point'?value.geometry.coordinates:null,point=Array.isArray(coordinates)&&coordinates.length===2?{latitude:coordinates[1],longitude:coordinates[0]}:null;setPointFields(pointShape(point)?point:null);
     if(value.point_fields&&['latitude','longitude'].every(key=>typeof value.point_fields[key]==='string'&&value.point_fields[key].length<=64)){byId('contributionLatitude').value=value.point_fields.latitude;byId('contributionLongitude').value=value.point_fields.longitude;}
     byId('contributionPlaceMode').value=value.place_mode;openRequestedRecordId=value.record_id;openTargetLabel=value.title;showOpenReference();
@@ -409,7 +409,7 @@
   }
   function resetOpenContext(){
     ++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;openTaskIds=[];openSourcesInitial='';openSourcesDisplayInitial='';openExplanationInitial='';openExplanationDisplayInitial='';
-    byId('contributionObjectTitle').value='';byId('extraSources').replaceChildren();byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;if(byId('freeformCredit'))byId('freeformCredit').hidden=false;byId('freeformLocation').open=false;setPointFields(null);byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
+    byId('contributionObjectTitle').value='';byId('extraSources').replaceChildren();byId('freeformSources').value='';for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=false;byId('freeformContext').open=false;byId('freeformLocation').open=false;setPointFields(null);byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
   }
   function populatePlaceChoices(){
     const select=byId('freeformPlaceSelect'),records=typeof allRecords==='function'?allRecords():window.NYC_INVENTORY?.records||[];
@@ -511,7 +511,7 @@
     }finally{clearTimeout(timeout);}
   }
   async function beginImages(submission,request){
-    if(!stagedImages.length||!['/submit','/revise'].includes(request.path))return;
+    if(!stagedImages.length||!['/submit','/revise','/publish'].includes(request.path))return;
     if(!imageBatch)imageBatch={submission_id:submission.id,revision:submission.revision,actor_id:request.actor_id};
     await uploadImages();
   }
@@ -555,78 +555,20 @@
   byId('retryContributionImages').addEventListener('click',uploadImages);
   window.addEventListener('beforeunload',event=>{if((stagedImages.some(entry=>!entry.receipt)||[...privateImages.values()].some(saved=>saved.stagedImages.some(entry=>!entry.receipt)))){event.preventDefault();event.returnValue='';}});
   const placeTyped=()=>(byId('contributionPlace')?.value||'').trim().slice(0,300);
-  // Public credit is the one name that can leave the form. It is sent only with the box checked,
-  // remembered per account on this device, and offered from the event registration name first.
-  const creditStorageKey=()=>'hauntologies-public-credit:'+(privateActor||'anonymous');
-  function creditValue(){const consent=byId('publicCreditConsent').checked,label=consent?text(byId('publicCreditLabel').value).trim().replace(/\s+/g,' ').slice(0,120):'';return {consent:consent&&!!label,label};}
-  function setCreditFields(credit){byId('publicCreditConsent').checked=!!credit?.consent;byId('publicCreditLabel').value=typeof credit?.label==='string'?credit.label:'';byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;if(typeof renderCreditHint==='function')renderCreditHint();}
-  function rememberCredit(){if(!privateActor)return;try{localStorage.setItem(creditStorageKey(),JSON.stringify({consent:byId('publicCreditConsent').checked,label:byId('publicCreditLabel').value.slice(0,120)}));}catch{}}
-  function rememberedCredit(){try{const value=JSON.parse(localStorage.getItem(creditStorageKey())||'null');return value&&typeof value.consent==='boolean'&&typeof value.label==='string'?value:null;}catch{return null;}}
-  function restoreCreditFields(){const saved=rememberedCredit();setCreditFields(saved||{consent:true,label:byId('publicCreditLabel').value});}
-  // Whether this account's name is shown on the map at all (the Contributors switch). A checked box
-  // here is consent for this contribution; the switch decides whether any name is published. The
-  // hint states the effective result only after a valid answer for the current account; while that
-  // answer is loading, missing or failed it says so, so a checked box never implies a name that
-  // stays hidden. Every asynchronous update is checked against the account it was started for.
-  let creditListed=null,creditVisibility='unknown',creditSync=0;
-  const creditCurrent=(request,actor,account)=>request===creditSync&&actor===privateActor&&!!window.HauntologiesAccount?.isCurrent(account);
-  function resetCreditState(){creditListed=null;creditVisibility='unknown';++creditSync;}
-  function renderCreditHint(){
-    const hint=byId('publicCreditHint'),credit=creditValue();if(!hint)return;
-    hint.replaceChildren();delete hint.dataset.state;
-    if(!credit.consent){hint.textContent='This contribution shows no name. Check the box and enter a name to be credited.';return;}
-    if(!privateActor){hint.dataset.state='unknown';hint.textContent='Sign in to check whether your name is shown on the map.';return;}
-    if(creditVisibility==='loading'){hint.dataset.state='loading';hint.textContent='Checking whether your name is shown on the map…';return;}
-    if(creditVisibility!=='known'){
-      hint.dataset.state='unknown';
-      hint.append(document.createTextNode('Whether your name is shown on the map could not be checked, so this contribution may stay unnamed. '));
-      hint.append(button('Check again',()=>syncCreditState(),'textbutton'));return;
-    }
-    if(creditListed===false){
-      hint.dataset.state='hidden';
-      hint.append(document.createTextNode('Your name is hidden on the map right now, so this contribution shows no name until you turn it back on. Turning it on shows your name on every contribution you consented to, earlier ones included. '));
-      const show=button('Show my name on the map',()=>showNameOnMap(show),'textbutton');hint.append(show);return;
-    }
-    hint.textContent='Shown with this contribution under review, once published, and in the Contributors list. Uncheck to contribute without a name.';
+  // A chosen moniker is public attribution; account names and email are never defaults.
+  const creditStorageKey=()=>'hauntologies-public-moniker:'+(privateActor||'anonymous');
+  function creditValue(){
+    const label=text(byId('publicCreditLabel').value).trim().replace(/\s+/g,' ').slice(0,120);
+    if(!label||/[@\u0000-\u001f\u007f]/.test(label))throw Object.assign(new Error('Choose a public username or moniker, not an email address.'),{field:'public_credit.label'});
+    return {consent:true,label,identity:'moniker'};
   }
-  async function syncCreditState(){
-    const request=++creditSync,actor=privateActor,account=window.HauntologiesAccount?.snapshot();
-    creditListed=null;creditVisibility=actor?'loading':'unknown';renderCreditHint();if(!actor)return;
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
-    try{
-      const response=await fetch('/api/contributor-roster',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
-      if(!creditCurrent(request,actor,account))return;
-      if(!response.ok)throw new Error('unavailable');
-      const data=await response.json();
-      if(!creditCurrent(request,actor,account))return;
-      if(typeof data?.you?.listed!=='boolean')throw new Error('malformed');
-      creditListed=data.you.listed;creditVisibility='known';
-      if(typeof data.you.name==='string'&&!rememberedCredit()?.label&&!byId('publicCreditLabel').value.trim()){byId('publicCreditLabel').value=data.you.name.slice(0,120);byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();}
-      renderCreditHint();
-    }catch{if(creditCurrent(request,actor,account)){creditVisibility='error';renderCreditHint();}}
-    finally{clearTimeout(timer);}
-  }
-  // The inline switch posts the same roster change as the Contributors dialog, scoped to this account
-  // and bounded in time. An interrupted write is followed by a fresh read, since it may have landed.
-  async function showNameOnMap(control){
-    const request=++creditSync,actor=privateActor,account=window.HauntologiesAccount?.snapshot();if(!actor)return;control.disabled=true;
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
-    try{
-      const response=await fetch('/api/contributor-roster',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({listed:true}),signal:controller.signal});
-      if(!creditCurrent(request,actor,account))return;
-      if(!response.ok)throw new Error('unavailable');
-      const data=await response.json();
-      if(!creditCurrent(request,actor,account))return;
-      if(typeof data?.listed!=='boolean')throw new Error('malformed');
-      creditListed=data.listed;creditVisibility='known';renderCreditHint();
-      window.dispatchEvent(new CustomEvent('contributor-listing-changed',{detail:{listed:data.listed,actor}}));
-    }catch{if(creditCurrent(request,actor,account))syncCreditState();}
-    finally{clearTimeout(timer);}
-  }
-  window.addEventListener('contributor-listing-changed',event=>{
-    if(typeof event.detail?.listed!=='boolean'||event.detail.actor!==privateActor||!privateActor)return;
-    ++creditSync;creditListed=event.detail.listed;creditVisibility='known';renderCreditHint();
-  });
+  function setCreditFields(credit){byId('publicCreditLabel').value=typeof credit?.label==='string'?credit.label:'';renderCreditHint();}
+  function rememberCredit(){if(!privateActor)return;try{localStorage.setItem(creditStorageKey(),JSON.stringify({label:byId('publicCreditLabel').value.slice(0,120)}));}catch{}}
+  function rememberedCredit(){try{const value=JSON.parse(localStorage.getItem(creditStorageKey())||'null');return value&&typeof value.label==='string'?value:null;}catch{return null;}}
+  function restoreCreditFields(){setCreditFields(rememberedCredit()||{label:''});}
+  function renderCreditHint(){const hint=byId('publicCreditHint');if(hint)hint.textContent='Your chosen username is public with this contribution and in Contributors. Use a moniker, not your email. To remove a published contribution, revoke it from My edits.';}
+  function resetCreditState(){setCreditFields({label:''});}
+  function syncCreditState(){renderCreditHint();}
   function buildIntakeEnvelope(){
     const explanation=revisionOriginal&&byId('contributionSummary').value===openExplanationDisplayInitial?openExplanationInitial:byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
@@ -657,7 +599,7 @@
     if(simpleFlow()!=='other')return buildSimpleEnvelope();
     const type=byId('contributionType').value, prior=revisionOriginal?.type===type?revisionOriginal:null, payload=structuredClone(type==='entry_bundle'?prior?.payload?.Entries?.[0]||{}:prior?.payload||{});
     byId('typedPayloadFields').querySelectorAll('[data-field]:not([data-row-field])').forEach(input=>setPath(payload,input.dataset.field,fieldValue(input)));
-    const credit={consent:byId('publicCreditConsent').checked,label:byId('publicCreditConsent').checked?byId('publicCreditLabel').value:''};
+    const credit=creditValue();
     const creditChanged=!!prior&&(credit.consent!==!!prior.public_credit?.consent||credit.label!==(prior.public_credit?.label||''));
     const sources=rows('submissionSources').map(source=>{const clean={...source};delete clean.source_type;return clean;}),targets=rows('submissionTargets').map(t=>({...t,expected_hash:t.expected_hash||null})),attachments=rows('submissionAttachments');
     if(type==='layer_candidate'){
@@ -713,7 +655,7 @@
   }
   function empty(container,message){container.replaceChildren(el('p',message,'empty'));}
   function switchView(id,focus=true){
-    const title=byId('sidecarTitle');if(title)title.textContent=({taskView:'Tasks',submissionView:'Contribute',reviewView:'Review'})[id]||title.textContent;
+    const title=byId('sidecarTitle');if(title)title.textContent=({taskView:'Tasks',submissionView:'Contribute',reviewView:'Your contribution'})[id]||title.textContent;
     document.querySelectorAll('.workflow-view').forEach(n=>n.hidden=n.id!==id);document.querySelectorAll('[data-workflow-view]').forEach(b=>{const active=b.dataset.workflowView===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
     if(focus)byId(id).querySelector('h3')?.focus();
   }
@@ -734,7 +676,7 @@
     // Pointed places draw on the contributor's own layer; every own id marks notes as theirs too.
     window.dispatchEvent(new CustomEvent('contributions-own-places',{detail:{places:ownPlaces(data.submissions||[]),ids:(data.submissions||[]).filter(s=>s.is_own).map(s=>s.id)}}));
     byId('workflowConnection').textContent=caps().can_submit?'':'Read-only';
-    byId('reviewCapabilityNotice').textContent=caps().independent_review_available?'':'Independent reviewer required';
+    byId('reviewCapabilityNotice').textContent='';
     const targetSelect=byId('contributionTargetPick');targetSelect.replaceChildren();const first=el('option',(data.targets||[]).length?'Choose a record':'No records');first.value='';targetSelect.append(first);(data.targets||[]).forEach((target,index)=>{const option=el('option',target.title);option.value=String(index);targetSelect.append(option);});byId('useContributionTarget').disabled=true;
     renderTaskList();renderQueue();renderJobs();renderClarificationTargets();
     const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!caps().can_submit||busy||!!pendingWrite||preview?.result?.validation?.valid!==true;
@@ -743,7 +685,7 @@
   async function loadDashboard(){if(!window.HauntologiesAccount?.canContribute())return null;const account=window.HauntologiesAccount.snapshot(),request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest||!window.HauntologiesAccount.isCurrent(account)||actor!==account.actor)return null;
     if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();restoreCreditFields();syncCreditState();for(const [id,value] of Object.entries(privateTaskDrafts.get(actor)||{}))byId(id).value=value;restorePendingTask();}
     const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
-   }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
+   }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Saved work unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
   // Only problems a person can act on; a valid submission shows nothing, and the server's
   // standing review notice is not repeated on every screen.
@@ -754,7 +696,7 @@
   function intakeText(value){const node=el('p',value);node.style.whiteSpace='pre-wrap';return node;}
   function locationDetails(payload){const coordinates=payload?.geometry?.type==='Point'?payload.geometry.coordinates:null;return Array.isArray(coordinates)&&coordinates.length===2?metadata([['Proposed latitude',coordinates[1]],['Proposed longitude',coordinates[0]]]):null;}
   function renderPreview(envelope,result,raw){
-    const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3',result.local?'Almost there':'Not submitted yet'));root.firstChild.id='previewContributionTitle';
+    const root=byId('contributionPreview');root.replaceChildren();root.hidden=false;root.append(el('h3',result.local?'Almost there':'Ready to publish'));root.firstChild.id='previewContributionTitle';
     if(envelope.type==='open_proposal'){
       root.append(intakeText(envelope.payload.explanation));if(result.local)root.append(el('p','Local preview','small'));
       const location=locationDetails(envelope.payload);if(location)root.append(location);if(envelope.payload.location_text)root.append(metadata([['Place',envelope.payload.location_text]]));
@@ -766,7 +708,7 @@
       if(revisionOf)root.append(diffView(result.diff));
       root.append(rawDisclosure('Original',raw));
     }else{
-      root.append(intakeText(envelope.summary),el('p','Review only','small'),validationView(result.validation),diffView(result.diff),rawDisclosure('Original',raw));
+      root.append(intakeText(envelope.summary),validationView(result.validation),diffView(result.diff),rawDisclosure('Original',raw));
     }
     // A preview the server could not check says why, and offers the step that gets it saved.
     if(result.local){
@@ -777,14 +719,15 @@
       root.focus();return;
     }
     if(!caps().can_submit)root.append(el('p','This account cannot submit contributions.','preview-next-step'));
-    const send=button(revisionOf?'Submit revision':'Submit',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
+    const send=button(envelope.type==='open_proposal'?'Publish':'Save privately',submitPreview,'primary');send.id='confirmContribution';send.disabled=!caps().can_submit||busy||result.validation?.valid!==true;root.append(send);root.focus();
   }
   let previewInFlight=false;
   async function previewForm(event){
     event.preventDefault();if(!window.HauntologiesAccount?.canContribute()||previewInFlight||busy||imageProcessing||imageBusy)return;
     const account=window.HauntologiesAccount.snapshot();previewInFlight=true;
-    try{if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
+    try{if(pendingWrite){renderErrors(['Save outcome unknown. Check My edits before retrying.']);showReconciliation();return;}
     renderErrors([]);const errors=[],explanation=byId('contributionSummary').value;
+    if(isOpenForm()&&!byId('contributionChangeSummary').value.trim())errors.push({field:'change_summary',message:'Briefly describe your change'});
     if(!explanation.trim())errors.push({field:'summary',message:'Describe what you would like to contribute'});
     if(isOpenForm()&&explanation.length>15000)errors.push({field:'summary',message:'Use 15,000 characters or fewer'});
     if(imageBatch){imageStatus('Contribution saved. Images not saved',true);return;}
@@ -821,43 +764,33 @@
   }
 
   async function submitPreview(){
-    if(pendingWrite){renderErrors(['Save outcome unknown. Check the queue before retrying.']);showReconciliation();return;}
+    if(pendingWrite){renderErrors(['Save outcome unknown. Check My edits before retrying.']);showReconciliation();return;}
     if(!preview||!caps().can_submit||busy||imageProcessing||imageBusy||imageBatch||draftRevisionBlocked)return;
     const exact=preview;
-    if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw){invalidatePreview();renderErrors(['Form changed. Submit again.']);return;}
+    if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw){invalidatePreview();renderErrors(['Form changed. Publish again.']);return;}
     const generation=identityGeneration,owner=privateActor;busy=true;const confirmButton=byId('confirmContribution');if(confirmButton)confirmButton.disabled=true;byId('previewContribution').disabled=true;let request=null;
     try{
       const actor_id=await sessionActor();if(generation!==identityGeneration||actor_id!==owner||privateActor!==owner)return;
-      if(pendingWrite)throw Object.assign(new Error('Previous save unresolved; check the queue'),{status:409});
-      if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw)throw Object.assign(new Error('Form changed. Submit again.'),{status:400});
-      request=revisionOf?{actor_id,path:'/revise',body:{idempotency_key:crypto.randomUUID(),submission_id:revisionOf.id,expected_revision:revisionOf.revision,submission_json:exact.raw}}:{actor_id,path:'/submit',body:{idempotency_key:crypto.randomUUID(),submission_json:exact.raw}};
+      if(pendingWrite)throw Object.assign(new Error('Previous save unresolved; check My edits'),{status:409});
+      if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw)throw Object.assign(new Error('Form changed. Publish again.'),{status:400});
+      request={actor_id,path:exact.envelope.type==='open_proposal'?'/publish':revisionOf?'/revise':'/submit',body:{idempotency_key:crypto.randomUUID(),submission_json:exact.raw,...(exact.envelope.type==='open_proposal'?{change_summary:byId('contributionChangeSummary').value}:{}),...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})}};
       retainWrite(request);const response=requireReceipt(await api(request.path,request.body),request);
-      await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;await beginImages(response.submission,request);await loadDashboard();
+      await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();
     }catch(error){
       if(generation!==identityGeneration||privateActor!==owner)return;const uncertain=!!request&&(error.uncertain||!error.status||error.status>=500);
       if(uncertain)renderErrors([]);else if(error.status===400)renderErrors([error.message]);else serviceFailure(error);
       if(!uncertain){if(request)retainWrite(null);}else showReconciliation();
     }finally{if(generation===identityGeneration&&owner===privateActor){busy=false;byId('previewContribution').disabled=false;const confirm=byId('confirmContribution');if(confirm)confirm.disabled=!!pendingWrite||!caps().can_submit||!preview?.result?.validation?.valid;}}
   }
-  function showSavedReadback(submission){const root=byId('contributionReceipt');root.replaceChildren(el('h3','Current saved contribution'),metadata([['Revision',submission.revision],['Status',statusLabel(submission.status)]]),button('Check review status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.hidden=false;}
+  function showSavedReadback(submission){const root=byId('contributionReceipt');root.replaceChildren(el('h3','Current saved contribution'),metadata([['Revision',submission.revision],['Status',statusLabel(submission.status)]]),button('View contribution',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));root.hidden=false;}
   // Where a submission stands, in the order a contributor experiences it.
-  const progressSteps=['Saved','In review','Approved','On the map'];
-  const progressStage=status=>({draft:0,submitted:1,changes_requested:1,approved:2,merged:3})[status]??1;
   const whenText=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';};
-  function nextStep(s){
-    if(s.status==='approved')return 'Approved. Another participant verifies the map and list preview before publication.';
-    return({draft:'Draft. Submit it when it is ready.',submitted:'Submitted. A reviewer approves it next.',changes_requested:'A reviewer asked for a revision. Revise it and submit again.',merged:'On the public map.',withheld:'Withdrawn.'})[s.status]||'';
-  }
-  function submissionProgress(s){
-    const wrap=el('div',undefined,'submission-state'),list=el('ol',undefined,'submission-progress'),stage=progressStage(s.status);list.setAttribute('aria-label','Progress');
-    progressSteps.forEach((label,index)=>{const item=el('li',index===1&&s.status==='changes_requested'?'Needs changes':label);item.dataset.state=index<stage?'done':index===stage?'current':'next';if(index===stage)item.setAttribute('aria-current','step');list.append(item);});
-    wrap.append(list);const next=nextStep(s);if(next)wrap.append(el('p',next,'submission-next'));
-    return wrap;
-  }
+  function nextStep(s){return({published:'On the public map.',merged:'On the public map.',revoked:'Revoked. Only you can view this contribution. Delete it from My edits when ready.'})[s.status]||'Saved privately. Publish it explicitly from My edits when ready.';}
+  function submissionProgress(s){const wrap=el('div',undefined,'submission-state');wrap.append(el('p',nextStep(s),'submission-next'));return wrap;}
   // Keeps an open receipt or own submission current with the database while it is on screen.
   let statusWatch=null;
   function watchSubmission(id,root,status){
-    clearInterval(statusWatch?.timer);statusWatch=null;if(['merged','withheld'].includes(status))return;
+    clearInterval(statusWatch?.timer);statusWatch=null;if(['merged','published','withheld','revoked'].includes(status))return;
     const generation=identityGeneration,actor=privateActor;
     const watch={id,status,loading:false,timer:setInterval(async()=>{
       const current=()=>statusWatch===watch&&generation===identityGeneration&&actor===privateActor&&root.isConnected&&!root.hidden&&root.dataset.submissionId===id&&root.querySelector('.submission-state');
@@ -865,32 +798,32 @@
       if(document.visibilityState!=='visible'||watch.loading)return;
       watch.loading=true;
       try{const data=await api('/submission?id='+encodeURIComponent(id)),s=data.submission;if(!current()||!s||s.status===watch.status)return;watch.status=s.status;
-        root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','withheld'].includes(s.status))clearInterval(watch.timer);}catch{}finally{watch.loading=false;}
+        root.querySelector('.submission-state')?.replaceWith(submissionProgress(s));if(['merged','published','withheld','revoked'].includes(s.status))clearInterval(watch.timer);}catch{}finally{watch.loading=false;}
     },30000)};statusWatch=watch;
   }
   function showReceipt(submission,response){
     const root=byId('contributionReceipt');root.replaceChildren();root.hidden=false;root.dataset.submissionId=submission.id;const revision=response.receipt.result.revision??submission.revision;
-    root.append(el('h3',revision>1?'Revision submitted for review':'Submitted for review'));
+    root.append(el('h3',submission.status==='published'?'Published':'Saved privately'));
     if(submission.title)root.append(el('p',submission.title,'submission-title'));
-    root.append(submissionProgress({...submission,revision}));
-    if(submission.id)root.append(button('Check review status',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));
+    root.append(el('p',submission.status==='published'?'Your contribution is on the map.':'Saved privately. Publish it when ready.'));
+    if(submission.id)root.append(button('View contribution',async()=>{switchView('reviewView');await loadSubmission(submission.id);},'outline'));
     watchSubmission(submission.id,root,submission.status);root.focus();
   }
 
-  function clearRevision(){revisionOf=null;revisionOriginal=null;byId('revisionContext').hidden=true;byId('cancelRevision').hidden=true;invalidatePreview();}
+  function clearRevision(){revisionOf=null;revisionOriginal=null;byId('previewContribution').textContent='Publish';byId('contributionChangeSummaryLabel').hidden=false;byId('contributionChangeSummary').required=true;byId('revisionContext').hidden=true;byId('cancelRevision').hidden=true;invalidatePreview();}
   function loadRevision(submission){
     if(imageBatch){imageStatus('Contribution saved. Images not saved',true);return;}
     let value;try{value=JSON.parse(submission.raw_json);}catch{return;}
     if(value.type==='record_update'){window.dispatchEvent(new CustomEvent('record-edit-revision-requested',{detail:{submission:structuredClone(submission),opener:document.activeElement}}));return;}
     clearRevision();resetContributionForm();resetOpenContext();revisionOriginal=structuredClone(value);revisionOf={id:submission.id,revision:submission.revision};
+    byId('previewContribution').textContent=value.type==='open_proposal'?'Publish':'Save privately';byId('contributionChangeSummaryLabel').hidden=value.type!=='open_proposal';byId('contributionChangeSummary').required=value.type==='open_proposal';
     openExplanationInitial=value.type==='open_proposal'?value.payload.explanation:value.summary||'';byId('contributionSummary').value=openExplanationInitial;openExplanationDisplayInitial=byId('contributionSummary').value;
     openTargets=structuredClone(value.targets||[]);openRequestedRecordId=openTargets[0]?.record_id||'';openTargetLabel=openRequestedRecordId;openTaskIds=[...(value.task_ids||[])];
     byId('contributionObjectTitle').value=value.title||'';byId('extraSources').replaceChildren();
-    // A revision keeps the credit the contributor chose, so a name can be added or taken off while revising.
-    if(value.type==='open_proposal')setCreditFields(value.public_credit);
+    // Only open proposals edit credit; typed revisions change their summary alone.
+    if(value.type==='open_proposal'&&value.public_credit?.identity==='moniker')setCreditFields(value.public_credit);
     openSourcesInitial=value.type==='open_proposal'?value.payload.sources_text??'':'';byId('freeformSources').value=openSourcesInitial;openSourcesDisplayInitial=byId('freeformSources').value;
     for(const attribute of value.payload.attributes||[])addAttribute(attribute);
-    // A typed revision edits its summary alone; its credit editor is hidden so the box cannot promise a change the envelope keeps.
     for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
     byId('revisionContext').replaceChildren(el('span','Revising '+(submission.title||'this contribution')+', revision '+submission.revision));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   }
@@ -909,10 +842,10 @@
   function renderQueue(){
     const items=dashboard?.submissions||[],state=byId('queueState')?.value||'open';
     const visible=items.filter(s=>state==='all'||(state==='open'?OPEN_QUEUE.includes(s.status):s.status===state)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
-    const awaiting=items.filter(s=>OPEN_QUEUE.includes(s.status)&&!s.is_own).length;
-    byId('queueSummary').textContent=!dashboard?'':awaiting?awaiting+(awaiting===1?' contribution from others awaits review':' contributions from others await review'):'Nothing from others awaits review';
+    const awaiting=items.filter(s=>!['published','merged','revoked'].includes(s.status)).length;
+    byId('queueSummary').textContent=!dashboard?'':awaiting?awaiting+(awaiting===1?' private saved contribution':' private saved contributions'):'No private saved contributions';
     const root=byId('contributionQueue');root.replaceChildren();
-    if(!visible.length){empty(root,!dashboard?'Review unavailable':items.length?'Nothing in this state':'No submissions');return;}
+    if(!visible.length){empty(root,!dashboard?'Saved work unavailable':items.length?'Nothing in this state':'No submissions');return;}
     visible.forEach(s=>{const b=button('',()=>loadSubmission(s.id),'queue-item');const status=el('span',statusLabel(s.status),'queue-status');status.dataset.status=s.status;const when=whenText(s.created_at||s.updated_at),credit=queueCredit(s);
       b.append(el('strong',s.title||'Untitled contribution'),status,el('small',[queueKind(s),s.is_own?'Yours':credit?'By '+credit:'',when?'Sent '+when:''].filter(Boolean).join(' · ')));root.append(b);});
   }
@@ -944,34 +877,28 @@
       if(caps().can_submit&&['draft','submitted','changes_requested','approved'].includes(s.status))actions.append(button(s.status==='changes_requested'?'Revise and resubmit':'Revise',()=>loadRevision(s),'outline'));
       if(actions.children.length)root.append(actions);
     }
-    renderReviewControls(root,s);
+    // Product publication has no approval queue. Legacy work remains private until owner Publish.
+
     if(s.revision>1)root.append(el('p','Revision '+s.revision,'submission-ref'));
   }
   // Server-filtered verification jobs are available to every eligible nonauthor, not just admins.
-  function renderJobs(){
-    const root=byId('applicationJobs'),jobs=(dashboard?.jobs||[]).filter(job=>job.can_verify===true||caps().is_admin&&job.status!=='verification_pending');
-    root.replaceChildren();root.closest('.workflow-jobs').hidden=!jobs.length;
-    for(const job of jobs){const title=dashboard?.submissions?.find(s=>s.id===job.submission_id)?.title||'Contribution';const card=el('details',undefined,'job-card');card.append(el('summary',title));
-      if(caps().is_admin)card.append(rawDisclosure('Receipt',job));
-      jobControls(card,job);root.append(card);
-    }
-  }
+  function renderJobs(){const root=byId('applicationJobs');root.replaceChildren();root.closest('.workflow-jobs').hidden=true;}
   function showReconciliation(ready=false){
     if(!pendingWrite||pendingWrite.actor_id!==privateActor)return;
     const root=byId('workflowConnection');root.querySelector('[data-reconciliation]')?.remove();
     const controls=el('span');controls.dataset.reconciliation='true';controls.append(el('span',' Save outcome unknown '));root.append(controls);
-    const retry=button(ready?'Confirm save':'Check queue',async()=>{
+    const retry=button(ready?'Confirm save':'Check saved work',async()=>{
       retry.disabled=true;
       if(!ready){const data=await loadDashboard();showReconciliation(!!data);return;}
       if(!pendingWrite)return;const request=pendingWrite,selectedId=selectedSubmission?.id;
       try{
         await requireOriginalActor(request);const result=requireReceipt(await api(request.path,request.body),request);await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);renderErrors([]);
-        if(result.submission){if(['/submit','/revise'].includes(request.path))clearSavedDraft(request);showReceipt(result.submission,result);if(['submit','revise'].includes(request.path.slice(1)))await beginImages(result.submission,request);}
+        if(result.submission){if(['/submit','/revise','/publish'].includes(request.path))clearSavedDraft(request);showReceipt(result.submission,result);if(['submit','revise'].includes(request.path.slice(1)))await beginImages(result.submission,request);}
         else{byId('contributionReceipt').replaceChildren(el('h3','Saved'),metadata([['Receipt',result.receipt.id]]));byId('contributionReceipt').hidden=false;}
         await loadDashboard();
         if(selectedId&&result.submission?.id===selectedId)await loadSubmission(selectedId);
         if(dashboard)byId('workflowConnection').textContent='Saved';
-        if(result.job&&['verified','rolled_back'].includes(result.job.status))window.dispatchEvent(new CustomEvent('contributions-records-changed'));
+        if(request.path==='/publish'||result.job&&['verified','rolled_back'].includes(result.job.status))window.dispatchEvent(new CustomEvent('contributions-records-changed'));
       }catch(error){
         // A rejected retry cannot establish whether the earlier uncertain write committed.
         showReconciliation(error.status!==401);root.append(el('span',' '+(error.status===401?'Submissions unavailable':error.message)));
@@ -979,11 +906,11 @@
     },'outline');retry.dataset.reconciliationAction=ready?'retry':'check';controls.append(retry);
   }
   async function safeMutation(path,body){
-    if(pendingWrite)throw new Error('Previous save unresolved; check the queue');
+    if(pendingWrite)throw new Error('Previous save unresolved; check My edits');
     const generation=identityGeneration,owner=privateActor;
     const actor_id=await sessionActor();
     if(generation!==identityGeneration||owner!==privateActor||actor_id!==owner)throw Object.assign(new Error('Account changed; reopen this action.'),{status:409});
-    if(pendingWrite)throw new Error('Previous save unresolved; check the queue');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(generation!==identityGeneration||privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(generation!==identityGeneration||owner!==privateActor)throw error;if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check the queue before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
+    if(pendingWrite)throw new Error('Previous save unresolved; check My edits');const request={actor_id,path,body};retainWrite(request);try{const result=requireReceipt(await api(path,body),request);await requireOriginalActor(request);if(generation!==identityGeneration||privateActor!==actor_id)throw Object.assign(new Error('Account changed'),{status:409});retainWrite(null);return result;}catch(error){if(generation!==identityGeneration||owner!==privateActor)throw error;if(error.uncertain||!error.status||error.status>=500){error.message='Save outcome unknown; check My edits before retrying. '+error.message;showReconciliation();}else retainWrite(null);throw error;}
   }
   const reviewKeys=['evidence_check','geography_check','rights_check','duplicate_check','privacy_check'];
   // Approval, staging and map/list verification are separate, observable decisions.
@@ -1053,7 +980,6 @@
   window.addEventListener('contributions-verification-ready',event=>{const {job,container}=event.detail||{};if(window.HauntologiesAccount?.isCurrent(event.detail?.account)&&job?.can_verify===true&&container?.isConnected)jobControls(container,job,false);});
   document.querySelectorAll('[data-workflow-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.workflowView)));
   byId('contributionType').addEventListener('change',()=>{renderPayload(byId('contributionType').value);invalidatePreview();});
-  byId('publicCreditConsent').addEventListener('change',()=>{byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();renderCreditHint();invalidatePreview();});
   byId('publicCreditLabel').addEventListener('input',()=>{rememberCredit();renderCreditHint();});
   byId('typedContributionForm').addEventListener('input',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('change',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('submit',previewForm);
   byId('addSubmissionSource').addEventListener('click',()=>{if(simpleFlow()==='other')addRow('submissionSources',sourceSpecs);else addSimpleSource();invalidatePreview();});byId('addSubmissionTarget').addEventListener('click',()=>{addRow('submissionTargets',targetSpecs);invalidatePreview();});byId('addSubmissionAttachment').addEventListener('click',()=>{addRow('submissionAttachments',attachmentSpecs);invalidatePreview();});

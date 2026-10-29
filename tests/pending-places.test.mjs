@@ -113,18 +113,6 @@ test('leaving the roster hides a published credit from every public feed at once
   await credited();
 });
 
-test('the signed-in roster offers the viewer their own registration name and no one else\'s', async t => {
-  const { contributorRoster } = await import('../server/published-edits.mjs');
-  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
-  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
-  register('ada.lovelace', 'Ada@Example.test'); register('Bo Example', 'bo@example.test');
-  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'ada@example.test', 1, '2026-10-22', '2026-10-22');
-  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u9', '', 'nobody@example.test', 1, '2026-10-22', '2026-10-22');
-  assert.deepEqual((await contributorRoster(h.db, 'map_u1')).you, { listed: true, name: 'Ada Lovelace' });
-  assert.deepEqual((await contributorRoster(h.db, 'map_u9')).you, { listed: true }, 'an account without an RSVP gets no name');
-  assert.equal((await contributorRoster(h.db)).you, undefined);
-});
-
 test('a contribution to a mapped place is drawn at that place; one with nowhere to draw is left out', async t => {
   const h = harness(t), target = ok(await call(h, 'target?id=' + place.id), 200).target;
   const added = await submit(h, proposal({ geometry: null, targets: [{ record_id: target.record_id, expected_version: target.expected_version, expected_hash: target.expected_hash }] }));
@@ -163,7 +151,7 @@ test('a configured reviewer alone takes a new place from approval to the map, as
   assert.ok((await publishedEdits(h.db)).some(e => JSON.stringify(e).includes('Lantern on Sullivan')), 'published');
 });
 
-test('the deployed gate serves the pending layer to anyone, read-only', async t => {
+test('the direct-publication gate keeps legacy saved work private', async t => {
   const h = harness(t), s = await submit(h, proposal());
   let forwarded = 0;
   const worker = createDemoWorker({ fetch: () => { forwarded++; return new Response('map'); } });
@@ -171,10 +159,10 @@ test('the deployed gate serves the pending layer to anyone, read-only', async t 
   const response = await worker.fetch(new Request('https://map.test/api/pending-places'), env, {});
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
-  assert.deepEqual((await response.json()).places.map(p => p.id), [s.id]);
+  assert.deepEqual((await response.json()).places, []);
   assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places?owner=author'), env, {})).status, 400);
   for (const method of ['POST', 'PUT', 'DELETE']) assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places', { method }), env, {})).status, 401);
-  assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places'), { DB: { prepare() { throw new Error('down'); } } }, {})).status, 503);
+  assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places'), { DB: { prepare() { throw new Error('down'); } } }, {})).status, 200);
   assert.equal(forwarded, 0);
 });
 
@@ -196,46 +184,10 @@ test('an older attempt at a place the same contributor sent again drops out; oth
   }
 });
 
-test('the signed-in roster names every registrant with their counts and never an email', async t => {
-  const { contributorRoster } = await import('../server/published-edits.mjs');
-  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
-  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
-  register('Ada Example', 'ada@example.test'); register('Ada Example', 'ADA.alt@example.test'); register('Bo Example', 'bo@example.test');
-  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'Ada@Example.test', 1, '2026-10-22', '2026-10-22');
-  await submit(h, proposal({ title: 'One' }), 'map_u1'); await submit(h, proposal({ title: 'Two' }), 'map_u1');
-  // The same place sent again counts once; two untitled contributions stay two.
-  await submit(h, proposal({ title: 'two ' }), 'map_u1'); await submit(h, proposal({ title: 'Contribution' }), 'map_u1'); await submit(h, proposal({ title: 'Contribution' }), 'map_u1');
-  const roster = await contributorRoster(h.db);
-  assert.deepEqual(roster, { registrants: [{ name: 'Ada Example', contributions: 4, published: 0, account: true }, { name: 'Bo Example', contributions: 0, published: 0, account: false }] });
-  assert.ok(!JSON.stringify(roster).includes('@'));
-});
-
 test('the roster endpoint is for signed-in accounts only', async () => {
   const worker = createDemoWorker({ fetch: async () => new Response('app') });
   const response = await worker.fetch(new Request('https://map.test/api/contributor-roster'), { DB: {} }, {});
   assert.equal(response.status, 401);
-});
-
-test('a signed-in account can leave the roster and rejoin it', async t => {
-  const { contributorRoster, setRosterListing } = await import('../server/published-edits.mjs');
-  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
-  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
-  // A second sign-up under the same name, with no account, is hidden along with the account's.
-  register('Ada Example', 'ada@example.test'); register('Ada Example', 'ada.alt@example.test'); register('Bo Example', 'bo@example.test');
-  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'ada@example.test', 1, '2026-10-22', '2026-10-22');
-  const names = roster => roster.registrants.map(p => p.name);
-  assert.deepEqual((await contributorRoster(h.db, 'map_u1')).you, { listed: true, name: 'Ada Example' });
-  assert.deepEqual(await setRosterListing(h.db, 'map_u1', false), { listed: false });
-  await setRosterListing(h.db, 'map_u1', false);
-  const hidden = await contributorRoster(h.db, 'map_u1');
-  assert.deepEqual(names(hidden), ['Bo Example']); assert.deepEqual(hidden.you, { listed: false, name: 'Ada Example' });
-  assert.deepEqual(names(await contributorRoster(h.db)), ['Bo Example']);
-  await setRosterListing(h.db, 'map_u1', true);
-  assert.deepEqual(names(await contributorRoster(h.db, 'map_u1')), ['Ada Example', 'Bo Example']);
-  // Only real accounts can be recorded, and only the caller's own.
-  await setRosterListing(h.db, 'map_nobody', false);
-  assert.equal(h.db.native.prepare('SELECT COUNT(*) AS n FROM contributor_roster_hidden').get().n, 0);
-  await assert.rejects(setRosterListing(h.db, '', false));
 });
 
 test('leaving the roster needs a signed-in account', async () => {
@@ -244,24 +196,19 @@ test('leaving the roster needs a signed-in account', async () => {
   assert.equal(response.status, 401);
 });
 
-test('the roster leaves out placeholder sign-ups and reads handles as names', async t => {
-  const { contributorRoster } = await import('../server/published-edits.mjs');
-  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
-  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
-  register('Test', 't@example.test'); register('testing2', 't2@example.test');
-  register('Zarin', 'z1@example.test'); register('Zarin Syed', 'z2@example.test');
-  register('ada.lovelace', 'ada@example.test'); register('Bo', 'bo@example.test');
-  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'z1@example.test', 1, '2026-10-22', '2026-10-22');
-  const roster = await contributorRoster(h.db);
-  assert.deepEqual(roster.registrants.map(p => [p.name, p.account]), [['Ada Lovelace', false], ['Bo', false], ['Zarin Syed', true]]);
-});
 
-test('leaving the roster under a full name also hides the bare first-name sign-up', async t => {
-  const { contributorRoster, setRosterListing } = await import('../server/published-edits.mjs');
-  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
-  const register = (name, email) => run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)', crypto.randomUUID(), 'e', crypto.randomUUID(), 'p', name, email, '2026-10-22T00:00:00Z');
-  register('Zarin', 'z1@example.test'); register('Zarin Syed', 'z2@example.test'); register('Bo Example', 'bo@example.test');
-  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u2', '', 'z2@example.test', 1, '2026-10-22', '2026-10-22');
-  await setRosterListing(h.db, 'map_u2', false);
-  assert.deepEqual((await contributorRoster(h.db)).registrants.map(p => p.name), ['Bo Example']);
+
+test('roster attribution is chosen monikers only, never registration or account names/email',async t=>{
+ const {contributorRoster,setRosterListing}=await import('../server/published-edits.mjs');
+ const h=harness(t),run=(sql,...v)=>h.db.native.prepare(sql).run(...v);
+ run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)','u1','Private Account Name','private@example.test',1,'2026-10-22','2026-10-22');
+ run('INSERT INTO event_registrations (id,event_id,idempotency_hash,payload_hash,name,email,created_at) VALUES (?,?,?,?,?,?,?)','reg','event','idem','payload','Private Registration Name','private@example.test','2026-10-22');
+ assert.deepEqual(await contributorRoster(h.db,'map_u1'),{registrants:[],you:{listed:true}});
+ await setRosterListing(h.db,'map_u1',false);
+ await submit(h,{...proposal({title:'Legacy hidden'}),public_credit:{consent:true,label:'Earlier private name'}},'map_u1');
+ await submit(h,{...proposal({title:'Chosen username'}),public_credit:{consent:true,label:'night.owl',identity:'moniker'}},'map_u1');
+ const roster=await contributorRoster(h.db,'map_u1');assert.deepEqual(roster.registrants,[]);assert.deepEqual(roster.you,{listed:false});
+ const places=await pendingPlaces(h.db);assert.equal(places.places.find(p=>p.title==='Chosen username').contributor,'night.owl');assert.equal(places.places.find(p=>p.title==='Legacy hidden').contributor,undefined);
+ for(const secret of ['Private Account','Private Registration','private@example.test','Earlier private name'])assert.ok(!JSON.stringify({roster,places}).includes(secret));
+ const bad=await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify({...proposal(),public_credit:{consent:true,label:'private@example.test',identity:'moniker'}})},'map_u1');ok(bad,400);
 });

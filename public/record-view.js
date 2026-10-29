@@ -18,6 +18,7 @@
       ['Dates',record.time_original||record.event_date_start],['Date basis',record.time_basis],
       ['Location basis',record.geo_basis||record.location_precision],['Uncertainty',record.uncertainty_note],
       ['Uncertainty (m)',record.uncertainty_m],['Uncertainty basis',record.uncertainty_basis],
+      ...(Array.isArray(record.attributes)?record.attributes.map(a=>[a.name,a.value]):[]),
       ['Rights',record.rights_or_license],['Record license',record.record_license],['Rights notes',record.rights_notes]
     ]);
     if(facts.children.length)body.append(facts);
@@ -51,7 +52,7 @@
       }
       body.append(list);
     }
-    card.append(details);
+    if(body.children.length)card.append(details);
     return details;
   }
   root.PlaceRecordView=Object.freeze({append});

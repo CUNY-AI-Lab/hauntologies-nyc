@@ -21,7 +21,7 @@ export function pendingPlace(row) {
     const target = Array.isArray(raw.targets) && raw.targets.length === 1 && RECORD_ID.test(raw.targets[0]?.record_id || '') ? raw.targets[0].record_id : null;
     // Without a point or a mapped place it adds to, there is nowhere to draw it.
     if (!point && !target) return [];
-    const contributor = row.roster_hidden ? null : publicCredit(row.raw_json);
+    const contributor = publicCredit(row.raw_json,row.roster_hidden);
     return [{
       id: row.id, status: row.review_state, submitted_at: row.created_at,
       title: clip(raw.title, 300) || 'Contribution', description: clip(payload.explanation, 2000),

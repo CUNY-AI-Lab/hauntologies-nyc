@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><meta name="format-detection" content="telephone=no,date=no,address=no"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="contributors.css"><link rel="stylesheet" href="contribution-form.css"><link rel="stylesheet" href="place-search.css"><link rel="stylesheet" href="map-controls.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="record-view.js"></script><script defer src="public-reads.js"></script><script defer src="map-recovery.js"></script><script defer src="account-state.js"></script><script defer src="app.js"></script><script defer src="disclosure.js"></script><script defer src="map-tool-tray.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contribution-image.js"></script><script defer src="place-input.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration-policy.js"></script><script defer src="registration.js"></script><script defer src="account.js"></script><script defer src="edits.js"></script><script defer src="record-edit-model.js"></script><script defer src="record-editor.js"></script><script defer src="contributors.js"></script><script defer src="place-search-model.js"></script><script defer src="place-search.js"></script><script defer src="contribution-place.js"></script><script defer src="map-plot.js"></script></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><meta name="format-detection" content="telephone=no,date=no,address=no"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>Halloween Hauntologies of New York</title><meta name="description" content="Hauntologies of New York. Halloween Hackathon at the Graduate Center."><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="vendor/markercluster/MarkerCluster.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="contributors.css"><link rel="stylesheet" href="contribution-form.css"><link rel="stylesheet" href="place-search.css"><link rel="stylesheet" href="map-controls.css"><script defer src="vendor/leaflet.js"></script><script defer src="vendor/markercluster/leaflet.markercluster.js"></script><script defer src="inventory.js"></script><script defer src="atlas-model.js"></script><script defer src="nyc-geometry.js"></script><script defer src="draft-model.js"></script><script defer src="map-layers.js"></script><script defer src="pilot.js"></script><script defer src="place-summary.js"></script><script defer src="record-view.js"></script><script defer src="public-reads.js"></script><script defer src="map-recovery.js"></script><script defer src="account-state.js"></script><script defer src="place-history.js"></script><script defer src="app.js"></script><script defer src="disclosure.js"></script><script defer src="map-tool-tray.js"></script><script defer src="ingestion/local-preview.js"></script><script defer src="hosted-record-model.js"></script><script defer src="ingestion/hosted.js"></script><script defer src="shared-tasks.js"></script><script defer src="contribution-image.js"></script><script defer src="place-input.js"></script><script defer src="contributions.js"></script><script defer src="contribution-preview.js"></script><script defer src="registration-policy.js"></script><script defer src="registration.js"></script><script defer src="account.js"></script><script defer src="edits.js"></script><script defer src="record-edit-model.js"></script><script defer src="record-editor.js"></script><script defer src="contributors.js"></script><script defer src="place-search-model.js"></script><script defer src="place-search.js"></script><script defer src="contribution-place.js"></script><script defer src="map-plot.js"></script></head>
 <body>
 <a class="skip-link" href="#mapToolsButton">Places</a>
 <header class="masthead">
@@ -11,7 +11,7 @@
 <nav id="toolsMenu" class="tools-menu" aria-label="Contributions" hidden>
   <button id="tasksTool" type="button" aria-controls="researchSidecar">Tasks</button>
   <button id="submitTool" type="button" aria-controls="researchSidecar">Contribute</button>
-  <button id="reviewTool" type="button" aria-controls="researchSidecar">Review</button>
+  <button hidden id="reviewTool" type="button" aria-controls="researchSidecar">Review</button>
 </nav>
 <main class="workspace">
   <section class="mapspace" aria-label="Map"><div class="mapwrap"><div id="map" role="region" aria-label="New York map" tabindex="0"></div></div></section>
@@ -65,7 +65,7 @@
   <p id="workflowConnection" class="workflow-connection" role="status"></p>
   <div class="workflow-tabs" role="group" aria-label="Contribution views" hidden>
     <button type="button" class="active" data-workflow-view="submissionView" aria-pressed="true">Contribute</button>
-    <button type="button" data-workflow-view="reviewView" aria-pressed="false">Review</button>
+    <button type="button" hidden data-workflow-view="reviewView" aria-pressed="false">Review</button>
   </div>
   <section id="taskView" class="workflow-view" hidden aria-labelledby="taskTitle">
     <h3 id="taskTitle" tabindex="-1">Create a task</h3>
@@ -111,15 +111,15 @@
       <div id="contributionDetails">
       <div id="freeformTitle" class="contribution-title"><label for="contributionObjectTitle">Title<input id="contributionObjectTitle" maxlength="300"></label></div>
       <details id="freeformDescription" class="workflow-details" data-hint="required" open><summary>Description</summary><label for="contributionSummary"><span class="sr-only">Description</span><textarea id="contributionSummary" rows="3" required></textarea></label></details>
+      <label id="contributionChangeSummaryLabel" for="contributionChangeSummary">Describe your change<input id="contributionChangeSummary" maxlength="2000" required autocomplete="off"></label>
       <div id="freeformCredit" class="contribution-credit">
-        <label class="consent-line"><input id="publicCreditConsent" type="checkbox" checked> Show my name with this contribution</label>
-        <label for="publicCreditLabel" class="sr-only">Name shown on the map</label><input id="publicCreditLabel" placeholder="Your name, as shown on the map" maxlength="120" autocomplete="name" aria-describedby="publicCreditHint">
-        <p id="publicCreditHint" class="small contribution-credit-hint">Shown with this contribution under review, once published, and in the Contributors list. Uncheck to contribute without a name.</p>
+        <label for="publicCreditLabel" >Public username</label><input id="publicCreditLabel" placeholder="Choose a username or moniker" maxlength="120" required autocomplete="off" aria-describedby="publicCreditHint">
+        <p id="publicCreditHint" class="small contribution-credit-hint">Choose the username or moniker to display publicly. Your email and registration name are never used.</p>
       </div>
       <details id="freeformContext" class="workflow-details" data-hint><summary>Sources</summary>
         <label for="freeformSources">Links or references<textarea id="freeformSources" rows="3"></textarea></label><div id="extraSources"></div><button id="addFreeformSource" type="button" class="outline">Add source</button>
       </details>
-      <details id="freeformImages" class="workflow-details" data-hint><summary>Images</summary>
+      <details hidden id="freeformImages" class="workflow-details" data-hint><summary>Images</summary>
         <label for="contributionImages">Add images<input id="contributionImages" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="contributionImageLimits"></label>
         <p id="contributionImageLimits" class="small">Up to 3 images, 5 MB each. JPEG, PNG or WebP. Larger images are reduced to under 1 MB before upload.</p>
         <div id="contributionImageError" role="alert" hidden></div><div id="stagedContributionImages"></div>
@@ -142,16 +142,16 @@
       <details id="contributionAttachmentsGroup" class="workflow-details"><summary>Attachments</summary><div id="submissionAttachments"></div><button id="addSubmissionAttachment" type="button" class="outline">Add attachment</button></details>
         <button id="exportContribution" class="outline" type="button">Export</button>
       </div>
-      <div class="buttonrow"><button id="previewContribution" class="primary" type="submit">Submit</button><button id="cancelRevision" class="textbutton" type="button" hidden>Cancel</button></div>
+      <div class="buttonrow"><button id="previewContribution" class="primary" type="submit">Publish</button><button id="cancelRevision" class="textbutton" type="button" hidden>Cancel</button></div>
     </form>
     <section id="contributionPreview" class="workflow-preview" aria-labelledby="previewContributionTitle" tabindex="-1" hidden></section>
     <div id="contributionReceipt" class="workflow-receipt" role="status" tabindex="-1" hidden></div>
     <section id="contributionImageProgress" class="workflow-receipt" aria-label="Images" hidden><p id="contributionImageStatus" role="status"></p><button id="retryContributionImages" type="button" class="outline" hidden>Resume upload</button></section>
   </section>
   <section id="reviewView" class="workflow-view" hidden aria-labelledby="reviewQueueTitle">
-    <h3 id="reviewQueueTitle" class="sr-only" tabindex="-1">Review</h3>
+    <h3 id="reviewQueueTitle" class="sr-only" tabindex="-1">Your saved work</h3>
     <p id="reviewCapabilityNotice" class="notice" hidden></p>
-    <div class="queue-controls"><label for="queueState">Show<select id="queueState"><option value="open">Awaiting review</option><option value="submitted">Submitted</option><option value="approved">Approved, not yet published</option><option value="changes_requested">Needs information</option><option value="merged">Published</option><option value="all">All review states</option></select></label><button type="button" id="refreshContributions" class="outline">Refresh</button></div>
+    <div class="queue-controls"><label for="queueState">Show<select id="queueState"><option value="all">All your contributions</option><option value="open">Saved privately</option><option value="published">Published</option><option value="revoked">Revoked</option></select></label><button type="button" id="refreshContributions" class="outline">Refresh</button></div>
     <p id="queueSummary" class="count" aria-live="polite"></p>
     <div id="contributionQueue" class="submission-queue"></div>
     <article id="submissionDetail" class="submission-detail" tabindex="-1" hidden></article>
@@ -183,14 +183,15 @@
     <p id="recordEditorName" class="record-editor-name"></p>
     <div class="record-editor-service"><p id="recordEditorStatus" class="small" role="status"></p><button id="reloadRecordEditor" class="textbutton" type="button" hidden>Load current record</button></div>
     <form id="recordEditorForm" novalidate>
-      <label for="recordChangeMessage">Explanation<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
+      <label for="recordChangeMessage">Describe your change<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
+      <label for="recordPublicMoniker">Public username<input id="recordPublicMoniker" maxlength="120" required autocomplete="off" placeholder="Choose a username or moniker"></label><p class="small">This username is public with your edit. Never enter your email.</p>
       <div id="recordEditorFields"></div>
-      <button id="previewRecordEdit" class="primary" type="submit">Submit</button>
+      <button id="previewRecordEdit" class="primary" type="submit">Publish</button>
     </form>
     <div id="recordEditorErrors" role="alert" tabindex="-1" hidden></div>
     <section id="recordEditorPreview" aria-labelledby="recordEditorPreviewTitle" tabindex="-1" hidden>
       <h3 id="recordEditorPreviewTitle">Your changes</h3><p id="recordEditorPreviewMode" class="small"></p><div id="recordEditorDiff"></div>
-      <button id="submitRecordEdit" class="primary" type="button" disabled>Submit</button>
+      <button id="submitRecordEdit" class="primary" type="button" disabled>Publish</button>
     </section>
     <div id="recordEditorReceipt" role="status" tabindex="-1" hidden></div>
   </div>

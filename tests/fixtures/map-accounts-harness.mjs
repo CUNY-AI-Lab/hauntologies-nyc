@@ -10,7 +10,7 @@ export const password = 'Synthetic-local-password-482!';
 export const replacement = 'Synthetic-replacement-password-293!';
 const root = path.resolve(import.meta.dirname, '../..');
 let bundle;
-export async function harness(t, {mailFailure = false, eligibilityEnabled = false, guestCode} = {}) {
+export async function harness(t, {mailFailure = false, eligibilityEnabled = false, guestCode, publicationMode = 'legacy'} = {}) {
   if (!bundle) {
     const compiled = await build({ stdin: { contents: `
       import { createDemoWorker } from './deployment/demo-gate.mjs';
@@ -24,14 +24,14 @@ export async function harness(t, {mailFailure = false, eligibilityEnabled = fals
           await env.DB.prepare('INSERT INTO hny_test_mail (email,kind,token,expires_at) VALUES (?,?,?,?)').bind(input.email,input.kind,input.token,input.expiresAt).run();
           return { status:'accepted' };
         }};
-        const handler = {fetch: req => createWorkflowService({store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}, authorization:reviewAuthorization(env.CONTRIBUTIONS_REVIEWER_IDS, env.CONTRIBUTIONS_PUBLISHER_IDS, env.CONTRIBUTIONS_ADMIN_IDS), geography:{boundaries:${await readFile(path.join(root,'public/data/nyc-borough-boundaries.geojson'),'utf8')}}, staticRecords:[{id:'second-avenue-deli',title:'Synthetic existing place',latitude:40.75,longitude:-73.98}]}).handle(req)};
+        const handler = {fetch: req => createWorkflowService({publicationMode:env.TEST_PUBLICATION_MODE,store:createWorkflowStore(env.DB), taskSeeds:{tasks:[]}, authorization:reviewAuthorization(env.CONTRIBUTIONS_REVIEWER_IDS, env.CONTRIBUTIONS_PUBLISHER_IDS, env.CONTRIBUTIONS_ADMIN_IDS), geography:{boundaries:${await readFile(path.join(root,'public/data/nyc-borough-boundaries.geojson'),'utf8')}}, staticRecords:[{id:'second-avenue-deli',title:'Synthetic existing place',latitude:40.75,longitude:-73.98}]}).handle(req)};
         return createDemoWorker(handler, handleRegistration).fetch(request,env,ctx);
       }};
     `, resolveDir: root }, bundle: true, write: false, format: 'esm', platform: 'node', conditions: ['workerd', 'node'], target: 'es2022' });
     bundle = compiled.outputFiles[0].text;
   }
   const directory = await mkdtemp(path.join(tmpdir(), 'hny-auth-test-'));
-  const baseOptions = { modules: [{type:'ESModule',path:'worker.mjs',contents:bundle}], compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], d1Persist: directory, bindings: { MAP_ACCOUNTS_ENABLED:'true', MAP_AUTH_SECRET:'local-fixture-secret-only-12345678901234567890', MAIL_FAILURE: String(mailFailure), REGISTRATION_ELIGIBILITY_ENABLED:String(eligibilityEnabled), ...(guestCode === undefined ? {} : {REGISTRATION_GUEST_CODE:guestCode}) } };
+  const baseOptions = { modules: [{type:'ESModule',path:'worker.mjs',contents:bundle}], compatibilityDate: '2026-05-15', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], d1Persist: directory, bindings: { MAP_ACCOUNTS_ENABLED:'true', TEST_PUBLICATION_MODE:publicationMode, MAP_AUTH_SECRET:'local-fixture-secret-only-12345678901234567890', MAIL_FAILURE: String(mailFailure), REGISTRATION_ELIGIBILITY_ENABLED:String(eligibilityEnabled), ...(guestCode === undefined ? {} : {REGISTRATION_GUEST_CODE:guestCode}) } };
   const mf = new Miniflare(baseOptions);
   t.after(async () => { await mf.dispose(); await rm(directory,{recursive:true,force:true}); });
   let db = await mf.getD1Database('DB');

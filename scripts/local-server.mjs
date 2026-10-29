@@ -1,3 +1,4 @@
+import {directHistory} from '../server/direct-publication.mjs';
 // Local map with testing accounts. Serves web/ and public/ with the real
 // workflow service on SQLite, behind a stand-in for map accounts: two fixed
 // accounts sign in through the map's own Sign in dialog. Nothing here reaches
@@ -15,13 +16,12 @@ import { createWorkflowStore } from '../server/workflow-store.mjs';
 import { createWorkflowService } from '../server/workflow-service.mjs';
 import { parseStaticRecords } from '../server/static-targets.mjs';
 import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage, setRosterListing } from '../server/published-edits.mjs';
-import { pendingPlaces } from '../server/pending-places.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const port = Number(args[args.indexOf('--port') + 1]) || 8790;
 const PASSWORD = 'haunted-local-only';
-// Open review, as in production: each account reviews and publishes the other's work, not its own.
+// Synthetic verified accounts exercise the same direct-publication mode as the candidate runtime.
 const ACCOUNTS = [
   { email: 'contributor@local.test', actor_id: 'map_00000000-0000-4000-8000-000000000001' },
   { email: 'reviewer@local.test', actor_id: 'map_00000000-0000-4000-8000-000000000002' },
@@ -48,6 +48,7 @@ const db = { prepare, batch(statements) {
 
 const read = p => readFileSync(path.join(repo, p), 'utf8');
 const service = createWorkflowService({
+  publicationMode: 'direct',
   store: createWorkflowStore(db),
   taskSeeds: JSON.parse(read('public/data/contribution-tasks.json')),
   geography: { boundaries: JSON.parse(read('public/data/nyc-borough-boundaries.geojson')), gazetteer: JSON.parse(read('server/gazetteer.json')) },
@@ -105,9 +106,10 @@ async function route(req) {
   if (p.startsWith('/api/auth/')) return auth(req, p.slice('/api/auth/'.length));
   if (p === '/api/access-status') return json({ enabled: true, sign_in_url: '/api/contributions/sign-in', account_mode: 'map', dashboard_enabled: false });
   if (p === '/api/registration-policy') return json({ restricted: false });
+  if (p === '/api/place-history') return json(await directHistory(db,url.searchParams.get('id')));
   if (p === '/api/published-edits') return json({ items: await publishedEdits(db) });
   if (p === '/api/published-records') return json(await publishedRecordPage(db, url.searchParams.get('after') || ''));
-  if (p === '/api/pending-places') return json(await pendingPlaces(db));
+  if (p === '/api/pending-places') return json({places:[]});
   if (p === '/api/contributor-credits') return json(await contributorCredits(db));
   if (p === '/api/contributor-roster') {
     const account = sessionOf(req);
@@ -130,5 +132,5 @@ http.createServer(async (req, res) => {
 }).listen(port, '127.0.0.1', () => {
   console.log(`Hauntologies local map: http://127.0.0.1:${port}  (data: ${path.relative(repo, file)}${fresh ? ', new' : ''})`);
   console.log(`Sign in with ${ACCOUNTS.map(a => a.email).join(' or ')}, password ${PASSWORD}`);
-  console.log('Each account can review and publish the other\'s work. Registration and password resets need email and are off here.');
+  console.log('Each account can publish its own contributions directly. Registration and password resets are off here.');
 });

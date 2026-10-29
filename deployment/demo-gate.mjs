@@ -1,10 +1,10 @@
+import {directHistory} from '../server/direct-publication.mjs';
 import { registrationRestricted } from '../server/registration-eligibility.mjs';
 // Public map with account-derived identity for private contribution routes.
 // Old hosting identity headers never establish an account session.
 import { accessConfiguration, authenticateAccess, stripIdentityHeaders } from './access-identity.mjs';
 import { MAP_ORIGIN, handleMapAccount, mapAccountsReady, mapSession } from './map-accounts.mjs';
 import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage, setRosterListing } from '../server/published-edits.mjs';
-import { pendingPlaces } from '../server/pending-places.mjs';
 const privateJson = (value, status = 200) => Response.json(value, { status, headers: {
   'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer'
 } });
@@ -55,13 +55,12 @@ export function createDemoWorker(handler, registration, authenticate = authentic
           return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'private, no-store'}}) : Response.json(data, {headers:{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
         } catch { return privateJson({error:'feed_unavailable'},503); }
       }
-      // Places sent for review are public as their own map layer, before any decision.
-      if (rawPath === '/api/pending-places' && ['GET','HEAD'].includes(request.method)) {
-        if (new URL(request.url).search) return privateJson({error:'invalid_page'},400);
-        try {
-          const data = await pendingPlaces(env.DB);
-          return request.method === 'HEAD' ? new Response(null, {headers:{'Cache-Control':'no-store'}}) : privateJson(data);
-        } catch { return privateJson({error:'feed_unavailable'},503); }
+      // Legacy saved work is private until its owner explicitly publishes it.
+      if(rawPath==='/api/pending-places'&&['GET','HEAD'].includes(request.method))return new URL(request.url).search?privateJson({error:'invalid_query'},400):privateJson({places:[]});
+      if(rawPath==='/api/place-history'&&['GET','HEAD'].includes(request.method)){
+        const query=new URL(request.url).searchParams;
+        if([...query.keys()].some(k=>k!=='id')||query.getAll('id').length!==1)return privateJson({error:'invalid_record_id'},400);
+        try{return privateJson(await directHistory(env.DB,query.get('id')));}catch{return privateJson({error:'history_unavailable'},503);}
       }
       if (path === '/api/auth' || path.startsWith('/api/auth/')) {
         if (rawPath !== path) return privateJson({error:'invalid_path'},400);
