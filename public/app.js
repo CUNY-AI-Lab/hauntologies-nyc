@@ -200,7 +200,9 @@ function renderPendingStatus(){
 let pendingSignature='';
 async function loadPendingPlaces(){
  const request=++pendingRequest;
- try{const data=await publicReads.json('/api/pending-places');if(request!==pendingRequest||!Array.isArray(data.places))return;
+ try{const data=await publicReads.json('/api/pending-places');if(request!==pendingRequest)return;
+  // A 200 without a places array is as unusable as a failed read, and is said so.
+  if(!Array.isArray(data?.places))throw new Error('Public map read malformed');
   const places=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string'),signature=JSON.stringify(places);
   pendingLoaded=true;const recovered=pendingUnavailable;pendingUnavailable=false;
   // Redrawing closes an open popup, so an unchanged list is left alone.

@@ -134,26 +134,35 @@
         if (version === loading && !creditedList.childElementCount) creditedStatus.textContent = 'Contribution counts are unavailable right now.';
       }
     }
+    // The write is scoped to the account that started it: once the account changes, its answer
+    // touches nothing, and the next account's own load decides what the switch shows.
     listed.addEventListener('change', async () => {
-      const want = listed.checked;
+      const want = listed.checked, account = window.HauntologiesAccount?.snapshot(), actor = account?.actor;
+      const current = () => !window.HauntologiesAccount || window.HauntologiesAccount.isCurrent(account);
       listed.disabled = true;
       try {
         const response = await fetch('/api/contributor-roster', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }) });
+        if (!current()) return;
         if (!response.ok) throw new Error('unavailable');
+        const data = await response.json();
+        if (!current()) return;
+        if (typeof data?.listed !== 'boolean') throw new Error('malformed');
+        listed.checked = data.listed;
         listed.disabled = false;
-        // The Contribute form shows the same state, so it hears about the change.
-        window.dispatchEvent(new CustomEvent('contributor-listing-changed', { detail: { listed: want } }));
+        // The Contribute form shows the same state, so it hears about the change, for this account.
+        window.dispatchEvent(new CustomEvent('contributor-listing-changed', { detail: { listed: data.listed, actor } }));
         loadCredits();
       } catch {
+        if (!current()) return;
         listed.checked = !want;
         listed.disabled = false;
         creditedStatus.textContent = 'That did not save. Try again in a moment.';
       }
     });
-    // Signing in or out changes which list applies.
+    // Signing in or out changes which list applies; a switch left disabled by an abandoned write is released.
     for (const type of ['contributions-session-started', 'contributions-session-ended']) {
-      window.addEventListener(type, () => { creditedList.replaceChildren(); listing.hidden = true; if (dialog.open) loadCredits(); });
+      window.addEventListener(type, () => { creditedList.replaceChildren(); listing.hidden = true; listed.disabled = false; if (dialog.open) loadCredits(); });
     }
 
     dialog.append(header, credited, collaborators, built);

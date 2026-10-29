@@ -78,4 +78,11 @@ test('actual pending refresh coalesces bursts and preserves current records on f
   assert.equal(h.context.renders,2);assert.equal(h.context.pendingUnavailable,true);assert.equal(h.context.pendingLoaded,true);
   const again=h.context.refresh();await flush();resolve(response(200,{places:[{id:'synthetic',title:'Synthetic'}]}));await again;
   assert.equal(h.context.pendingUnavailable,false);assert.equal(h.context.renders,3,'recovery clears the status even when the list is unchanged');
+  // A 200 whose body has no places array is as unusable as a failure: the loaded list stays, marked stale.
+  for(const body of [{},{places:null},{places:'x'}]){
+    const malformed=h.context.refresh();await flush();resolve(response(200,body));await malformed;
+    assert.equal(h.context.pendingUnavailable,true,JSON.stringify(body));assert.equal(h.context.pendingPlaces[0].id,'synthetic');
+    const recover=h.context.refresh();await flush();resolve(response(200,{places:[{id:'synthetic',title:'Synthetic'}]}));await recover;
+    assert.equal(h.context.pendingUnavailable,false);
+  }
 });

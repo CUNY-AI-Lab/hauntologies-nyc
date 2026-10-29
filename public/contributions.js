@@ -94,7 +94,7 @@
   function clearPrivateView(message){
     // Keep unsent work scoped to its original account; hide it, never reassign it.
     const endedKey=privateActor?draftStorageKey:null;
-    if(privateActor){privateTaskDrafts.set(privateActor,Object.fromEntries(taskFields.map(id=>[id,byId(id).value])));saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
+    if(privateActor){privateTaskDrafts.set(privateActor,Object.fromEntries(taskFields.map(id=>[id,byId(id).value])));saveDraft();privateImages.set(privateActor,{stagedImages,imageBatch});if(pendingWrite?.actor_id===privateActor)retainWrite(pendingWrite);pendingWrite=null;stagedImages=[];imageBatch=null;privateActor=null;draftStorageKey='hauntologies-contribution-draft:anonymous';resetCreditState();clearRevision();draftRevisionBlocked=null;resetContributionForm();resetOpenContext();byId('stagedContributionImages').replaceChildren();byId('contributionImageProgress').hidden=true;}
     byId('createTaskForm').reset();byId('createTaskForm').querySelector('button[type="submit"]').disabled=false;byId('createTaskResult').textContent='';
     dashboard=null;selectedSubmission=null;sharedTasks=null;previewInFlight=false;busy=false;imageProcessing=false;imageBusy=false;connectionVersion++;identityGeneration++;dashboardRequest++;detailRequest++;
     clearInterval(statusWatch?.timer);statusWatch=null;byId('contributionQueue').hidden=false;
@@ -565,31 +565,63 @@
   function restoreCreditFields(){const saved=rememberedCredit();setCreditFields(saved||{consent:true,label:byId('publicCreditLabel').value});}
   // Whether this account's name is shown on the map at all (the Contributors switch). A checked box
   // here is consent for this contribution; the switch decides whether any name is published. The
-  // hint states the effective result, so a checked box never implies a name that stays hidden.
-  let creditListed=null,creditSync=0;
+  // hint states the effective result only after a valid answer for the current account; while that
+  // answer is loading, missing or failed it says so, so a checked box never implies a name that
+  // stays hidden. Every asynchronous update is checked against the account it was started for.
+  let creditListed=null,creditVisibility='unknown',creditSync=0;
+  const creditCurrent=(request,actor,account)=>request===creditSync&&actor===privateActor&&!!window.HauntologiesAccount?.isCurrent(account);
+  function resetCreditState(){creditListed=null;creditVisibility='unknown';++creditSync;}
   function renderCreditHint(){
     const hint=byId('publicCreditHint'),credit=creditValue();if(!hint)return;
-    hint.replaceChildren();
+    hint.replaceChildren();delete hint.dataset.state;
+    if(!credit.consent){hint.textContent='This contribution shows no name. Check the box and enter a name to be credited.';return;}
+    if(!privateActor){hint.dataset.state='unknown';hint.textContent='Sign in to check whether your name is shown on the map.';return;}
+    if(creditVisibility==='loading'){hint.dataset.state='loading';hint.textContent='Checking whether your name is shown on the map…';return;}
+    if(creditVisibility!=='known'){
+      hint.dataset.state='unknown';
+      hint.append(document.createTextNode('Whether your name is shown on the map could not be checked, so this contribution may stay unnamed. '));
+      hint.append(button('Check again',()=>syncCreditState(),'textbutton'));return;
+    }
     if(creditListed===false){
       hint.dataset.state='hidden';
-      hint.append(document.createTextNode(credit.consent?'Your name is hidden on the map right now, so this contribution shows no name until you turn it back on. Turning it on shows your name on every contribution you consented to, earlier ones included. ':'Your name is hidden on the map right now. '));
-      const show=button('Show my name on the map',async()=>{show.disabled=true;try{const response=await fetch('/api/contributor-roster',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({listed:true})});if(!response.ok)throw new Error('unavailable');window.dispatchEvent(new CustomEvent('contributor-listing-changed',{detail:{listed:true}}));}catch{show.disabled=false;hint.append(document.createTextNode(' That did not save. Try again in a moment.'));}},'textbutton');
-      hint.append(show);
-      return;
+      hint.append(document.createTextNode('Your name is hidden on the map right now, so this contribution shows no name until you turn it back on. Turning it on shows your name on every contribution you consented to, earlier ones included. '));
+      const show=button('Show my name on the map',()=>showNameOnMap(show),'textbutton');hint.append(show);return;
     }
-    delete hint.dataset.state;
-    hint.textContent=credit.consent?'Shown with this contribution under review, once published, and in the Contributors list. Uncheck to contribute without a name.':'This contribution shows no name. Check the box and enter a name to be credited.';
+    hint.textContent='Shown with this contribution under review, once published, and in the Contributors list. Uncheck to contribute without a name.';
   }
   async function syncCreditState(){
-    const request=++creditSync,actor=privateActor;creditListed=null;renderCreditHint();if(!actor)return;
-    try{const response=await fetch('/api/contributor-roster',{credentials:'same-origin',cache:'no-store'});if(!response.ok)return;const data=await response.json();
-      if(request!==creditSync||actor!==privateActor)return;
-      if(typeof data?.you?.listed==='boolean')creditListed=data.you.listed;
-      if(typeof data?.you?.name==='string'&&!rememberedCredit()?.label&&!byId('publicCreditLabel').value.trim()){byId('publicCreditLabel').value=data.you.name.slice(0,120);byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();}
+    const request=++creditSync,actor=privateActor,account=window.HauntologiesAccount?.snapshot();
+    creditListed=null;creditVisibility=actor?'loading':'unknown';renderCreditHint();if(!actor)return;
+    try{
+      const response=await fetch('/api/contributor-roster',{credentials:'same-origin',cache:'no-store'});
+      if(!creditCurrent(request,actor,account))return;
+      if(!response.ok)throw new Error('unavailable');
+      const data=await response.json();
+      if(!creditCurrent(request,actor,account))return;
+      if(typeof data?.you?.listed!=='boolean')throw new Error('malformed');
+      creditListed=data.you.listed;creditVisibility='known';
+      if(typeof data.you.name==='string'&&!rememberedCredit()?.label&&!byId('publicCreditLabel').value.trim()){byId('publicCreditLabel').value=data.you.name.slice(0,120);byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();}
       renderCreditHint();
-    }catch{}
+    }catch{if(creditCurrent(request,actor,account)){creditVisibility='error';renderCreditHint();}}
   }
-  window.addEventListener('contributor-listing-changed',event=>{if(typeof event.detail?.listed==='boolean'){creditListed=event.detail.listed;renderCreditHint();}});
+  // The inline switch posts the same roster change as the Contributors dialog, scoped to this account.
+  async function showNameOnMap(control){
+    const request=++creditSync,actor=privateActor,account=window.HauntologiesAccount?.snapshot();if(!actor)return;control.disabled=true;
+    try{
+      const response=await fetch('/api/contributor-roster',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({listed:true})});
+      if(!creditCurrent(request,actor,account))return;
+      if(!response.ok)throw new Error('unavailable');
+      const data=await response.json();
+      if(!creditCurrent(request,actor,account))return;
+      if(typeof data?.listed!=='boolean')throw new Error('malformed');
+      creditListed=data.listed;creditVisibility='known';renderCreditHint();
+      window.dispatchEvent(new CustomEvent('contributor-listing-changed',{detail:{listed:data.listed,actor}}));
+    }catch{if(creditCurrent(request,actor,account)){control.disabled=false;byId('publicCreditHint')?.append(document.createTextNode(' That did not save. Try again in a moment.'));}}
+  }
+  window.addEventListener('contributor-listing-changed',event=>{
+    if(typeof event.detail?.listed!=='boolean'||event.detail.actor!==privateActor||!privateActor)return;
+    ++creditSync;creditListed=event.detail.listed;creditVisibility='known';renderCreditHint();
+  });
   function buildIntakeEnvelope(){
     const explanation=revisionOriginal&&byId('contributionSummary').value===openExplanationDisplayInitial?openExplanationInitial:byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
