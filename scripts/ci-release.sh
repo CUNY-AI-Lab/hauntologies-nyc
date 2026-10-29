@@ -24,6 +24,8 @@ origin=https://hauntologies-nyc.ailab-452.workers.dev
 "$wrangler" deployments status --name hauntologies-nyc --json > "$workdir/before-deployment.json"
 before_id=$(jq -er '.versions | select(length == 1 and .[0].percentage == 100) | .[0].version_id' "$workdir/before-deployment.json")
 "$wrangler" versions view "$before_id" --name hauntologies-nyc --json > "$workdir/before-version.json"
+jq -e '[.resources.bindings[] | select(.type == "d1" and .name == "DB" and .database_id == "df7f1e92-e339-4e25-ac30-989dd68d8dfc")] | length == 1' "$workdir/before-version.json" >/dev/null || fail 'The current database binding does not match the intended database.'
+jq -e '[.resources.bindings[] | select(.type == "service" and .name == "ACCOUNT_MAIL" and .service == "cail-tools-admission" and .entrypoint == "AdmissionHauntologiesAccountMail" and .environment == "production")] | length == 1' "$workdir/before-version.json" >/dev/null || fail 'The current account-mail binding does not match the intended service.'
 before_tag=$(jq -er '.annotations["workers/tag"] | select(type == "string" and test("^[0-9a-f]{7,40}$"))' "$workdir/before-version.json")
 git rev-parse --verify "${before_tag}^{commit}" >/dev/null || fail 'The serving version has no resolvable source tag.'
 git diff --quiet "$before_tag" "$EXPECTED_MAIN_SHA" -- drizzle || fail 'Migration changes need separate review before release.'
@@ -44,7 +46,10 @@ snapshot_counts() {
   done < "$workdir/tables.txt"
 }
 snapshot_counts > "$workdir/counts-before.txt"
-jq -r '[.resources.bindings[] | [.type, .name] | @tsv] | sort[]' "$workdir/before-version.json" > "$workdir/bindings-before.txt"
+binding_signatures() {
+  jq -r '[.resources.bindings[] | [.type, .name, (if .type == "d1" then (.database_id // "") elif .type == "service" then ([.service, .entrypoint, .environment] | map(. // "") | join("|")) else "" end)] | @tsv] | sort[]' "$1"
+}
+binding_signatures "$workdir/before-version.json" > "$workdir/bindings-before.txt"
 
 printf 'Prior Worker version: `%s`\n\nD1 bookmark: `%s`\n\n' "$before_id" "$bookmark" >> "$GITHUB_STEP_SUMMARY"
 [[ "$(current_main)" == "$EXPECTED_MAIN_SHA" ]] || fail 'Main changed before deployment.'
@@ -65,7 +70,7 @@ for attempt in {1..12}; do
   sleep 5
 done
 [[ -n "$after_id" ]] || fail 'Could not confirm the serving version. Inspect the deployment before retrying.'
-jq -r '[.resources.bindings[] | [.type, .name] | @tsv] | sort[]' "$workdir/after-version.json" > "$workdir/bindings-after.txt"
+binding_signatures "$workdir/after-version.json" > "$workdir/bindings-after.txt"
 [[ -z "$(comm -23 "$workdir/bindings-before.txt" "$workdir/bindings-after.txt")" ]] || fail 'A prior Worker binding is missing after deployment.'
 "$wrangler" d1 execute DB --remote --config "$config" --json \
   --command "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name" > "$workdir/tables-after.json"
