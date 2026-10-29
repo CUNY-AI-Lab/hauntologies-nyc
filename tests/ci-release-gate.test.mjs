@@ -48,13 +48,15 @@ else if (name === 'curl') {
   else if (args[0] === 'deployments') console.log(JSON.stringify({versions:[{version_id:fs.existsSync(state)?'after':'before',percentage:100}]}));
   else if (args[0] === 'versions') {
     const after=args[2]==='after';
-    const vars={CAIL_ENABLED:'false',MAP_ACCOUNTS_ENABLED:'true',REGISTRATION_ELIGIBILITY_ENABLED:'true',CONTRIBUTIONS_OPEN_REVIEW:'true',EXTRA_VARIABLE:'original'};
-    if(after && process.env.CI_MOCK_CHANGED_VAR)vars.EXTRA_VARIABLE='changed';
+    const vars={CAIL_ENABLED:'false',MAP_ACCOUNTS_ENABLED:'true',REGISTRATION_ELIGIBILITY_ENABLED:'true',CONTRIBUTIONS_OPEN_REVIEW:'true'};
+    if(after && process.env.CI_MOCK_CHANGED_VAR)vars.MAP_ACCOUNTS_ENABLED='false';
+    if(process.env.CI_MOCK_UNKNOWN_VARIABLE)vars.SURPRISE='unreviewed';
     const bindings=[{type:'d1',name:'DB',database_id:process.env.CI_MOCK_WRONG_DB?'wrong':'df7f1e92-e339-4e25-ac30-989dd68d8dfc'},
       {type:'service',name:'ACCOUNT_MAIL',service:'cail-tools-admission',entrypoint:'AdmissionHauntologiesAccountMail',environment:'production'},
-      {type:'secret_text',name:'MAP_AUTH_SECRET'},{type:'secret_text',name:'REGISTRATION_GUEST_CODE'},
+      ...['CONTRIBUTIONS_ADMIN_IDS','CONTRIBUTIONS_REVIEWER_IDS','MAP_AUTH_SECRET','REGISTRATION_GUEST_CODE'].map(name=>({type:'secret_text',name})),
       ...Object.entries(vars).map(([name,text])=>({type:'plain_text',name,text}))];
     if(after&&process.env.CI_MOCK_REMOVED_SECRET)bindings.splice(bindings.findIndex(x=>x.name==='MAP_AUTH_SECRET'),1);
+    if(process.env.CI_MOCK_UNKNOWN_SECRET)bindings.push({type:'secret_text',name:'SURPRISE_SECRET'});
     if(process.env.CI_MOCK_UNKNOWN_BINDING)bindings.push({type:'kv_namespace',name:'SURPRISE',namespace_id:'other'});
     console.log(JSON.stringify({annotations:{'workers/tag':!after || process.env.CI_MOCK_WRONG_TAG ? '1234567' : sha},resources:{bindings}}));
   } else process.exit(91); // A D1 call is never part of this release.
@@ -94,7 +96,7 @@ test('code-only release checks versions, bindings, variables and assets without 
 });
 
 test('migration drift, changed main, wrong checkout or binding stop before deploy',()=>{
-  for(const [env,pattern] of [[{CI_MOCK_MIGRATION_DIFF:'1'},/Migration changes need separate review/],[{CI_MOCK_MAIN_CHANGED:'1'},/Main changed before preflight/],[{CI_MOCK_MAIN_CHANGES_ON_CALL:'2'},/Main changed before deployment/],[{CI_MOCK_WRONG_CHECKOUT:'1'},/Checkout differs/],[{CI_MOCK_DIRTY_SOURCE:'1'},/Tracked source changed/],[{CI_MOCK_UNKNOWN_TAG:'1'},/no resolvable source tag/],[{CI_MOCK_WRONG_DB:'1'},/database binding does not match/],[{CI_MOCK_UNKNOWN_BINDING:'1'},/unreviewed binding type/]]){
+  for(const [env,pattern] of [[{CI_MOCK_MIGRATION_DIFF:'1'},/Migration changes need separate review/],[{CI_MOCK_MAIN_CHANGED:'1'},/Main changed before preflight/],[{CI_MOCK_MAIN_CHANGES_ON_CALL:'2'},/Main changed before deployment/],[{CI_MOCK_WRONG_CHECKOUT:'1'},/Checkout differs/],[{CI_MOCK_DIRTY_SOURCE:'1'},/Tracked source changed/],[{CI_MOCK_UNKNOWN_TAG:'1'},/no resolvable source tag/],[{CI_MOCK_WRONG_DB:'1'},/database binding does not match/],[{CI_MOCK_UNKNOWN_BINDING:'1'},/unreviewed binding type/],[{CI_MOCK_UNKNOWN_VARIABLE:'1'},/unreviewed variable/],[{CI_MOCK_UNKNOWN_SECRET:'1'},/unreviewed secret binding/]]){
     const f=fixture();try{const r=f.run(env);assert.notEqual(r.status,0);assert.match(r.stderr,pattern);assert.equal(existsSync(f.state),false);}finally{f.cleanup();}
   }
 });
@@ -114,7 +116,7 @@ test('deploy-time build, resource additions and migrations fail closed',()=>{
 });
 
 test('uncertain deploy or failed readback requires inspection before retry',()=>{
-  for(const [env,pattern] of [[{CI_MOCK_DEPLOY_ERROR:'1'},/Deployment outcome uncertain/],[{CI_MOCK_WRONG_TAG:'1'},/Inspect the deployment before retrying/],[{CI_MOCK_CHANGED_VAR:'1'},/bindings or variables changed/],[{CI_MOCK_REMOVED_SECRET:'1'},/Inspect the deployment before retrying/],[{CI_MOCK_ROSTER_OPEN:'1'},/Signed-out roster protection/],[{CI_MOCK_ASSET_CHANGED:'1'},/Delivered app.js differs/],[{CI_MOCK_MAIN_CHANGES_ON_CALL:'3'},/Main changed during the release/]]){
+  for(const [env,pattern] of [[{CI_MOCK_DEPLOY_ERROR:'1'},/Deployment outcome uncertain/],[{CI_MOCK_WRONG_TAG:'1'},/Inspect the deployment before retrying/],[{CI_MOCK_CHANGED_VAR:'1'},/Could not verify serving bindings/],[{CI_MOCK_REMOVED_SECRET:'1'},/Inspect the deployment before retrying/],[{CI_MOCK_ROSTER_OPEN:'1'},/Signed-out roster protection/],[{CI_MOCK_ASSET_CHANGED:'1'},/Delivered app.js differs/],[{CI_MOCK_MAIN_CHANGES_ON_CALL:'3'},/Main changed during the release/]]){
     const f=fixture();try{const r=f.run(env);assert.notEqual(r.status,0);assert.match(r.stderr,pattern);assert.equal(existsSync(f.state),true);assert.doesNotMatch(r.stderr,/synthetic-token|original/);}finally{f.cleanup();}
   }
 });

@@ -11,6 +11,7 @@ const expectedVars = {
   REGISTRATION_ELIGIBILITY_ENABLED: 'true',
   CONTRIBUTIONS_OPEN_REVIEW: 'true',
 };
+const expectedSecrets = new Set(['CONTRIBUTIONS_ADMIN_IDS', 'CONTRIBUTIONS_REVIEWER_IDS', 'MAP_AUTH_SECRET', 'REGISTRATION_GUEST_CODE']);
 const allowedKeys = new Set('account_id ai_search ai_search_namespaces analytics_engine_datasets artifacts assets build cloudchamber compatibility_date compatibility_flags d1_databases define dev dispatch_namespaces durable_objects flagship hyperdrive jsx_factory jsx_fragment kv_namespaces legacy_env logfwdr main migrations mtls_certificates name no_bundle observability pipelines preview_urls python_modules queues r2_buckets ratelimits rules secrets_store_secrets send_email services topLevelName triggers unsafe_hello_world vars vectorize vpc_networks vpc_services worker_loaders workers_dev workflows'.split(' '));
 const emptyArrays = 'ai_search ai_search_namespaces analytics_engine_datasets artifacts dispatch_namespaces flagship hyperdrive kv_namespaces migrations mtls_certificates pipelines r2_buckets ratelimits secrets_store_secrets send_email unsafe_hello_world vectorize vpc_networks vpc_services worker_loaders workflows'.split(' ');
 const dbId = 'df7f1e92-e339-4e25-ac30-989dd68d8dfc';
@@ -57,10 +58,12 @@ function snapshot(version, config) {
     if (!b || typeof b.name !== 'string' || !b.name || names.has(b.name)) fail('Worker binding metadata is invalid.');
     names.add(b.name);
     if (b.type === 'plain_text') {
+      if (!Object.hasOwn(expectedVars, b.name)) fail('The Worker has an unreviewed variable.');
       if (typeof b.text !== 'string') fail('Worker variable metadata is unavailable.');
       plain.set(b.name, b.text);
       out.push({type:b.type,name:b.name,sha256:createHash('sha256').update(b.text).digest('hex')});
     } else if (b.type === 'secret_text') {
+      if (!expectedSecrets.has(b.name)) fail('The Worker has an unreviewed secret binding.');
       // Cloudflare does not return secret values. Record the binding's name only.
       out.push({type:b.type,name:b.name});
     } else if (b.type === 'd1') {
@@ -71,9 +74,9 @@ function snapshot(version, config) {
       out.push({type:b.type,name:b.name,service:b.service,entrypoint:b.entrypoint,environment:b.environment});
     } else fail('The Worker has an unreviewed binding type.');
   }
-  if (bindings.filter(b => b.type === 'd1').length !== 1 || bindings.filter(b => b.type === 'service').length !== 1 || !names.has('MAP_AUTH_SECRET') || !names.has('REGISTRATION_GUEST_CODE')) fail('A required Worker binding is missing.');
+  if (bindings.filter(b => b.type === 'd1').length !== 1 || bindings.filter(b => b.type === 'service').length !== 1 || [...expectedSecrets].some(name => !names.has(name))) fail('A required Worker binding is missing.');
   for (const [name,value] of Object.entries(config.vars)) if (plain.get(name) !== value) fail('A serving variable differs from the prepared release.');
-  if (!bindings.some(b => b.name === 'MAP_AUTH_SECRET' && b.type === 'secret_text') || !bindings.some(b => b.name === 'REGISTRATION_GUEST_CODE' && b.type === 'secret_text')) fail('Required Worker secrets are not present as secret bindings.');
+  if ([...expectedSecrets].some(name => !bindings.some(b => b.name === name && b.type === 'secret_text'))) fail('Required Worker secrets are not present as secret bindings.');
   out.sort((a,b) => a.name.localeCompare(b.name));
   return {tag,bindings:out};
 }
