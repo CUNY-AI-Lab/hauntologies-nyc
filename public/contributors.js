@@ -44,23 +44,7 @@
     creditedStatus.setAttribute('role', 'status');
     const creditedList = document.createElement('ol');
     creditedList.className = 'contributors-list contributors-counts';
-    // A signed-in person can take their name off the map, and put it back. The switch governs every
-    // public place their name appears, not only this list, so it says so.
-    const listing = document.createElement('div');
-    listing.className = 'contributors-listing';
-    listing.hidden = true;
-    const listingLabel = document.createElement('label');
-    const listed = document.createElement('input');
-    listed.type = 'checkbox';
-    listed.id = 'contributorListed';
-    listingLabel.append(listed, document.createTextNode(' Show my name on the map'));
-    const listingHelp = document.createElement('p');
-    listingHelp.className = 'contributors-listing-help';
-    listingHelp.id = 'contributorListedHelp';
-    listed.setAttribute('aria-describedby', listingHelp.id);
-    listingHelp.textContent = 'This applies everywhere your name appears: places under review, published places, Published edits and this list, including your earlier contributions. Off takes your name off every public list; on shows it again.';
-    listing.append(listingLabel, listingHelp);
-    credited.append(creditedTitle, creditedList, creditedStatus, listing);
+    credited.append(creditedTitle, creditedList, creditedStatus);
 
     const collaborators = document.createElement('section');
     collaborators.className = 'contributors-section';
@@ -107,7 +91,7 @@
       if (!response.ok) throw Object.assign(new Error('unavailable'), { status: response.status });
       return response.json();
     };
-    // Signed in: every event registrant with what they have sent. Signed out: opted-in credit names only.
+    // Signed in: chosen monikers on submitted work. Signed out: published monikers only.
     async function loadCredits() {
       const version = ++loading;
       if (!creditedList.childElementCount) creditedStatus.textContent = 'Loading…';
@@ -115,13 +99,11 @@
         let roster = null;
         try { roster = await getJson('/api/contributor-roster'); } catch (error) { if (error.status !== 401) throw error; }
         if (version !== loading) return;
-        listing.hidden = !roster?.you;
-        if (roster?.you && !listed.disabled) listed.checked = roster.you.listed;
         if (roster) {
           const people = roster.registrants || [];
           creditedList.replaceChildren(...people.map(p => row(p.name, p.contributions,
             !p.account ? 'no map account yet' : p.published ? p.published + ' published' : '')));
-          creditedStatus.textContent = people.length ? '' : 'No one has registered yet.';
+          creditedStatus.textContent = people.length ? '' : 'No public usernames yet.';
           return;
         }
         const { contributors = [], total = 0 } = await getJson('/api/contributor-credits');
@@ -134,35 +116,8 @@
         if (version === loading && !creditedList.childElementCount) creditedStatus.textContent = 'Contribution counts are unavailable right now.';
       }
     }
-    // The write is scoped to the account that started it: once the account changes, its answer
-    // touches nothing, and the next account's own load decides what the switch shows.
-    listed.addEventListener('change', async () => {
-      const want = listed.checked, account = window.HauntologiesAccount?.snapshot(), actor = account?.actor;
-      const current = () => !window.HauntologiesAccount || window.HauntologiesAccount.isCurrent(account);
-      listed.disabled = true;
-      try {
-        const response = await fetch('/api/contributor-roster', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }) });
-        if (!current()) return;
-        if (!response.ok) throw new Error('unavailable');
-        const data = await response.json();
-        if (!current()) return;
-        if (typeof data?.listed !== 'boolean') throw new Error('malformed');
-        listed.checked = data.listed;
-        listed.disabled = false;
-        // The Contribute form shows the same state, so it hears about the change, for this account.
-        window.dispatchEvent(new CustomEvent('contributor-listing-changed', { detail: { listed: data.listed, actor } }));
-        loadCredits();
-      } catch {
-        if (!current()) return;
-        listed.checked = !want;
-        listed.disabled = false;
-        creditedStatus.textContent = 'That did not save. Try again in a moment.';
-      }
-    });
-    // Signing in or out changes which list applies; a switch left disabled by an abandoned write is released.
     for (const type of ['contributions-session-started', 'contributions-session-ended']) {
-      window.addEventListener(type, () => { creditedList.replaceChildren(); listing.hidden = true; listed.disabled = false; if (dialog.open) loadCredits(); });
+      window.addEventListener(type, () => { ++loading; creditedList.replaceChildren(); if (dialog.open) loadCredits(); });
     }
 
     dialog.append(header, credited, collaborators, built);
@@ -187,7 +142,7 @@
       if (event.key === 'Tab') {
         // Focus cycles between the close button and, when shown, the name switch.
         event.preventDefault();
-        const stops = [close, ...(listing.hidden ? [] : [listed])];
+        const stops = [close];
         const at = stops.indexOf(document.activeElement);
         stops[(at + (event.shiftKey ? stops.length - 1 : 1)) % stops.length].focus({ preventScroll: true });
       }

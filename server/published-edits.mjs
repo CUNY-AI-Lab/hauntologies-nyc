@@ -3,7 +3,7 @@ import { publicCredit, recordCredits } from './record-credits.mjs';
 // projection of release history reads this column, so leaving the roster hides the name everywhere
 // at once (records, published edits, the Contributors counts) and rejoining restores it.
 const ROSTER_HIDDEN=`EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id) AS roster_hidden`;
-const releaseCredit=row=>row.roster_hidden?null:publicCredit(row.raw_json);
+const releaseCredit=row=>publicCredit(row.raw_json,row.roster_hidden);
 // Public projection of immutable, independently approved and verified releases.
 // Never return a submission DTO, current draft, source text, media or identity.
 export async function publishedEdits(db) {
@@ -48,62 +48,24 @@ export async function contributorCredits(db) {
   return {contributors,total};
 }
 
-// Signed-in roster: every event registrant by name, with what their map account has sent and
-// what is published. Emails only join registration to account here and never leave the server.
-// An account can leave the list; `you` tells the signed-in viewer whether they are on it.
+// The roster uses only contributor-chosen, consented monikers. Account/registration
+// names and emails are never attribution sources, even for the viewer's own defaults.
 export async function contributorRoster(db, actorId = '') {
-  // A place sent again under the same title counts once, as in Under review; the default title never merges.
-  const place=`count(DISTINCT CASE WHEN lower(trim(coalesce(json_extract(r.raw_json,'$.title'),''))) IN ('','contribution') THEN s.id ELSE lower(trim(json_extract(r.raw_json,'$.title'))) END)`;
-  const mine=`FROM workflow_submissions s JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision WHERE s.owner_id='map_'||u.id`;
-  const {results = []} = await db.prepare(`SELECT g.name,
-      (SELECT ${place} ${mine} AND s.review_state IN ('submitted','changes_requested','approved','merged')) AS sent,
-      (SELECT ${place} ${mine} AND s.review_state='merged') AS published,
-      u.id IS NOT NULL AS account,
-      u.id IN (SELECT user_id FROM contributor_roster_hidden) AS hidden
-    FROM (SELECT lower(trim(email)) AS email, name, max(created_at) AS at FROM event_registrations GROUP BY lower(trim(email))) g
-    LEFT JOIN hny_auth_user u ON lower(u.email)=g.email`).all();
-  // Leaving the list hides the name, including any other sign-up under that same name.
-  const people=new Map(),hiddenNames=new Set();
-  for (const row of results) {
-    const name=rosterName(row.name);
-    if(!name)continue;
-    const key=name.toLocaleLowerCase('en-US');
-    if(row.hidden){hiddenNames.add(key);continue;}
-    const entry=people.get(key)||{name,contributions:0,published:0,account:false};
-    entry.contributions+=Number(row.sent)||0;entry.published+=Number(row.published)||0;entry.account||=Boolean(row.account);people.set(key,entry);
+  const {results=[]}=await db.prepare(`SELECT s.id,s.review_state,r.raw_json FROM workflow_submissions s
+    JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision
+    WHERE s.review_state IN ('submitted','changes_requested','approved','merged')
+      AND (json_extract(r.raw_json,'$.public_credit.identity')='moniker' OR NOT EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id))`).all();
+  const people=new Map();
+  for(const row of results){
+    const name=publicCredit(row.raw_json);if(!name)continue;
+    const key=name.toLocaleLowerCase('en-US'),entry=people.get(key)||{name,contributions:0,published:0,account:true};
+    entry.contributions++;if(row.review_state==='merged')entry.published++;people.set(key,entry);
   }
-  // A bare first name signed up again in full ("Zarin", then "Zarin Syed") is one person, and
-  // leaving the list under either form hides both.
-  const keys=new Set([...people.keys(),...hiddenNames]);
-  for(const key of keys){
-    if(key.includes(' '))continue;
-    const full=[...keys].filter(other=>other.startsWith(key+' '));
-    if(full.length!==1)continue;
-    const whole=people.get(full[0]),entry=people.get(key);
-    if(hiddenNames.has(key)||hiddenNames.has(full[0])){hiddenNames.add(key);hiddenNames.add(full[0]);continue;}
-    if(whole&&entry){whole.contributions+=entry.contributions;whole.published+=entry.published;whole.account||=entry.account;people.delete(key);}
-  }
-  for(const key of hiddenNames)people.delete(key);
   const registrants=[...people.values()].sort((a,b)=>b.contributions-a.contributions||a.name.localeCompare(b.name,'en-US'));
   const userId=String(actorId).startsWith('map_')?String(actorId).slice(4):'';
   if(!userId)return {registrants};
   const hidden=await db.prepare('SELECT 1 AS hidden FROM contributor_roster_hidden WHERE user_id=?').bind(userId).first();
-  // The viewer's own registration name, offered back to them as a default public credit.
-  // It is theirs already; it still never reaches anyone else from here.
-  const own=await db.prepare(`SELECT g.name FROM event_registrations g JOIN hny_auth_user u ON lower(trim(g.email))=lower(u.email)
-    WHERE u.id=? ORDER BY g.created_at DESC LIMIT 1`).bind(userId).first();
-  const name=rosterName(own?.name);
-  return {registrants,you:{listed:!hidden,...(name?{name}:{})}};
-}
-
-// Registration names as people typed them: test sign-ups are dropped and a handle such as
-// "first.last" reads as a name. Anything that looks like an email never leaves the server.
-const placeholderName=/^(test(ing|er)?|asdf+|placeholder|example|name|n\/?a|none|x+)\d*$/i;
-function rosterName(value){
-  let name=typeof value==='string'?value.trim().replace(/\s+/g,' ').slice(0,120):'';
-  if(!name||name.includes('@')||placeholderName.test(name))return '';
-  if(/^[a-z]+(?:[._][a-z]+)+$/i.test(name))name=name.split(/[._]/).map(part=>part[0].toUpperCase()+part.slice(1).toLowerCase()).join(' ');
-  return name;
+  return {registrants,you:{listed:!hidden}};
 }
 
 // The signed-in account's own choice to appear on the roster, or not.

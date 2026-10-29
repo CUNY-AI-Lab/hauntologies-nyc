@@ -3,22 +3,45 @@
   const byId=id=>document.getElementById(id),dialog=byId('ownEditsDialog');
   if(!dialog)return;
   const list=byId('ownEditsList'),status=byId('ownEditsStatus'),back=byId('returnToEdits');
-  const labels={draft:'Draft',submitted:'Submitted for review',changes_requested:'Submitted for review · revision requested',approved:'Approved',merged:'Published',withheld:'Withdrawn'};
+  const labels={draft:'Draft',submitted:'Submitted for review',changes_requested:'Submitted for review · revision requested',approved:'Approved',merged:'Published',revoked:'Revoked · visible only to you',withheld:'Withdrawn'};
   const node=(tag,text)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;return el;};
   const button=(label,action)=>{const el=node('button',label);el.type='button';el.className='outline';el.addEventListener('click',action);return el;};
   const date=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
   let page=1,totalPages=1,loaded=false,generation=0,scroll=0,returnFocus=null,actor=null;
   async function get(path){const account=window.HauntologiesAccount?.snapshot();const response=await fetch(path,{credentials:'same-origin',cache:'no-store'});if(response.status===401)window.HauntologiesAccount?.invalidate(account);if(!response.ok)throw new Error(response.status===401?'Sign in to view your edits.':'Edits are temporarily unavailable.');return response.json();}
-  async function post(path,body){const response=await fetch(path,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json',...(actor?{'X-Hauntologies-Actor':actor}:{})},body:JSON.stringify(body)});let data={};try{data=await response.json();}catch{}if(!response.ok)throw new Error(response.status===401?'Sign in to change your edits.':response.status===409?'This edit changed. Reload and try again.':'That edit could not be removed right now.');return data;}
-  // Removes an unpublished edit for good; a published one stays with the map.
-  async function remove(item,control){if(!window.confirm('Delete "'+(item.title||'this edit')+'"? It will be gone for good.'))return;control.disabled=true;status.textContent='Deleting…';
-    try{await post('/api/contributions/delete',{idempotency_key:crypto.randomUUID(),submission_id:item.id,expected_revision:item.revision});window.dispatchEvent(new CustomEvent('contributions-edit-deleted',{detail:{submissionId:item.id}}));await load(page);}
-    catch(error){status.textContent=error.message;control.disabled=false;}}
+  const requests=new Map();
+  async function post(path,body,expectedActor){
+    const response=await fetch(path,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json','X-Hauntologies-Actor':expectedActor},body:JSON.stringify(body)});
+    let data;try{data=await response.json();}catch{throw new Error('Save outcome unknown. Retry this action to confirm it.');}
+    if(!response.ok){const messages={revocation_dependency_conflict:'Another release depends on this contribution. It cannot be revoked without changing that work.',deletion_dependency_conflict:'Another release retains this contribution in its history. Deletion is blocked to protect that work.',published_record_cannot_be_deleted:'Revoke the published contribution before deleting it.'};throw new Error(messages[data.error]||(response.status===401?'Sign in to change your edits.':response.status===409?'This edit changed. Reopen My edits before trying again.':'That edit could not be changed right now.'));}
+    const action=path.split('/').pop(),result=data.receipt?.result;
+    if(data.receipt?.action!==action||typeof data.receipt.id!=='string'||(action==='delete'?result?.deleted_submission_id:result?.submission_id)!==body.submission_id||result?.revision!==body.expected_revision)throw new Error('Save outcome unknown. Retry this action to confirm it.');
+    return data;
+  }
+  async function change(item,control,action){
+    const account=window.HauntologiesAccount?.snapshot(),owner=actor,version=generation;
+    const current=()=>version===generation&&owner===actor&&owner===account?.actor&&window.HauntologiesAccount?.isCurrent(account);
+    if(!current())return;
+    const question=action==='revoke'?'Revoke "'+(item.title||'this contribution')+'"? Its published changes will be removed from the map. Your private contribution remains; deletion is a separate step.':'Delete "'+(item.title||'this contribution')+'"? Its saved content will be gone for good.';
+    if(!window.confirm(question)||!current())return;
+    const requestKey=[owner,action,item.id,item.revision].join(':');
+    if(!requests.has(requestKey))requests.set(requestKey,{idempotency_key:crypto.randomUUID(),submission_id:item.id,expected_revision:item.revision});
+    control.disabled=true;status.textContent=action==='revoke'?'Revoking…':'Deleting…';
+    try{
+      await post('/api/contributions/'+action,requests.get(requestKey),owner);
+      if(!current())return;
+      requests.delete(requestKey);
+      window.dispatchEvent(new CustomEvent('contributions-edit-deleted',{detail:{submissionId:item.id,actor:owner}}));
+      window.dispatchEvent(new CustomEvent('contributions-records-changed'));
+      await load(page);
+    }catch(error){if(!current())return;status.textContent=error.message;control.disabled=false;}
+  }
   async function identity(){const value=await get('/api/auth/session');if(value.password_required||typeof value.actor_id!=='string')throw new Error('Sign in to view your edits.');return value.actor_id;}
   function leave(action,focus){scroll=dialog.scrollTop;returnFocus=focus;dialog.close();back.hidden=false;action();}
   function showItem(item){
     const row=node('li'),title=button(item.title||'Edit',()=>leave(()=>window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:item.id}})),title));title.className='edit-title';row.append(title,node('p',(labels[item.status]||'Saved')+' · '+date(item.updated_at)));
-    if(item.status!=='merged'){const del=button('Delete',()=>remove(item,del));del.className='textbutton edit-delete';del.setAttribute('aria-label','Delete '+(item.title||'edit'));row.append(del);}
+    if(item.can_revoke){const revoke=button('Revoke',()=>change(item,revoke,'revoke'));revoke.setAttribute('aria-label','Revoke '+(item.title||'contribution'));row.append(revoke);}
+    if(item.can_delete){const del=button('Delete',()=>change(item,del,'delete'));del.className='textbutton edit-delete';del.setAttribute('aria-label','Delete '+(item.title||'edit'));row.append(del);}
     const targets=node('div');targets.className='edit-targets';
     for(const target of item.targets||[]){const open=button(target.title||'View place',()=>leave(()=>window.dispatchEvent(new CustomEvent('edits-place-requested',{detail:{recordId:target.record_id}})),open));open.setAttribute('aria-label','Show '+(target.title||'place')+' on map');targets.append(open);}
     row.append(targets);return row;

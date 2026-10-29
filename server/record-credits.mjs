@@ -1,7 +1,8 @@
 // Names come only from consent attached to verified releases, never from accounts or RSVP names.
-export function publicCredit(raw) {
+export function publicCredit(raw, hidden = false) {
   try {
     const credit = JSON.parse(raw).public_credit;
+    if(hidden && credit?.identity!=='moniker')return null;
     if (credit?.consent !== true || typeof credit.label !== 'string') return null;
     const label = credit.label.trim().replace(/\s+/g, ' ');
     return label && label.length <= 120 && !/[@\u0000-\u001f\u007f]/.test(label) ? label : null;
@@ -21,7 +22,7 @@ export async function recordCredits(db, recordIds) {
     JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
     JOIN json_each(j.manifest_json,'$.targets') t
     WHERE j.status='verified' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)
-      AND NOT EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id)
+      AND (json_extract(r.raw_json,'$.public_credit.identity')='moniker' OR NOT EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id))
       AND json_extract(t.value,'$.record_id') IN (${ids.map(() => '?').join(',')})
     ORDER BY j.created_at,j.id`).bind(...ids).all();
     results.push(...(page.results||[]));

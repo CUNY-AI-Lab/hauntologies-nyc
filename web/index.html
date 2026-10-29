@@ -112,9 +112,8 @@
       <div id="freeformTitle" class="contribution-title"><label for="contributionObjectTitle">Title<input id="contributionObjectTitle" maxlength="300"></label></div>
       <details id="freeformDescription" class="workflow-details" data-hint="required" open><summary>Description</summary><label for="contributionSummary"><span class="sr-only">Description</span><textarea id="contributionSummary" rows="3" required></textarea></label></details>
       <div id="freeformCredit" class="contribution-credit">
-        <label class="consent-line"><input id="publicCreditConsent" type="checkbox" checked> Show my name with this contribution</label>
-        <label for="publicCreditLabel" class="sr-only">Name shown on the map</label><input id="publicCreditLabel" placeholder="Your name, as shown on the map" maxlength="120" autocomplete="name" aria-describedby="publicCreditHint">
-        <p id="publicCreditHint" class="small contribution-credit-hint">Shown with this contribution under review, once published, and in the Contributors list. Uncheck to contribute without a name.</p>
+        <label for="publicCreditLabel" >Public username</label><input id="publicCreditLabel" placeholder="Choose a username or moniker" maxlength="120" required autocomplete="off" aria-describedby="publicCreditHint">
+        <p id="publicCreditHint" class="small contribution-credit-hint">Choose the username or moniker to display publicly. Your email and registration name are never used.</p>
       </div>
       <details id="freeformContext" class="workflow-details" data-hint><summary>Sources</summary>
         <label for="freeformSources">Links or references<textarea id="freeformSources" rows="3"></textarea></label><div id="extraSources"></div><button id="addFreeformSource" type="button" class="outline">Add source</button>
@@ -184,6 +183,7 @@
     <div class="record-editor-service"><p id="recordEditorStatus" class="small" role="status"></p><button id="reloadRecordEditor" class="textbutton" type="button" hidden>Load current record</button></div>
     <form id="recordEditorForm" novalidate>
       <label for="recordChangeMessage">Explanation<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>
+      <label for="recordPublicMoniker">Public username<input id="recordPublicMoniker" maxlength="120" required autocomplete="off" placeholder="Choose a username or moniker"></label><p class="small">This username is public with your edit. Never enter your email.</p>
       <div id="recordEditorFields"></div>
       <button id="previewRecordEdit" class="primary" type="submit">Submit</button>
     </form>

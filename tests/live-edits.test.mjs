@@ -29,8 +29,8 @@ function sqliteD1() {
 }
 function harness(t, authorization = { reviewers: ['reviewer', 'reviewer2'], publishers: ['publisher'] }) {
   const db = sqliteD1(); t.after(() => db.native.close());
-  const service = createWorkflowService({ store: createWorkflowStore(db), staticRecords: [place], taskSeeds: { tasks: [] }, geography: { boundaries }, authorization });
-  return { db, service };
+  const store=createWorkflowStore(db),service = createWorkflowService({ store, staticRecords: [place], taskSeeds: { tasks: [] }, geography: { boundaries }, authorization });
+  return { db, store, service };
 }
 async function call(h, path, body, actor = 'author') {
   const response = await h.service.handle(new Request('https://map.test/api/contributions/' + path, { method: body === undefined ? 'GET' : 'POST',
@@ -351,4 +351,95 @@ test('published notes preserve exact text and respect later public-credit opt-ou
  h.db.native.prepare('INSERT INTO contributor_roster_hidden VALUES(?,?)').run(user,'2026-10-25');
  assert.deepEqual((await publishedRecords(h.db))[0].contributors||[],[]);
  assert.equal((await publishedRecords(h.db))[0].description,record.description);
+});
+
+const lifecycleBody = s => ({idempotency_key:key(),submission_id:s.id,expected_revision:s.revision});
+test('owner revokes a published edit before deleting; public feeds restore the original and private content remains until deletion',async t=>{
+ const h=harness(t),value=edit(await target(h),{title:'Private after revocation'});value.public_credit={consent:true,label:'Synthetic Author'};
+ const {s,job,verified}=await publish(h,value);ok(verified,200);
+ const body=lifecycleBody(s);
+ ok(await call(h,'delete',lifecycleBody(s)),409);
+ for(const actor of ['other','reviewer','publisher'])ok(await call(h,'revoke',body,actor),404);
+ const removed=ok(await call(h,'revoke',body),200);assert.equal(removed.submission.status,'revoked');
+ assert.equal(ok(await call(h,'revoke',body),200).reused,true);
+ ok(await call(h,'revoke',lifecycleBody(s)),409);
+ assert.deepEqual(await publishedRecords(h.db),[]);assert.deepEqual(await publishedEdits(h.db),[]);
+ assert.equal((await target(h)).record.title,place.title);
+ const {contributorCredits}=await import('../server/published-edits.mjs');assert.deepEqual(await contributorCredits(h.db),{contributors:[],total:0});
+ assert.equal(ok(await call(h,'submission?id='+s.id),200).submission.raw_json,JSON.stringify(value));
+ for(const actor of ['other','reviewer','publisher']){ok(await call(h,'submission?id='+s.id,undefined,actor),404);ok(await call(h,'delete',lifecycleBody(s),actor),404);}
+ ok(await call(h,'revise',{...lifecycleBody(s),submission_json:JSON.stringify(value)}),409);
+ ok(await call(h,'rollback',{idempotency_key:key(),job_id:job.id,rationale:'Cannot revive revoked history'},'publisher'),404);
+ const items=ok(await call(h,'edits'),200).items;assert.equal(items[0].can_revoke,false);assert.equal(items[0].can_delete,true);
+ const deletion=lifecycleBody(s);ok(await call(h,'delete',deletion),200);assert.equal(ok(await call(h,'delete',deletion),200).reused,true);
+ ok(await call(h,'submission?id='+s.id),404);
+ for(const table of ['workflow_submissions','workflow_revisions','workflow_events','workflow_approvals','workflow_jobs','contribution_media'])assert.equal(count(h,table),0,table);
+ assert.equal(count(h,'workflow_targets'),1,'version tombstone survives');
+ ok(await call(h,'revoke',body),200); // old receipt cannot resurrect deleted content
+ assert.equal(count(h,'workflow_submissions'),0);
+});
+
+test('revocation preserves another contributor’s prior release and its sources',async t=>{
+ const h=harness(t),first=await publish(h,edit(await target(h),{title:'Earlier contributor'}),'earlier');ok(first.verified,200);
+ const before=await publishedRecords(h.db),second=await publish(h,edit(await target(h),{title:'Later contribution'}));ok(second.verified,200);
+ ok(await call(h,'revoke',lifecycleBody(second.s)),200);
+ assert.deepEqual(await publishedRecords(h.db),before);
+ ok(await call(h,'delete',lifecycleBody(second.s)),200);
+ assert.deepEqual(await publishedRecords(h.db),before);
+});
+
+test('dependent releases block revocation; historical dependencies block deletion without destroying shared work',async t=>{
+ const h=harness(t),first=await publish(h,edit(await target(h),{title:'Earlier own text'}));ok(first.verified,200);
+ const second=await publish(h,edit(await target(h),{description:'Someone else added this'}),'other');ok(second.verified,200);
+ const before=await publishedRecords(h.db);
+ assert.equal(ok(await call(h,'revoke',lifecycleBody(first.s)),409).error,'revocation_dependency_conflict');
+ assert.deepEqual(await publishedRecords(h.db),before);
+ ok(await call(h,'revoke',lifecycleBody(second.s),'other'),200);
+ ok(await call(h,'revoke',lifecycleBody(first.s)),200);
+ assert.equal(ok(await call(h,'delete',lifecycleBody(first.s)),409).error,'deletion_dependency_conflict');
+ assert.equal((await h.store.getSubmission(first.s.id)).review_state,'revoked');
+ ok(await call(h,'delete',lifecycleBody(second.s),'other'),200);
+ ok(await call(h,'delete',lifecycleBody(first.s)),200);
+});
+
+test('a staged dependent edit blocks revocation and a stale version cannot revoke',async t=>{
+ const h=harness(t),first=await publish(h,edit(await target(h),{title:'Current'}));ok(first.verified,200);
+ const next=await submit(h,edit(await target(h),{title:'Staged dependent'}),'other'),approved=ok(await approve(h,next),200).submission;
+ ok(await apply(h,approved),201);
+ ok(await call(h,'revoke',{...lifecycleBody(first.s),expected_revision:99}),409);
+ assert.equal(ok(await call(h,'revoke',lifecycleBody(first.s)),409).error,'revocation_dependency_conflict');
+ assert.equal((await publishedRecords(h.db))[0].title,'Current');
+});
+
+test('revocation checks dependencies again at the atomic commit boundary',async t=>{
+ const h=harness(t),first=await publish(h,edit(await target(h),{title:'Before race'}));ok(first.verified,200);
+ const original=h.store.revokeSubmission;h.store.revokeSubmission=async(...args)=>{
+  const next=await publish(h,edit(await target(h),{title:'Concurrent contributor'}),'other');ok(next.verified,200);
+  return original(...args);
+ };
+ ok(await call(h,'revoke',lifecycleBody(first.s)),409);
+ assert.equal((await publishedRecords(h.db))[0].title,'Concurrent contributor');
+ assert.equal((await h.store.getSubmission(first.s.id)).review_state,'merged');
+});
+
+test('all live revisions of one contribution are unwound atomically without reviving its earlier text',async t=>{
+ const h=harness(t),first=await publish(h,edit(await target(h),{title:'First revision'}));ok(first.verified,200);
+ const revised=ok(await call(h,'revise',{...lifecycleBody(first.s),submission_json:JSON.stringify(edit(await target(h),{title:'Second revision'}))}),200).submission;
+ const queued=ok(await call(h,'triage',{...lifecycleBody(revised),action:'ready_for_review',rationale:'Synthetic revision.'},'reviewer'),200).submission;
+ const approved=ok(await approve(h,queued),200).submission,job=ok(await apply(h,approved),201).job;ok(await verify(h,job),200);
+ ok(await call(h,'revoke',lifecycleBody(revised)),200);
+ assert.deepEqual(await publishedRecords(h.db),[]);assert.equal((await target(h)).record.title,place.title);
+ assert.deepEqual((await h.store.jobsForSubmission(first.s.id)).map(j=>j.status),['revoked','revoked']);
+ ok(await call(h,'delete',lifecycleBody(revised)),200);
+});
+
+test('a separate related claim prevents removing the new place it depends on',async t=>{
+ const h=harness(t),e={schema_version:'1.0',type:'open_proposal',task_ids:[],title:'New source place',summary:'Synthetic source place.',public_credit:{consent:false,label:''},sources:[],attachments:[],targets:[],payload:{explanation:'Synthetic source place.',geometry:{type:'Point',coordinates:[-74,40.72]}}};
+ const first=await publish(h,e);ok(first.verified,200);
+ const record=JSON.parse(first.job.manifest.targets[0].after.raw_json),bundle=record.metadata.canonical_bundle,oldId=bundle.Entries[0].entry_id;
+ const linked=JSON.parse(JSON.stringify(bundle).replaceAll(oldId,'HNY-LINKED'));
+ linked.Entries[0].related_entry_id=oldId;
+ const check=ok(await call(h,'preview',{submission_json:JSON.stringify({...e,type:'entry_bundle',title:'Related claim',payload:linked})},'reviewer2'),200);assert.deepEqual(check.preview.validation.errors,[]);const other=await publish(h,{...e,type:'entry_bundle',title:'Related claim',payload:linked},'reviewer2');ok(other.verified,200);
+ ok(await call(h,'revoke',lifecycleBody(first.s)),409);
+ assert.equal((await publishedRecords(h.db)).length,2);
 });
