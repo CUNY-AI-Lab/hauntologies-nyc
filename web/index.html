@@ -93,7 +93,7 @@
         </div>
         <div id="contributionPlacePlate" class="contribution-place-plate"><span id="contributionPlaceName" class="contribution-place-name"></span><p id="newLocationStatus" role="status"></p><button id="clearContributionPoint" class="textbutton" type="button" hidden>Clear</button></div>
         <p id="contributionPlaceHint" class="small contribution-place-hint">Pin the place first. The title and description follow once it is on the map.</p>
-        <div id="freeformRecordContext" class="contribution-place-plate is-record" hidden><span id="freeformRecordLabel" class="contribution-place-name" role="status"></span><p>Adding to this place</p><button id="removeFreeformRecord" class="textbutton" type="button">Change</button></div>
+        <div id="freeformRecordContext" class="contribution-place-plate is-record" hidden><span id="freeformRecordLabel" class="contribution-place-name" role="status"></span><p>Adding a note to this place. Use Edit on its card to change the place itself.</p><button id="removeFreeformRecord" class="textbutton" type="button">Change</button></div>
         <!-- The form logic, drafts and validation read these; the Place field above sets them. -->
         <div class="contribution-place-model" hidden>
           <label for="contributionPlaceMode">Place mode<select id="contributionPlaceMode"><option value="new">New place</option><option value="existing">Existing place</option></select></label>
@@ -181,6 +181,7 @@
   <div class="popout-head"><h2 id="recordEditorTitle">Edit</h2><button id="closeRecordEditor" class="close-control" type="button" aria-label="Close editor"><span aria-hidden="true">×</span></button></div>
   <div class="record-editor-content">
     <p id="recordEditorName" class="record-editor-name"></p>
+    <p class="small">Edit changes this place. Use Contribute on its card to add a note.</p>
     <div class="record-editor-service"><p id="recordEditorStatus" class="small" role="status"></p><button id="reloadRecordEditor" class="textbutton" type="button" hidden>Load current record</button></div>
     <form id="recordEditorForm" novalidate>
       <label for="recordChangeMessage">Describe your change<textarea id="recordChangeMessage" rows="2" maxlength="2000" required></textarea></label>

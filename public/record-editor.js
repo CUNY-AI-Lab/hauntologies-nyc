@@ -314,6 +314,14 @@
   window.addEventListener('contributions-session-ended',hidePrivateEditor);
   window.addEventListener('focus',async()=>{if(current&&window.HauntologiesAccount?.canContribute()){const state=current,account=window.HauntologiesAccount.snapshot();try{const session=await api('/session');if(current===state&&window.HauntologiesAccount.isCurrent(account)&&session.actor_id!==state.actor_id)hidePrivateEditor();}catch{if(current===state&&window.HauntologiesAccount.isCurrent(account))hidePrivateEditor();}}});
   byId('recordPublicMoniker').addEventListener('input',()=>{if(current){current.moniker=byId('recordPublicMoniker').value;try{localStorage.setItem('hauntologies-public-moniker:'+current.actor_id,JSON.stringify({label:current.moniker}));}catch{}changed();}});
+  window.addEventListener('hauntologies-public-moniker-changed',event=>{
+    const {actor,label}=event.detail||{},account=window.HauntologiesAccount?.snapshot();
+    if(!window.HauntologiesAccount?.isCurrent(account)||account.actor!==actor||typeof label!=='string'||!label.trim()||label.length>120||/[@\u0000-\u001f\u007f]/.test(label))return;
+    for(const draft of drafts.values()){
+      if(draft.actor_id!==actor||draft.pending||draft.revisionOf||draft.saved||draft.moniker===label)continue;
+      draft.moniker=label;draft.preview=null;if(draft===current){byId('recordPublicMoniker').value=label;changed();}
+    }
+  });
   message.addEventListener('input',()=>{if(current){current.message=message.value;changed();}});
   form.addEventListener('submit',preview);submit.addEventListener('click',send);
   byId('reloadRecordEditor').addEventListener('click',()=>current&&loadTarget(current));
