@@ -27,13 +27,13 @@ If the email does not arrive, check spam and wait before asking again because pe
 
 Signing in takes an email address and password. **Reset password** sends a separate-purpose link that lasts 30 minutes; saving the new password revokes earlier sessions. A map session lasts seven days and the account check may renew it at most once a day. **Sign out** ends the current session.
 
-The contribution draft is saved on the device being used: an account draft lasts 14 days and a signed-out draft lasts one day. Signing out on purpose deletes that account's draft.
+The contribution draft is saved on the device being used: an account draft lasts 14 days and a signed-out draft lasts one day. Signing out keeps that account's draft on the device within its retention period.
 
 ## Contribute
 
 After signing in, choose **Edit** in the bottom-right corner, then **Contribute**. The form starts with **Place**. Type an address, street, building, existing map place, OpenStreetMap link or coordinates, choose a result, or choose **Pin** and click the map. Only points inside the five boroughs can be chosen. Choosing an existing place adds a note about it; it does not change the place itself. Use **Edit** on the place card for a correction to the place's fields or sources.
 
-Once a place is selected, add a title when needed and write the description. Sources and facts are optional. Enter a **Public username** and use **Describe your change** to say briefly what you are adding or changing. Choose **Publish** to check the preview, then confirm publication. A successful publication puts the change on the map without a separate review step. The direct form does not offer a new public image upload.
+For a new place, add a title and description. For an existing place, add a description, a source or a fact; its description can be blank. Sources and facts are optional when a description is supplied. Enter a **Public username** and use **Describe your change** to say briefly what you are adding or changing. Choose **Publish** to check the preview, then confirm publication. A successful publication puts the change on the map without a separate review step. The direct form does not offer a new public image upload.
 
 ## Public credit and history
 
