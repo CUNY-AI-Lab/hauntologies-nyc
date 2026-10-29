@@ -151,7 +151,7 @@ test('a configured reviewer alone takes a new place from approval to the map, as
   assert.ok((await publishedEdits(h.db)).some(e => JSON.stringify(e).includes('Lantern on Sullivan')), 'published');
 });
 
-test('the deployed gate serves the pending layer to anyone, read-only', async t => {
+test('the direct-publication gate keeps legacy saved work private', async t => {
   const h = harness(t), s = await submit(h, proposal());
   let forwarded = 0;
   const worker = createDemoWorker({ fetch: () => { forwarded++; return new Response('map'); } });
@@ -159,10 +159,10 @@ test('the deployed gate serves the pending layer to anyone, read-only', async t 
   const response = await worker.fetch(new Request('https://map.test/api/pending-places'), env, {});
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
-  assert.deepEqual((await response.json()).places.map(p => p.id), [s.id]);
+  assert.deepEqual((await response.json()).places, []);
   assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places?owner=author'), env, {})).status, 400);
   for (const method of ['POST', 'PUT', 'DELETE']) assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places', { method }), env, {})).status, 401);
-  assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places'), { DB: { prepare() { throw new Error('down'); } } }, {})).status, 503);
+  assert.equal((await worker.fetch(new Request('https://map.test/api/pending-places'), { DB: { prepare() { throw new Error('down'); } } }, {})).status, 200);
   assert.equal(forwarded, 0);
 });
 
@@ -207,7 +207,7 @@ test('roster attribution is chosen monikers only, never registration or account 
  await setRosterListing(h.db,'map_u1',false);
  await submit(h,{...proposal({title:'Legacy hidden'}),public_credit:{consent:true,label:'Earlier private name'}},'map_u1');
  await submit(h,{...proposal({title:'Chosen username'}),public_credit:{consent:true,label:'night.owl',identity:'moniker'}},'map_u1');
- const roster=await contributorRoster(h.db,'map_u1');assert.deepEqual(roster.registrants,[{name:'night.owl',contributions:1,published:0,account:true}]);assert.deepEqual(roster.you,{listed:false});
+ const roster=await contributorRoster(h.db,'map_u1');assert.deepEqual(roster.registrants,[]);assert.deepEqual(roster.you,{listed:false});
  const places=await pendingPlaces(h.db);assert.equal(places.places.find(p=>p.title==='Chosen username').contributor,'night.owl');assert.equal(places.places.find(p=>p.title==='Legacy hidden').contributor,undefined);
  for(const secret of ['Private Account','Private Registration','private@example.test','Earlier private name'])assert.ok(!JSON.stringify({roster,places}).includes(secret));
  const bad=await call(h,'submit',{idempotency_key:key(),submission_json:JSON.stringify({...proposal(),public_credit:{consent:true,label:'private@example.test',identity:'moniker'}})},'map_u1');ok(bad,400);

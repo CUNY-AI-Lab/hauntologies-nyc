@@ -323,3 +323,20 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 
 /* Keep password guidance beside the field it describes. */
 #accountFormHost .account-password-hint { margin:-8px 0 12px; }
+
+/* History stays compact and secondary to the place itself. */
+.place-heading .textbutton{flex:none;font-size:.8rem;padding:.35rem;}
+.place-history,.place-notes{margin-top:.65rem;}
+.history-entry{border-top:1px solid var(--line,#454039);padding:.5rem 0;}
+.history-entry pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:.8rem;margin:.3rem 0;}
+.history-entry pre:first-of-type{color:#e2a995;}.history-entry pre:last-of-type{color:#c7d7a8;}
+.history-entry form{display:grid;gap:.5rem;}
+#freeformImages{display:none;}
+#reviewTool,[data-workflow-view="reviewView"]{display:none;}
+/* Keep long titles full width; Edit and History share one compact action row. */
+#researchSidecar .recordlist .place-heading{display:grid;grid-template-columns:auto auto 1fr;gap:0 6px;padding:0 10px 0 0;}
+#researchSidecar .recordlist .place-heading .place-select{grid-column:1 / -1;min-width:0;width:100%;}
+#researchSidecar .recordlist .place-heading .place-edit{grid-column:1;margin-left:10px;}
+#researchSidecar .recordlist .place-heading > .textbutton{grid-column:2;width:auto;min-width:44px;margin:0;}
+
+#pendingPlacesFeed{display:none!important;}

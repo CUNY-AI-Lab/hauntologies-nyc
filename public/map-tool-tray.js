@@ -11,6 +11,7 @@
   const panelOpen = () => [...tray.querySelectorAll('[aria-expanded]')].some(item => item.getAttribute('aria-expanded') === 'true');
   const opensPopout = item => item.matches?.('[aria-controls]') && byId(item.getAttribute('aria-controls'))?.classList.contains('popout');
   const popoutOpen = () => [...tray.querySelectorAll('[aria-expanded="true"]')].some(opensPopout);
+  const anyPopoutOpen=()=>[...document.querySelectorAll('.popout')].some(n=>!n.hidden&&!n.matches('dialog'));
   const isOpen = () => group.hasAttribute('data-open');
 
   function sync() {
@@ -31,14 +32,14 @@
   button.addEventListener('click', event => {
     if (pinned) { fold(); return; }
     // Tools while Filters or Layers is open goes back to the column.
-    if (popoutOpen() && typeof closeTools === 'function') closeTools();
+    if (anyPopoutOpen() && typeof closeTools === 'function') closeTools();
     pinned = true; sync();
     // Keyboard activation moves into the tray; a pointer leaves focus where it is.
     if (event.detail === 0) byId('filtersButton').focus();
   });
   group.addEventListener('pointerenter', event => {
     // An open panel covers the column, so hover waits for it to close.
-    if (!hoverable.matches || event.pointerType !== 'mouse' || popoutOpen()) return;
+    if (!hoverable.matches || event.pointerType !== 'mouse' || anyPopoutOpen()) return;
     clearTimeout(leaveTimer); hovering = true; sync();
   });
   group.addEventListener('pointerleave', event => {

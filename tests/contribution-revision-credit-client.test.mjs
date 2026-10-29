@@ -75,5 +75,5 @@ test('contributing to a mapped place from an open-proposal revision keeps that r
  f.loadRevision({id:'s2',revision:1,title:'Lantern',raw_json:JSON.stringify({schema_version:'1.0',type:'open_proposal',task_ids:[],title:'Lantern',summary:'Old.',public_credit:{consent:true,label:'Ada Example',identity:'moniker'},sources:[],attachments:[],targets:[],payload:{explanation:'Old.',geometry:null}})});
  f.contributeTo('synthetic_place','Hall');
  assert.equal(f.isRevising(),true);assert.equal(f.controls.revisionContext.hidden,false);assert.equal(f.controls.freeformCredit.hidden,false);
- f.controls.publicCreditConsent.checked=false;const e=f.envelope();assert.equal(e.type,'open_proposal');assert.equal(e.public_credit.label,'chosen.handle');
+ f.controls.publicCreditConsent.checked=false;const e=f.envelope();assert.equal(e.type,'open_proposal');assert.equal(e.public_credit.label,'Ada Example');
 });

@@ -31,7 +31,7 @@
   }
   function view(record){
     const n=root.AtlasModel.normalize(record),point=n.geometry?.coordinates;
-    return {title:record.title,description:record.canonical_reviewed?(record.description||record.claim_text||reason(record,n)):reason(record,n),location:location(record),sourceUrl:record.display_source_url||record.source_url||null,latitude:point?.[1]??null,longitude:point?.[0]??null,approximate:n.geoStatus==='approximate',current:record.id==='featured-csi-wsia',mapUrl:point?`https://www.openstreetmap.org/?mlat=${point[1]}&mlon=${point[0]}#map=18/${point[1]}/${point[0]}`:null};
+    return {title:record.title,description:(record.canonical_reviewed||record.direct_publication)?(record.description||record.claim_text||reason(record,n)):reason(record,n),location:location(record),sourceUrl:record.display_source_url||record.source_url||null,latitude:point?.[1]??null,longitude:point?.[0]??null,approximate:n.geoStatus==='approximate',current:record.id==='featured-csi-wsia',mapUrl:point?`https://www.openstreetmap.org/?mlat=${point[1]}&mlon=${point[0]}#map=18/${point[1]}/${point[0]}`:null};
   }
   root.PlaceSummary=Object.freeze({view});
 })(typeof window!=='undefined'?window:globalThis);
