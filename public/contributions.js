@@ -409,7 +409,7 @@
   }
   function resetOpenContext(){
     ++openRequest;openTargets=[];openRequestedRecordId='';openTargetLabel='';openTargetPending=false;openTargetFailed=false;openTaskIds=[];openSourcesInitial='';openSourcesDisplayInitial='';openExplanationInitial='';openExplanationDisplayInitial='';
-    byId('contributionObjectTitle').value='';byId('extraSources').replaceChildren();byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;byId('freeformLocation').open=false;setPointFields(null);byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
+    byId('contributionObjectTitle').value='';byId('extraSources').replaceChildren();byId('freeformSources').value='';byId('freeformContext').hidden=false;byId('freeformContext').open=false;if(byId('freeformCredit'))byId('freeformCredit').hidden=false;byId('freeformLocation').open=false;setPointFields(null);byId('contributionPlaceMode').value='new';byId('contributionAttributes').replaceChildren();byId('addContributionAttribute').disabled=false;showOpenReference();
   }
   function populatePlaceChoices(){
     const select=byId('freeformPlaceSelect'),records=typeof allRecords==='function'?allRecords():window.NYC_INVENTORY?.records||[];
@@ -592,8 +592,9 @@
   async function syncCreditState(){
     const request=++creditSync,actor=privateActor,account=window.HauntologiesAccount?.snapshot();
     creditListed=null;creditVisibility=actor?'loading':'unknown';renderCreditHint();if(!actor)return;
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
     try{
-      const response=await fetch('/api/contributor-roster',{credentials:'same-origin',cache:'no-store'});
+      const response=await fetch('/api/contributor-roster',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
       if(!creditCurrent(request,actor,account))return;
       if(!response.ok)throw new Error('unavailable');
       const data=await response.json();
@@ -603,12 +604,15 @@
       if(typeof data.you.name==='string'&&!rememberedCredit()?.label&&!byId('publicCreditLabel').value.trim()){byId('publicCreditLabel').value=data.you.name.slice(0,120);byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();}
       renderCreditHint();
     }catch{if(creditCurrent(request,actor,account)){creditVisibility='error';renderCreditHint();}}
+    finally{clearTimeout(timer);}
   }
-  // The inline switch posts the same roster change as the Contributors dialog, scoped to this account.
+  // The inline switch posts the same roster change as the Contributors dialog, scoped to this account
+  // and bounded in time. An interrupted write is followed by a fresh read, since it may have landed.
   async function showNameOnMap(control){
     const request=++creditSync,actor=privateActor,account=window.HauntologiesAccount?.snapshot();if(!actor)return;control.disabled=true;
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
     try{
-      const response=await fetch('/api/contributor-roster',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({listed:true})});
+      const response=await fetch('/api/contributor-roster',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({listed:true}),signal:controller.signal});
       if(!creditCurrent(request,actor,account))return;
       if(!response.ok)throw new Error('unavailable');
       const data=await response.json();
@@ -616,7 +620,8 @@
       if(typeof data?.listed!=='boolean')throw new Error('malformed');
       creditListed=data.listed;creditVisibility='known';renderCreditHint();
       window.dispatchEvent(new CustomEvent('contributor-listing-changed',{detail:{listed:data.listed,actor}}));
-    }catch{if(creditCurrent(request,actor,account)){control.disabled=false;byId('publicCreditHint')?.append(document.createTextNode(' That did not save. Try again in a moment.'));}}
+    }catch{if(creditCurrent(request,actor,account))syncCreditState();}
+    finally{clearTimeout(timer);}
   }
   window.addEventListener('contributor-listing-changed',event=>{
     if(typeof event.detail?.listed!=='boolean'||event.detail.actor!==privateActor||!privateActor)return;
@@ -885,7 +890,8 @@
     if(value.type==='open_proposal')setCreditFields(value.public_credit);
     openSourcesInitial=value.type==='open_proposal'?value.payload.sources_text??'':'';byId('freeformSources').value=openSourcesInitial;openSourcesDisplayInitial=byId('freeformSources').value;
     for(const attribute of value.payload.attributes||[])addAttribute(attribute);
-    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
+    // A typed revision edits its summary alone; its credit editor is hidden so the box cannot promise a change the envelope keeps.
+    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=value.type!=='open_proposal';showOpenReference();if(value.type!=='open_proposal')byId('freeformRecordContext').hidden=true;
     byId('revisionContext').replaceChildren(el('span','Revising '+(submission.title||'this contribution')+', revision '+submission.revision));byId('revisionContext').hidden=false;byId('cancelRevision').hidden=false;invalidatePreview();switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   }
 
@@ -1075,13 +1081,21 @@
   window.addEventListener('contributions-clarify-requested',event=>{
     if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
-    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
+    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
   window.addEventListener('contributions-refresh-requested',()=>loadDashboard());
   // A reviewer with the queue open sees new submissions as the public Under review layer learns of them,
   // at most once every 20 seconds; everyone else keeps the lighter manual Refresh.
-  window.addEventListener('contributions-pending-changed',()=>{if(privateActor&&!byId('reviewView').hidden&&!document.getElementById('researchSidecar')?.hidden&&document.visibilityState==='visible'&&Date.now()-dashboardLoadedAt>20000)loadDashboard();});
+  let pendingQueueRefresh=0;
+  window.addEventListener('contributions-pending-changed',()=>{
+    const wanted=()=>privateActor&&!byId('reviewView').hidden&&!document.getElementById('researchSidecar')?.hidden&&document.visibilityState==='visible';
+    if(!wanted())return;
+    const wait=20000-(Date.now()-dashboardLoadedAt);
+    if(wait<=0){loadDashboard();return;}
+    // Inside the cooldown the change is deferred to its end rather than dropped; one timer covers a burst.
+    if(!pendingQueueRefresh)pendingQueueRefresh=setTimeout(()=>{pendingQueueRefresh=0;if(wanted())loadDashboard();},wait);
+  });
   window.addEventListener('contributions-review-requested',async event=>{
     if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;

@@ -140,9 +140,10 @@
       const want = listed.checked, account = window.HauntologiesAccount?.snapshot(), actor = account?.actor;
       const current = () => !window.HauntologiesAccount || window.HauntologiesAccount.isCurrent(account);
       listed.disabled = true;
+      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
       try {
         const response = await fetch('/api/contributor-roster', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }) });
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }), signal: controller.signal });
         if (!current()) return;
         if (!response.ok) throw new Error('unavailable');
         const data = await response.json();
@@ -155,10 +156,19 @@
         loadCredits();
       } catch {
         if (!current()) return;
-        listed.checked = !want;
+        // The write may still have landed: the server's state decides before failure is declared.
+        let landed = null;
+        try { const check = await fetch('/api/contributor-roster', { cache: 'no-store', credentials: 'same-origin' }); if (check.ok) landed = (await check.json())?.you?.listed; } catch {}
+        if (!current()) return;
+        if (landed === want) {
+          listed.checked = want; listed.disabled = false;
+          window.dispatchEvent(new CustomEvent('contributor-listing-changed', { detail: { listed: want, actor } }));
+          loadCredits(); return;
+        }
+        listed.checked = typeof landed === 'boolean' ? landed : !want;
         listed.disabled = false;
         creditedStatus.textContent = 'That did not save. Try again in a moment.';
-      }
+      } finally { clearTimeout(timer); }
     });
     // Signing in or out changes which list applies; a switch left disabled by an abandoned write is released.
     for (const type of ['contributions-session-started', 'contributions-session-ended']) {

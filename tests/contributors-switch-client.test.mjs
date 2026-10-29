@@ -26,7 +26,7 @@ function mount({actor='map_a'}={}){
   createElement(tag){const el=new Element(tag);const set=el.setAttribute.bind(el);Object.defineProperty(el,'id',{get(){return el._id;},set(v){el._id=v;byId.set(v,el);}});return el;},
   createTextNode:t=>({textContent:String(t)}),getElementById:id=>byId.get(id)||null,addEventListener(){}};
  const context=vm.createContext({document,fetch:(path,init={})=>new Promise((resolve,reject)=>{fetches.push({path,method:init.method||'GET',body:init.body,resolve,reject});}),
-  setInterval:()=>0,clearInterval(){},
+  setInterval:()=>0,clearInterval(){},setTimeout:()=>0,clearTimeout(){},AbortController,
   window:{HauntologiesAccount:{snapshot:()=>account,isCurrent:expected=>!!expected&&expected.actor===account.actor&&expected.generation===account.generation},addEventListener:(type,fn)=>{handlers[type]=fn;},dispatchEvent:e=>events.push(e)},
   CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}}});
  vm.runInContext(source,context);
@@ -63,12 +63,22 @@ test('a write for the current account lands, tells the form which account change
  assert.deepEqual(JSON.parse(JSON.stringify(m.events.map(e=>[e.type,e.detail]))),[['contributor-listing-changed',{listed:false,actor:'map_a'}]]);
  assert.equal(m.fetches[1]?.method,'GET');assert.equal(m.fetches[1]?.path,'/api/contributor-roster');
 });
-test('a failed or malformed write is reverted and explained, for the current account only',async()=>{
- const m=mount({actor:'map_a'});
- m.listed.checked=false;let write=m.listed.listeners.change();m.reply(0,{},false);await write;
- assert.equal(m.listed.checked,true,'reverted');assert.equal(m.listed.disabled,false);assert.equal(m.status(),'That did not save. Try again in a moment.');
- m.listed.checked=false;write=m.listed.listeners.change();m.reply(1,{listed:'yes'});await write;
- assert.equal(m.listed.checked,true,'a 200 without a boolean is not a saved change');assert.equal(m.events.length,0);
- m.listed.checked=false;write=m.listed.listeners.change();m.switchAccount('map_b');m.reply(2,{},false);await write;
- assert.equal(m.listed.checked,false,'a stale failure changes nothing either');assert.equal(m.listed.disabled,true);
+test('an interrupted write is checked against the server before failure is declared, for the current account only',async()=>{
+ const m=mount({actor:'map_a'});const last=()=>m.fetches.length-1;
+ // The write fails; the reread says it did not land: reverted and explained.
+ m.listed.checked=false;let write=m.listed.listeners.change();m.reply(last(),{},false);await flush();
+ assert.equal(m.fetches.at(-1).method,'GET','the server is asked before failure is declared');
+ m.reply(last(),{registrants:[],you:{listed:true}});await write;
+ assert.equal(m.listed.checked,true,'reverted');assert.equal(m.listed.disabled,false);assert.equal(m.status(),'That did not save. Try again in a moment.');assert.equal(m.events.length,0);
+ // The write fails, but the reread shows it landed: treated as saved.
+ m.listed.checked=false;write=m.listed.listeners.change();m.fetches.at(-1).reject(new TypeError('network'));await flush();
+ m.reply(last(),{registrants:[],you:{listed:false}});await write;await flush();
+ assert.equal(m.listed.checked,false);assert.equal(m.listed.disabled,false);
+ assert.deepEqual(JSON.parse(JSON.stringify(m.events.map(e=>[e.type,e.detail]))),[['contributor-listing-changed',{listed:false,actor:'map_a'}]]);
+ // A 200 without a boolean is not a saved change either; the reread decides.
+ m.listed.checked=true;write=m.listed.listeners.change();m.reply(last(),{listed:'yes'});await flush();m.reply(last(),{registrants:[],you:{listed:false}});await write;
+ assert.equal(m.listed.checked,false);assert.equal(m.status(),'That did not save. Try again in a moment.');
+ // A stale failure neither reverts nor rereads for the old account.
+ m.listed.checked=true;write=m.listed.listeners.change();const stale=last();m.switchAccount('map_b');m.reply(stale,{},false);await write;await flush();
+ assert.equal(m.listed.checked,true,'untouched');assert.equal(m.listed.disabled,true);assert.equal(m.fetches.at(-1).method,'POST','no reread for an account that is no longer current');
 });

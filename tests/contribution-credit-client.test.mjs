@@ -24,7 +24,7 @@ function fixture({consent=true,label='',prior=null,actor='map_a',stored={}}={}){
   localStorage:{getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,v)},fetch,
   window:{HauntologiesAccount:{snapshot:()=>account,isCurrent:expected=>!!expected&&expected.actor===account.actor&&expected.generation===account.generation},addEventListener:(type,fn)=>{handlers[type]=fn;},dispatchEvent:e=>events.push(e)},
   CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},
-  document:{createTextNode:t=>({textContent:String(t)})},button:(label,action,className)=>({tagName:'button',textContent:label,className,action,disabled:false})});
+  document:{createTextNode:t=>({textContent:String(t)})},button:(label,action,className)=>({tagName:'button',textContent:label,className,action,disabled:false}),AbortController,setTimeout:()=>0,clearTimeout(){}});
  vm.runInContext(part+';globalThis.out={creditValue,buildIntakeEnvelope,setCreditFields,rememberCredit,restoreCreditFields,renderCreditHint,syncCreditState,resetCreditState};',context);
  // Values cross the vm realm, so they are compared as plain JSON.
  const plain=fn=>(...args)=>JSON.parse(JSON.stringify(fn(...args)));
@@ -129,4 +129,13 @@ test('a listing change from the Contributors dialog applies only when it names t
  assert.equal(f.hint.dataset.state,'hidden');
  // Teardown forgets the answer, so a later sign-in starts from unknown.
  f.resetCreditState();f.renderCreditHint();assert.equal(f.hint.dataset.state,'unknown');
+});
+test('an interrupted inline write is followed by a fresh read, since it may have landed',async()=>{
+ const f=fixture({label:'Ada Example'});const sync=f.syncCreditState();f.reply(0,{registrants:[],you:{listed:false}});await sync;
+ assert.equal(f.hint.dataset.state,'hidden');
+ const write=f.hint.button().action();await flush();assert.equal(f.fetches[1].method,'POST');
+ f.fetches[1].reject(new TypeError('network'));await write;await flush();
+ assert.equal(f.fetches.length,3,'a read follows the failed write');assert.equal(f.fetches[2].method,'GET');assert.equal(f.hint.dataset.state,'loading');
+ f.reply(2,{registrants:[],you:{listed:true}});await flush();
+ assert.equal(f.hint.dataset.state,undefined,'the server says the write landed after all');assert.equal(f.events.length,0,'no event was claimed for a write that was not confirmed');
 });
