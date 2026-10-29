@@ -15,11 +15,11 @@ class Element {
  querySelectorAll(){return this.children.flatMap(n=>[...(n.tagName==='details'&&n.open?[n]:[]),...n.querySelectorAll()]);}
 }
 const source=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-function harness(places,{account=false,own=[],cards=[]}={}){
- const nodes={pendingPlacesFeed:new Element('details'),pendingPlacesCount:new Element('span'),pendingPlacesList:new Element('ul')};nodes.pendingPlacesFeed.append(new Element('summary'));
+function harness(places,{account=false,own=[],cards=[],unavailable=false,loaded=false}={}){
+ const nodes={pendingPlacesFeed:new Element('details'),pendingPlacesCount:new Element('span'),pendingPlacesList:new Element('ul'),pendingPlacesStatus:new Element('div')};nodes.pendingPlacesFeed.append(new Element('summary'));nodes.pendingPlacesFeed.hidden=true;
  const slots=cards.map(id=>{const slot=new Element('div');slot.dataset.recordId=id;slot.hidden=true;return slot;});
  const events=[];
- const context=vm.createContext({document:{createElement:tag=>new Element(tag),querySelectorAll:()=>slots},window:{HauntologiesAccount:account?{canContribute:()=>true}:undefined,dispatchEvent:e=>events.push(e)},CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},$:id=>nodes[id],pendingPlaces:places,ownPlaces:own,ownIds:new Set(own.map(p=>p.id)),pendingMarkers:new Map(),whereLabel:()=> 'Existing vicinity',allRecords:()=>[],map:{closePopup(){}}});
+ const context=vm.createContext({document:{createElement:tag=>new Element(tag),createTextNode:text=>({textContent:String(text)}),querySelectorAll:()=>slots},window:{HauntologiesAccount:account?{canContribute:()=>true}:undefined,dispatchEvent:e=>events.push(e)},CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},$:id=>nodes[id],pendingPlaces:places,ownPlaces:own,ownIds:new Set(own.map(p=>p.id)),pendingUnavailable:unavailable,pendingLoaded:loaded,refreshPendingPlaces:()=>{context.refreshes=(context.refreshes||0)+1;return Promise.resolve();},pendingMarkers:new Map(),whereLabel:()=> 'Existing vicinity',allRecords:()=>[],map:{closePopup(){}}});
  vm.runInContext(source.slice(source.indexOf('const pendingLabel='),source.indexOf("let pendingSignature=")),context);
  return {nodes,context,slots,events,render:records=>context.renderPendingList(records||new Map(),new Set(own.map(p=>p.id)))};
 }
@@ -72,4 +72,15 @@ test('a place card lists the contributions under review that add to it, with nam
  assert.equal(items[0].children[0].textContent,'Cold spot');assert.equal(items[0].children[1].textContent,'By Ada Example · Under review');assert.equal(items[0].children[2].textContent,'A draft moves through the hall.');
  assert.equal(items[1].children[1].textContent,'Approved');
  assert.equal(c.hidden,true);assert.equal(c.children.length,0);
+});
+test('a failed first read shows the list with a plain explanation and a retry; a later failure marks it stale',()=>{
+ const h=harness([],{unavailable:true});h.render();
+ assert.equal(h.nodes.pendingPlacesFeed.hidden,false,'the accordion stays reachable so the status can be read');
+ assert.equal(h.nodes.pendingPlacesCount.textContent,'0');
+ const status=h.nodes.pendingPlacesStatus;assert.ok(status.textContent.startsWith('The list of places under review is unavailable right now.'));
+ const retry=status.children.find(n=>n.tagName==='button');assert.equal(retry.textContent,'Retry');retry.listeners.click();assert.equal(h.context.refreshes,1);
+ const stale=harness([{id:'synthetic',title:'Synthetic',status:'submitted',latitude:40.7,longitude:-74}],{unavailable:true,loaded:true});stale.render();
+ assert.ok(stale.nodes.pendingPlacesStatus.textContent.startsWith('This list may be out of date.'));assert.equal(stale.nodes.pendingPlacesList.children.length,1);
+ const fine=harness([{id:'synthetic',title:'Synthetic',status:'submitted',latitude:40.7,longitude:-74}]);fine.render();
+ assert.equal(fine.nodes.pendingPlacesStatus.children.length,0);assert.equal(fine.nodes.pendingPlacesStatus.textContent,'');
 });

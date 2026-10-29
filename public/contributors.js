@@ -44,13 +44,22 @@
     creditedStatus.setAttribute('role', 'status');
     const creditedList = document.createElement('ol');
     creditedList.className = 'contributors-list contributors-counts';
-    // A signed-in registrant can take their own name off the roster, and put it back.
-    const listing = document.createElement('label');
+    // A signed-in person can take their name off the map, and put it back. The switch governs every
+    // public place their name appears, not only this list, so it says so.
+    const listing = document.createElement('div');
     listing.className = 'contributors-listing';
     listing.hidden = true;
+    const listingLabel = document.createElement('label');
     const listed = document.createElement('input');
     listed.type = 'checkbox';
-    listing.append(listed, document.createTextNode(' Show my name in this list'));
+    listed.id = 'contributorListed';
+    listingLabel.append(listed, document.createTextNode(' Show my name on the map'));
+    const listingHelp = document.createElement('p');
+    listingHelp.className = 'contributors-listing-help';
+    listingHelp.id = 'contributorListedHelp';
+    listed.setAttribute('aria-describedby', listingHelp.id);
+    listingHelp.textContent = 'This applies everywhere your name appears: places under review, published places, Published edits and this list, including your earlier contributions. Off takes your name off every public list; on shows it again.';
+    listing.append(listingLabel, listingHelp);
     credited.append(creditedTitle, creditedList, creditedStatus, listing);
 
     const collaborators = document.createElement('section');
@@ -133,6 +142,8 @@
           headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }) });
         if (!response.ok) throw new Error('unavailable');
         listed.disabled = false;
+        // The Contribute form shows the same state, so it hears about the change.
+        window.dispatchEvent(new CustomEvent('contributor-listing-changed', { detail: { listed: want } }));
         loadCredits();
       } catch {
         listed.checked = !want;

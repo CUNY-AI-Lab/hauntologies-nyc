@@ -95,7 +95,7 @@ function renderOwnPlaces(){
 window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));ownIds=new Set(Array.isArray(event.detail?.ids)?event.detail.ids.filter(id=>typeof id==='string'):ownPlaces.map(p=>p.id));renderOwnPlaces();renderPendingPlaces();});
 // Everyone sees places sent for review as their own layer, before a reviewer decides.
 // A contribution to a mapped place sits as a badge beside that place's marker.
-let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;const pendingMarkers=new Map();
+let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0,pendingUnavailable=false,pendingLoaded=false;const pendingMarkers=new Map();
 // An approved note on a mapped place stays a note; only a new point is published on approval.
 const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, awaiting publication'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
 // Where a pending place is: the contributor's own words, the place it adds to, or its cross streets.
@@ -154,7 +154,7 @@ function bringUpPending(place){
 function renderPendingList(records,own){
  const feed=$('pendingPlacesFeed');if(!feed)return;
  const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
- feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
+ feed.hidden=!shown.length&&!pendingUnavailable;$('pendingPlacesCount').textContent=String(shown.length);renderPendingStatus();feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
  const list=$('pendingPlacesList'),openLocations=new Set([...list.querySelectorAll('details[open]')].map(node=>node.dataset.placeId));
  list.replaceChildren(...shown.map(place=>{
   const row=document.createElement('li'),record=place.record_id?records.get(place.record_id):null;
@@ -188,15 +188,26 @@ function renderCardPending(records=new Map(allRecords().map(r=>[r.id,r]))){
   slot.append(list);
  }
 }
+// A failed read is said out loud in the list's own status line, with a retry, rather than leaving a
+// hidden list or a stale count with no explanation.
+function renderPendingStatus(){
+ const status=$('pendingPlacesStatus');if(!status)return;status.replaceChildren();
+ if(!pendingUnavailable)return;
+ status.append(document.createTextNode(pendingLoaded?'This list may be out of date. ':'The list of places under review is unavailable right now. '));
+ const retry=document.createElement('button');retry.type='button';retry.className='pending-retry';retry.textContent='Retry';
+ retry.addEventListener('click',()=>{retry.disabled=true;refreshPendingPlaces().finally(()=>{retry.disabled=false;});});status.append(retry);
+}
 let pendingSignature='';
 async function loadPendingPlaces(){
  const request=++pendingRequest;
  try{const data=await publicReads.json('/api/pending-places');if(request!==pendingRequest||!Array.isArray(data.places))return;
   const places=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string'),signature=JSON.stringify(places);
+  pendingLoaded=true;const recovered=pendingUnavailable;pendingUnavailable=false;
   // Redrawing closes an open popup, so an unchanged list is left alone.
-  if(signature===pendingSignature)return;pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();
+  if(signature===pendingSignature){if(recovered)renderPendingPlaces();return;}pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();
   // Review, when open, learns of new submissions from the same public read.
-  window.dispatchEvent(new CustomEvent('contributions-pending-changed',{detail:{count:places.length}}));}catch{}
+  window.dispatchEvent(new CustomEvent('contributions-pending-changed',{detail:{count:places.length}}));}
+ catch{if(request===pendingRequest){pendingUnavailable=true;renderPendingPlaces();}}
 }
 const refreshPendingPlaces=publicReads.singleFlight(loadPendingPlaces);
 window.addEventListener('contributions-records-changed',renderPendingPlaces);

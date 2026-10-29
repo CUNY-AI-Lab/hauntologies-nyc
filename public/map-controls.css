@@ -33,6 +33,7 @@
 .brand-panel>.program-credits{margin:0}
 #eventDetails .brand-panel{right:auto;width:max-content;min-width:100%;max-width:calc(100vw - 24px)}
 .program-credits span{white-space:nowrap}
+#pendingPlacesStatus:empty{display:none}#pendingPlacesStatus{margin:0 0 8px;font-size:12px;color:var(--muted)}#pendingPlacesStatus .pending-retry{margin-left:4px;min-height:32px;padding:4px 10px;border:1px solid var(--line);background:none;color:var(--ink);font-size:12px}
 #pendingPlacesList{padding:0;margin:0;list-style:none;max-height:min(300px,45dvh);overflow:auto;overscroll-behavior:contain}
 #pendingPlacesList>li{border-top:1px solid var(--line);padding:12px 0;overflow-wrap:anywhere}
 #pendingPlacesList .pending-title{display:block;font-size:14px;line-height:1.4}
@@ -90,6 +91,10 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 .brand-drop>.review-hourglass svg{width:28px;height:28px;flex:none}
 .brand-drop>.review-hourglass::before,.brand-drop>.review-hourglass::after,.review-hourglass>.disclosure-mark{display:none}
 .review-hourglass:hover,.brand-drop[open]>.review-hourglass{color:var(--ink)}
+/* The lantern keeps its 44px target and gains a visible label, so the list is easy to find. */
+.brand-drop>.review-lantern{width:auto;min-width:44px;padding:6px 10px 6px 6px;gap:4px}
+.review-lantern-label{font-size:12px;line-height:1.2;color:var(--ink);white-space:nowrap}
+@media(max-width:380px){.review-lantern-label{display:none}.brand-drop>.review-lantern{width:44px;padding:6px}}
 .place-contributors{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 @media(max-width:760px){#mapFooter{left:max(12px,env(safe-area-inset-left))}}
 #mapFooter,.contribution-navigation{bottom:max(var(--dock-bottom),env(safe-area-inset-bottom))}

@@ -67,11 +67,15 @@ test('offline avoids requests and malformed JSON is not blindly retried',async()
 test('actual pending refresh coalesces bursts and preserves current records on failure',async()=>{
   let resolve;const h=setup(()=>new Promise(r=>{resolve=r;}));
   const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  Object.assign(h.context,{pendingRequest:0,pendingSignature:'',pendingPlaces:[],publicReads:h.api,renderPendingPlaces:()=>{h.context.renders++;},renders:0});
+  Object.assign(h.context,{pendingRequest:0,pendingSignature:'',pendingPlaces:[],pendingUnavailable:false,pendingLoaded:false,publicReads:h.api,renderPendingPlaces:()=>{h.context.renders++;},renders:0,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}}});h.context.window.dispatchEvent=()=>{};
   const part=app.slice(app.indexOf('async function loadPendingPlaces(){'),app.indexOf("window.addEventListener('contributions-records-changed',renderPendingPlaces);"));
   vm.runInContext(part+';globalThis.refresh=refreshPendingPlaces;',h.context);
   const a=h.context.refresh(),b=h.context.refresh(),c=h.context.refresh();await flush();assert.equal(h.calls.length,1);
   resolve(response(200,{places:[{id:'synthetic',title:'Synthetic'}]}));await Promise.all([a,b,c]);assert.equal(h.context.renders,1);
   const next=h.context.refresh();await flush();resolve(response(403));await next;
-  assert.equal(h.context.pendingPlaces[0].id,'synthetic');assert.equal(h.context.renders,1);
+  assert.equal(h.context.pendingPlaces[0].id,'synthetic');
+  // The failure is shown (one redraw of the status) while the loaded places stay.
+  assert.equal(h.context.renders,2);assert.equal(h.context.pendingUnavailable,true);assert.equal(h.context.pendingLoaded,true);
+  const again=h.context.refresh();await flush();resolve(response(200,{places:[{id:'synthetic',title:'Synthetic'}]}));await again;
+  assert.equal(h.context.pendingUnavailable,false);assert.equal(h.context.renders,3,'recovery clears the status even when the list is unchanged');
 });

@@ -559,18 +559,37 @@
   // remembered per account on this device, and offered from the event registration name first.
   const creditStorageKey=()=>'hauntologies-public-credit:'+(privateActor||'anonymous');
   function creditValue(){const consent=byId('publicCreditConsent').checked,label=consent?text(byId('publicCreditLabel').value).trim().replace(/\s+/g,' ').slice(0,120):'';return {consent:consent&&!!label,label};}
-  function setCreditFields(credit){byId('publicCreditConsent').checked=!!credit?.consent;byId('publicCreditLabel').value=typeof credit?.label==='string'?credit.label:'';byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;}
+  function setCreditFields(credit){byId('publicCreditConsent').checked=!!credit?.consent;byId('publicCreditLabel').value=typeof credit?.label==='string'?credit.label:'';byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;if(typeof renderCreditHint==='function')renderCreditHint();}
   function rememberCredit(){if(!privateActor)return;try{localStorage.setItem(creditStorageKey(),JSON.stringify({consent:byId('publicCreditConsent').checked,label:byId('publicCreditLabel').value.slice(0,120)}));}catch{}}
   function rememberedCredit(){try{const value=JSON.parse(localStorage.getItem(creditStorageKey())||'null');return value&&typeof value.consent==='boolean'&&typeof value.label==='string'?value:null;}catch{return null;}}
   function restoreCreditFields(){const saved=rememberedCredit();setCreditFields(saved||{consent:true,label:byId('publicCreditLabel').value});}
-  let creditPrefill=0;
-  async function prefillCreditName(){
-    const request=++creditPrefill,actor=privateActor;if(!actor||rememberedCredit()?.label||byId('publicCreditLabel').value.trim())return;
+  // Whether this account's name is shown on the map at all (the Contributors switch). A checked box
+  // here is consent for this contribution; the switch decides whether any name is published. The
+  // hint states the effective result, so a checked box never implies a name that stays hidden.
+  let creditListed=null,creditSync=0;
+  function renderCreditHint(){
+    const hint=byId('publicCreditHint'),credit=creditValue();if(!hint)return;
+    hint.replaceChildren();
+    if(creditListed===false){
+      hint.dataset.state='hidden';
+      hint.append(document.createTextNode(credit.consent?'Your name is hidden on the map right now, so this contribution shows no name until you turn it back on. Turning it on shows your name on every contribution you consented to, earlier ones included. ':'Your name is hidden on the map right now. '));
+      const show=button('Show my name on the map',async()=>{show.disabled=true;try{const response=await fetch('/api/contributor-roster',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({listed:true})});if(!response.ok)throw new Error('unavailable');window.dispatchEvent(new CustomEvent('contributor-listing-changed',{detail:{listed:true}}));}catch{show.disabled=false;hint.append(document.createTextNode(' That did not save. Try again in a moment.'));}},'textbutton');
+      hint.append(show);
+      return;
+    }
+    delete hint.dataset.state;
+    hint.textContent=credit.consent?'Shown with this contribution under review, once published, and in the Contributors list. Uncheck to contribute without a name.':'This contribution shows no name. Check the box and enter a name to be credited.';
+  }
+  async function syncCreditState(){
+    const request=++creditSync,actor=privateActor;creditListed=null;renderCreditHint();if(!actor)return;
     try{const response=await fetch('/api/contributor-roster',{credentials:'same-origin',cache:'no-store'});if(!response.ok)return;const data=await response.json();
-      if(request!==creditPrefill||actor!==privateActor||byId('publicCreditLabel').value.trim()||typeof data?.you?.name!=='string')return;
-      byId('publicCreditLabel').value=data.you.name.slice(0,120);byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();
+      if(request!==creditSync||actor!==privateActor)return;
+      if(typeof data?.you?.listed==='boolean')creditListed=data.you.listed;
+      if(typeof data?.you?.name==='string'&&!rememberedCredit()?.label&&!byId('publicCreditLabel').value.trim()){byId('publicCreditLabel').value=data.you.name.slice(0,120);byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();}
+      renderCreditHint();
     }catch{}
   }
+  window.addEventListener('contributor-listing-changed',event=>{if(typeof event.detail?.listed==='boolean'){creditListed=event.detail.listed;renderCreditHint();}});
   function buildIntakeEnvelope(){
     const explanation=revisionOriginal&&byId('contributionSummary').value===openExplanationDisplayInitial?openExplanationInitial:byId('contributionSummary').value;
     // Existing typed submissions keep every payload/source field. Their summary alone is editable here.
@@ -685,7 +704,7 @@
     if(pendingWrite)showReconciliation();
   }
   async function loadDashboard(){if(!window.HauntologiesAccount?.canContribute())return null;const account=window.HauntologiesAccount.snapshot(),request=++dashboardRequest;try{const actor=await sessionActor();if(request!==dashboardRequest||!window.HauntologiesAccount.isCurrent(account)||actor!==account.actor)return null;
-    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();restoreCreditFields();prefillCreditName();for(const [id,value] of Object.entries(privateTaskDrafts.get(actor)||{}))byId(id).value=value;restorePendingTask();}
+    if(privateActor!==actor){if(privateActor){clearPrivateView('');dashboardRequest=request;}privateActor=actor;try{localStorage.removeItem(signedOutMarker(actor));}catch{}const recovered=readPendingWrite(actor)||readPendingWrite();pendingWrite=recovered?.actor_id===actor?recovered:null;draftStorageKey='hauntologies-contribution-draft:'+actor;const saved=privateImages.get(actor);if(saved){stagedImages=saved.stagedImages;imageBatch=saved.imageBatch;renderStagedImages();}restoreDraft();restoreCreditFields();syncCreditState();for(const [id,value] of Object.entries(privateTaskDrafts.get(actor)||{}))byId(id).value=value;restorePendingTask();}
     const version=identityGeneration,data=await api('/dashboard'),confirmed=await sessionActor();if(request!==dashboardRequest||version!==identityGeneration||confirmed!==actor||privateActor!==actor)return null;applyDashboard(data);return data;
    }catch(error){if(request!==dashboardRequest)return null;clearPrivateView(error.status===401?'Sign in to contribute':'Review unavailable');if(error.status===401)await accessActions(byId('workflowConnection'));if(pendingWrite)showReconciliation();return null;}}
   function rawDisclosure(title,value){const details=el('details',undefined,'workflow-details');details.append(el('summary',title));const pre=el('pre',pretty(value),'workflow-raw');details.append(pre);return details;}
@@ -996,8 +1015,8 @@
   window.addEventListener('contributions-verification-ready',event=>{const {job,container}=event.detail||{};if(window.HauntologiesAccount?.isCurrent(event.detail?.account)&&job?.can_verify===true&&container?.isConnected)jobControls(container,job,false);});
   document.querySelectorAll('[data-workflow-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.workflowView)));
   byId('contributionType').addEventListener('change',()=>{renderPayload(byId('contributionType').value);invalidatePreview();});
-  byId('publicCreditConsent').addEventListener('change',()=>{byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();invalidatePreview();});
-  byId('publicCreditLabel').addEventListener('input',rememberCredit);
+  byId('publicCreditConsent').addEventListener('change',()=>{byId('publicCreditLabel').disabled=!byId('publicCreditConsent').checked;rememberCredit();renderCreditHint();invalidatePreview();});
+  byId('publicCreditLabel').addEventListener('input',()=>{rememberCredit();renderCreditHint();});
   byId('typedContributionForm').addEventListener('input',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('change',()=>{invalidatePreview();saveDraft();});byId('typedContributionForm').addEventListener('submit',previewForm);
   byId('addSubmissionSource').addEventListener('click',()=>{if(simpleFlow()==='other')addRow('submissionSources',sourceSpecs);else addSimpleSource();invalidatePreview();});byId('addSubmissionTarget').addEventListener('click',()=>{addRow('submissionTargets',targetSpecs);invalidatePreview();});byId('addSubmissionAttachment').addEventListener('click',()=>{addRow('submissionAttachments',attachmentSpecs);invalidatePreview();});
   byId('contributionTargetPick').addEventListener('change',()=>{byId('useContributionTarget').disabled=byId('contributionTargetPick').value==='';});

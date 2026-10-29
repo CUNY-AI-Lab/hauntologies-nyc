@@ -8,14 +8,15 @@ const source=readFileSync(new URL('../public/contributions.js',import.meta.url),
 const part=source.slice(source.indexOf('  const creditStorageKey='),source.indexOf('  function buildEnvelope(){'));
 const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
 function fixture({consent=true,label='',prior=null,actor='map_synthetic',stored={}}={}){
- const controls={publicCreditConsent:{checked:consent},publicCreditLabel:{value:label,disabled:false},contributionSummary:{value:'A lantern moves at night.'},contributionObjectTitle:{value:'Lantern'},freeformTitle:{hidden:false},contributionPlaceName:{textContent:'Kreischer Street'}};
+ const hint={children:[],dataset:{},replaceChildren(){this.children=[];this._text='';},append(...n){this.children.push(...n);},set textContent(v){this._text=String(v);this.children=[];},get textContent(){return (this._text||'')+this.children.map(n=>n.textContent||'').join('');}};
+ const controls={publicCreditHint:hint,publicCreditConsent:{checked:consent},publicCreditLabel:{value:label,disabled:false},contributionSummary:{value:'A lantern moves at night.'},contributionObjectTitle:{value:'Lantern'},freeformTitle:{hidden:false},contributionPlaceName:{textContent:'Kreischer Street'}};
  const storage=new Map(Object.entries(stored));
  const context=vm.createContext({byId:id=>controls[id]||{value:'',hidden:true,textContent:''},text:v=>String(v??''),revisionOriginal:prior,openExplanationDisplayInitial:'',openExplanationInitial:'',pointForm:()=>true,pointGeometry:()=>({type:'Point',coordinates:[-74.2391,40.5365]}),sourceText:()=>'',openSourcesDisplayInitial:'',attributeValues:()=>[],openTargets:[],openRequestedRecordId:'',openTaskIds:[],privateActor:actor,structuredClone,JSON,placeTyped:()=>'',
-  localStorage:{getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw new Error('no network in this test');}});
- vm.runInContext(part+';globalThis.out={creditValue,buildIntakeEnvelope,setCreditFields,rememberCredit,restoreCreditFields};',context);
+  localStorage:{getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,v)},fetch:async()=>{throw new Error('no network in this test');},window:{addEventListener(){},dispatchEvent(){}},document:{createTextNode:t=>({textContent:String(t)})},button:(label,action,className)=>({tagName:'button',textContent:label,className,action})});
+ vm.runInContext(part+';globalThis.out={creditValue,buildIntakeEnvelope,setCreditFields,rememberCredit,restoreCreditFields,renderCreditHint,setListed:v=>{creditListed=v;}};',context);
  // Values cross the vm realm, so they are compared as plain JSON.
  const plain=fn=>(...args)=>JSON.parse(JSON.stringify(fn(...args)));
- return {controls,storage,...context.out,creditValue:plain(context.out.creditValue),buildIntakeEnvelope:plain(context.out.buildIntakeEnvelope)};
+ return {controls,storage,hint,...context.out,creditValue:plain(context.out.creditValue),buildIntakeEnvelope:plain(context.out.buildIntakeEnvelope)};
 }
 test('the credit controls sit in the visible form, checked by default, not in the inert legacy block',()=>{
  const legacy=html.slice(html.indexOf('id="typedCompatibilityFields"'),html.indexOf('id="previewContribution"'));
@@ -47,4 +48,22 @@ test('the choice is remembered per account on this device and restored after a f
  assert.equal(other.controls.publicCreditLabel.value,'','another account does not inherit the name');
  const declined=fixture({stored:{'hauntologies-public-credit:map_synthetic':JSON.stringify({consent:false,label:''})}});declined.restoreCreditFields();
  assert.equal(declined.controls.publicCreditConsent.checked,false);assert.equal(declined.controls.publicCreditLabel.disabled,true,'a remembered opt-out stays opted out');
+});
+test('the hint states the effective result: hidden on the map means no name, whatever the box says',()=>{
+ const f=fixture({label:'Ada Example'});
+ f.renderCreditHint();
+ assert.equal(f.hint.textContent,'Shown with this contribution under review, once published, and in the Contributors list. Uncheck to contribute without a name.');
+ f.controls.publicCreditConsent.checked=false;f.renderCreditHint();
+ assert.equal(f.hint.textContent,'This contribution shows no name. Check the box and enter a name to be credited.');
+ f.controls.publicCreditConsent.checked=true;f.setListed(false);f.renderCreditHint();
+ assert.equal(f.hint.dataset.state,'hidden');
+ assert.ok(f.hint.textContent.startsWith('Your name is hidden on the map right now, so this contribution shows no name until you turn it back on. Turning it on shows your name on every contribution you consented to, earlier ones included.'));
+ const show=f.hint.children.find(n=>n.tagName==='button');assert.equal(show.textContent,'Show my name on the map');
+ f.setListed(true);f.renderCreditHint();assert.equal(f.hint.dataset.state,undefined);assert.ok(f.hint.textContent.startsWith('Shown with this contribution'));
+});
+test('the Contributors switch says it governs the whole map, and the form hears a change',()=>{
+ const contributors=readFileSync(new URL('../public/contributors.js',import.meta.url),'utf8');
+ assert.ok(contributors.includes("' Show my name on the map'"));assert.ok(!contributors.includes('Show my name in this list'));
+ assert.ok(/places under review, published places, Published edits and this list, including your earlier contributions/.test(contributors));
+ assert.ok(contributors.includes("new CustomEvent('contributor-listing-changed'"));
 });
