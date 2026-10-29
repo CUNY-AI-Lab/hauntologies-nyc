@@ -1018,16 +1018,31 @@
   for(const id of ['contributionLatitude','contributionLongitude'])byId(id).addEventListener('input',()=>{invalidatePreview();saveDraft();showPoint();});
   byId('chooseContributionPoint').addEventListener('click',()=>{if(byId('chooseContributionPoint').getAttribute('aria-pressed')==='true'){window.dispatchEvent(new CustomEvent('contributions-point-pick-cancelled'));return;}if(canRequestPoint())window.dispatchEvent(new CustomEvent('contributions-point-pick-requested'));});
   byId('cancelContributionPoint').addEventListener('click',()=>{setPointFields(null);locationStatus('');invalidatePreview();saveDraft();showPoint();byId('chooseContributionPoint').focus();});
+  // Contributing to a mapped place is a new note on it. A typed revision in progress (entry bundle,
+  // area proposal, record annotation) cannot take a place, so it is left deliberately, as Cancel does,
+  // before the open form is shown; an open-proposal revision keeps going and takes the place.
+  function leaveTypedRevision(){if(!isOpenForm()){clearRevision();resetContributionForm();resetOpenContext();}}
   window.addEventListener('contributions-clarify-requested',event=>{
     if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.recordId;if(typeof id!=='string'||!id)return;
-    for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=false;chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
+    leaveTypedRevision();
+    // Visibility follows the form's state, never a bare unhide.
+    const open=isOpenForm();for(const id of ['freeformContext','freeformImages','freeformDetails','freeformPlaceChoice','freeformCredit'])byId(id).hidden=!open;
+    chooseOpenReference(id,event.detail?.title);switchView('submissionView',false);byId('freeformDescription').open=true;byId('contributionSummary').focus();
   });
   window.addEventListener('contributions-records-changed',renderClarificationTargets);
   window.addEventListener('contributions-refresh-requested',()=>loadDashboard());
   // A reviewer with the queue open sees new submissions as the public Under review layer learns of them,
   // at most once every 20 seconds; everyone else keeps the lighter manual Refresh.
-  window.addEventListener('contributions-pending-changed',()=>{if(privateActor&&!byId('reviewView').hidden&&!document.getElementById('researchSidecar')?.hidden&&document.visibilityState==='visible'&&Date.now()-dashboardLoadedAt>20000)loadDashboard();});
+  let pendingQueueRefresh=0;
+  window.addEventListener('contributions-pending-changed',()=>{
+    const wanted=()=>privateActor&&!byId('reviewView').hidden&&!document.getElementById('researchSidecar')?.hidden&&document.visibilityState==='visible';
+    if(!wanted())return;
+    const wait=20000-(Date.now()-dashboardLoadedAt);
+    if(wait<=0){loadDashboard();return;}
+    // Inside the cooldown the change is deferred to its end rather than dropped; one timer covers a burst.
+    if(!pendingQueueRefresh)pendingQueueRefresh=setTimeout(()=>{pendingQueueRefresh=0;if(wanted())loadDashboard();},wait);
+  });
   window.addEventListener('contributions-review-requested',async event=>{
     if(!window.HauntologiesAccount?.canContribute())return;
     const id=event.detail?.submissionId;if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(id))return;
