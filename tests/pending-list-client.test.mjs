@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 class Element {
- constructor(tag){this.tagName=tag;this.children=[];this.dataset={};this.attributes={};this.listeners={};this.value='';this.open=false;}
+ constructor(tag){this.tagName=tag;this.children=[];this.dataset={};this.attributes={};this.listeners={};this.value='';this.open=false;this.hidden=false;this.className='';}
  append(...nodes){this.children.push(...nodes);}
  replaceChildren(...nodes){this.children=nodes;}
  set textContent(value){this.value=String(value);this.children=[];}
@@ -15,11 +15,13 @@ class Element {
  querySelectorAll(){return this.children.flatMap(n=>[...(n.tagName==='details'&&n.open?[n]:[]),...n.querySelectorAll()]);}
 }
 const source=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-function harness(places){
- const nodes={pendingPlacesFeed:new Element('details'),pendingPlacesCount:new Element('span'),pendingPlacesList:new Element('ul')};nodes.pendingPlacesFeed.append(new Element('summary'));
- const context=vm.createContext({document:{createElement:tag=>new Element(tag)},window:{},$:id=>nodes[id],pendingPlaces:places,ownPlaces:[],pendingMarkers:new Map(),whereLabel:()=> 'Existing vicinity',allRecords:()=>[]});
+function harness(places,{account=false,own=[],cards=[],unavailable=false,loaded=false}={}){
+ const nodes={pendingPlacesFeed:new Element('details'),pendingPlacesCount:new Element('span'),pendingPlacesList:new Element('ul'),pendingPlacesStatus:new Element('div')};nodes.pendingPlacesFeed.append(new Element('summary'));nodes.pendingPlacesFeed.hidden=true;
+ const slots=cards.map(id=>{const slot=new Element('div');slot.dataset.recordId=id;slot.hidden=true;return slot;});
+ const events=[];
+ const context=vm.createContext({document:{createElement:tag=>new Element(tag),createTextNode:text=>({textContent:String(text)}),querySelectorAll:()=>slots},window:{HauntologiesAccount:account?{canContribute:()=>true}:undefined,dispatchEvent:e=>events.push(e)},CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},$:id=>nodes[id],pendingPlaces:places,ownPlaces:own,ownIds:new Set(own.map(p=>p.id)),pendingUnavailable:unavailable,pendingLoaded:loaded,refreshPendingPlaces:()=>{context.refreshes=(context.refreshes||0)+1;return Promise.resolve();},pendingMarkers:new Map(),whereLabel:()=> 'Existing vicinity',allRecords:()=>[],map:{closePopup(){}}});
  vm.runInContext(source.slice(source.indexOf('const pendingLabel='),source.indexOf("let pendingSignature=")),context);
- return {nodes,context,render:records=>context.renderPendingList(records||new Map(),new Set())};
+ return {nodes,context,slots,events,render:records=>context.renderPendingList(records||new Map(),new Set(own.map(p=>p.id)))};
 }
 test('list separates status, linked place, location disclosure and map action with literal text',()=>{
  const h=harness([{id:'synthetic',title:'<img src=x>',status:'approved',record_id:'target'}]);
@@ -39,4 +41,46 @@ test('repeated refresh preserves open location without duplicating rows or absen
 for(const [status,expected] of [['submitted','Not yet checked by a reviewer.'],['changes_requested','A reviewer has requested more information.'],['approved','Approved by a reviewer; publication is a separate step.']])test(`popup accurately describes ${status}`,()=>{
  const h=harness([]),popup=h.context.pendingPopup({title:'Synthetic',status,location_text:'Synthetic address'},null);
  assert.ok(popup.textContent.includes(expected));if(status!=='submitted')assert.ok(!popup.textContent.includes('Not yet checked'));
+ assert.ok(popup.textContent.includes('Shared by a contributor.'));
+});
+test('a credited contributor is named in the list row and the popup, as literal text',()=>{
+ const h=harness([{id:'named',title:'Named lantern',status:'submitted',latitude:40.7,longitude:-74,contributor:'<b>Ada</b> Example'}]);h.render();
+ const row=h.nodes.pendingPlacesList.children[0];
+ assert.deepEqual(row.children.map(n=>n.tagName),['strong','p','p','details','button']);
+ assert.equal(row.children[2].className,'pending-contributor');assert.equal(row.children[2].textContent,'By <b>Ada</b> Example');
+ const popup=h.context.pendingPopup(h.context.pendingPlaces[0],null);
+ assert.equal(popup.children.find(n=>n.className==='pending-place-contributor').textContent,'By <b>Ada</b> Example');
+ assert.ok(popup.textContent.includes('Shared by <b>Ada</b> Example. Not yet checked by a reviewer.'));
+ assert.ok(!popup.children.some(n=>n.className==='pending-review-action'),'signed out, no review shortcut');
+});
+test('a signed-in participant gets a Review shortcut for others\' submitted or approved work only',()=>{
+ const places=[{id:'theirs',title:'Theirs',status:'submitted',latitude:40.7,longitude:-74},{id:'mine',title:'Mine',status:'submitted',latitude:40.71,longitude:-74},{id:'back',title:'Sent back',status:'changes_requested',latitude:40.72,longitude:-74}];
+ const h=harness(places,{account:true,own:[{id:'mine'}]});h.render();
+ const rows=h.nodes.pendingPlacesList.children,review=row=>row.children.find(n=>n.className==='pending-review-action');
+ assert.ok(review(rows[0]),'another person\'s submission can be reviewed');assert.equal(review(rows[1]),undefined,'own work has no review shortcut');assert.equal(review(rows[2]),undefined,'returned work is not readable by peers');
+ assert.ok(rows[1].textContent.includes('Yours'));
+ review(rows[0]).listeners.click();
+ assert.deepEqual(JSON.parse(JSON.stringify(h.events.map(e=>[e.type,e.detail]))),[['contributions-review-requested',{submissionId:'theirs'}]]);
+});
+test('a place card lists the contributions under review that add to it, with names',()=>{
+ const places=[{id:'note1',title:'Cold spot',status:'submitted',record_id:'place-a',contributor:'Ada Example',description:'A draft moves through the hall.'},{id:'note2',title:'Bell',status:'approved',record_id:'place-a'},{id:'elsewhere',title:'Other',status:'submitted',record_id:'place-b'}];
+ const h=harness(places,{cards:['place-a','place-c']});
+ h.render(new Map([['place-a',{title:'Hall',latitude:40.7,longitude:-74}],['place-b',{title:'Elsewhere',latitude:40.7,longitude:-74}]]));
+ const [a,c]=h.slots;
+ assert.equal(a.hidden,false);assert.equal(a.children[0].textContent,'Under review (2)');
+ const items=a.children[1].children;assert.equal(items.length,2);
+ assert.equal(items[0].children[0].textContent,'Cold spot');assert.equal(items[0].children[1].textContent,'By Ada Example · Under review');assert.equal(items[0].children[2].textContent,'A draft moves through the hall.');
+ assert.equal(items[1].children[1].textContent,'Approved');
+ assert.equal(c.hidden,true);assert.equal(c.children.length,0);
+});
+test('a failed first read shows the list with a plain explanation and a retry; a later failure marks it stale',()=>{
+ const h=harness([],{unavailable:true});h.render();
+ assert.equal(h.nodes.pendingPlacesFeed.hidden,false,'the accordion stays reachable so the status can be read');
+ assert.equal(h.nodes.pendingPlacesCount.textContent,'0');
+ const status=h.nodes.pendingPlacesStatus;assert.ok(status.textContent.startsWith('The list of places under review is unavailable right now.'));
+ const retry=status.children.find(n=>n.tagName==='button');assert.equal(retry.textContent,'Retry');retry.listeners.click();assert.equal(h.context.refreshes,1);
+ const stale=harness([{id:'synthetic',title:'Synthetic',status:'submitted',latitude:40.7,longitude:-74}],{unavailable:true,loaded:true});stale.render();
+ assert.ok(stale.nodes.pendingPlacesStatus.textContent.startsWith('This list may be out of date.'));assert.equal(stale.nodes.pendingPlacesList.children.length,1);
+ const fine=harness([{id:'synthetic',title:'Synthetic',status:'submitted',latitude:40.7,longitude:-74}]);fine.render();
+ assert.equal(fine.nodes.pendingPlacesStatus.children.length,0);assert.equal(fine.nodes.pendingPlacesStatus.textContent,'');
 });

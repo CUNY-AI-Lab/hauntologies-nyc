@@ -44,13 +44,22 @@
     creditedStatus.setAttribute('role', 'status');
     const creditedList = document.createElement('ol');
     creditedList.className = 'contributors-list contributors-counts';
-    // A signed-in registrant can take their own name off the roster, and put it back.
-    const listing = document.createElement('label');
+    // A signed-in person can take their name off the map, and put it back. The switch governs every
+    // public place their name appears, not only this list, so it says so.
+    const listing = document.createElement('div');
     listing.className = 'contributors-listing';
     listing.hidden = true;
+    const listingLabel = document.createElement('label');
     const listed = document.createElement('input');
     listed.type = 'checkbox';
-    listing.append(listed, document.createTextNode(' Show my name in this list'));
+    listed.id = 'contributorListed';
+    listingLabel.append(listed, document.createTextNode(' Show my name on the map'));
+    const listingHelp = document.createElement('p');
+    listingHelp.className = 'contributors-listing-help';
+    listingHelp.id = 'contributorListedHelp';
+    listed.setAttribute('aria-describedby', listingHelp.id);
+    listingHelp.textContent = 'This applies everywhere your name appears: places under review, published places, Published edits and this list, including your earlier contributions. Off takes your name off every public list; on shows it again.';
+    listing.append(listingLabel, listingHelp);
     credited.append(creditedTitle, creditedList, creditedStatus, listing);
 
     const collaborators = document.createElement('section');
@@ -125,24 +134,47 @@
         if (version === loading && !creditedList.childElementCount) creditedStatus.textContent = 'Contribution counts are unavailable right now.';
       }
     }
+    // The write is scoped to the account that started it: once the account changes, its answer
+    // touches nothing, and the next account's own load decides what the switch shows.
     listed.addEventListener('change', async () => {
-      const want = listed.checked;
+      const want = listed.checked, account = window.HauntologiesAccount?.snapshot(), actor = account?.actor;
+      const current = () => !window.HauntologiesAccount || window.HauntologiesAccount.isCurrent(account);
       listed.disabled = true;
+      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
       try {
         const response = await fetch('/api/contributor-roster', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }) });
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listed: want }), signal: controller.signal });
+        if (!current()) return;
         if (!response.ok) throw new Error('unavailable');
+        const data = await response.json();
+        if (!current()) return;
+        if (typeof data?.listed !== 'boolean') throw new Error('malformed');
+        listed.checked = data.listed;
         listed.disabled = false;
+        // The Contribute form shows the same state, so it hears about the change, for this account.
+        window.dispatchEvent(new CustomEvent('contributor-listing-changed', { detail: { listed: data.listed, actor } }));
         loadCredits();
       } catch {
-        listed.checked = !want;
+        if (!current()) return;
+        // The write may still have landed: the server's state decides before failure is declared,
+        // within its own deadline. When that read fails too, the outcome is unknown and said so.
+        let landed = null;
+        const recheck = new AbortController(), recheckTimer = setTimeout(() => recheck.abort(), 20000);
+        try { const check = await fetch('/api/contributor-roster', { cache: 'no-store', credentials: 'same-origin', signal: recheck.signal }); if (check.ok) { const state = (await check.json())?.you?.listed; if (typeof state === 'boolean') landed = state; } } catch {} finally { clearTimeout(recheckTimer); }
+        if (!current()) return;
+        if (landed === want) {
+          listed.checked = want; listed.disabled = false;
+          window.dispatchEvent(new CustomEvent('contributor-listing-changed', { detail: { listed: want, actor } }));
+          loadCredits(); return;
+        }
+        listed.checked = typeof landed === 'boolean' ? landed : !want;
         listed.disabled = false;
-        creditedStatus.textContent = 'That did not save. Try again in a moment.';
-      }
+        creditedStatus.textContent = landed === null ? 'Could not confirm whether that saved. The switch shows your last saved setting; check again in a moment.' : 'That did not save. Try again in a moment.';
+      } finally { clearTimeout(timer); }
     });
-    // Signing in or out changes which list applies.
+    // Signing in or out changes which list applies; a switch left disabled by an abandoned write is released.
     for (const type of ['contributions-session-started', 'contributions-session-ended']) {
-      window.addEventListener(type, () => { creditedList.replaceChildren(); listing.hidden = true; if (dialog.open) loadCredits(); });
+      window.addEventListener(type, () => { creditedList.replaceChildren(); listing.hidden = true; listed.disabled = false; if (dialog.open) loadCredits(); });
     }
 
     dialog.append(header, credited, collaborators, built);

@@ -1,6 +1,9 @@
+import { publicCredit } from './record-credits.mjs';
 // Public projection of places sent for review but not yet published, so the map can
 // show them as their own "under review" layer. Only the words a contributor wrote for
 // the map and where it is: never an owner, account, email, source, image or fact list.
+// The one name that can appear is the public credit label the contributor consented to,
+// and a roster opt-out suppresses it here as it does on published records.
 // A withheld, superseded or published submission drops out of this list, and so does an older
 // attempt at a place the same contributor has since sent again under the same title.
 export const PENDING_STATES = Object.freeze(['submitted', 'changes_requested', 'approved']);
@@ -18,18 +21,21 @@ export function pendingPlace(row) {
     const target = Array.isArray(raw.targets) && raw.targets.length === 1 && RECORD_ID.test(raw.targets[0]?.record_id || '') ? raw.targets[0].record_id : null;
     // Without a point or a mapped place it adds to, there is nowhere to draw it.
     if (!point && !target) return [];
+    const contributor = row.roster_hidden ? null : publicCredit(row.raw_json);
     return [{
       id: row.id, status: row.review_state, submitted_at: row.created_at,
       title: clip(raw.title, 300) || 'Contribution', description: clip(payload.explanation, 2000),
       location_text: clip(payload.location_text, 300), ...(point || {}), ...(point ? {} : { record_id: target }),
       // A note on a mapped place is reviewed but never published as a place of its own.
-      ...(target ? { note: true } : {})
+      ...(target ? { note: true } : {}),
+      ...(contributor ? { contributor } : {})
     }];
   } catch { return []; }
 }
 
 export async function pendingPlaces(db) {
-  const { results = [] } = await db.prepare(`SELECT s.id,s.owner_id,s.review_state,s.created_at,r.raw_json,r.preview_json
+  const { results = [] } = await db.prepare(`SELECT s.id,s.owner_id,s.review_state,s.created_at,r.raw_json,r.preview_json,
+      EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id) AS roster_hidden
     FROM workflow_submissions s JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision
     ORDER BY s.updated_at DESC,s.id ASC LIMIT ${LIMIT * 4}`).all();
   // The owner is only compared here, never returned. Places left with the default title are never merged.

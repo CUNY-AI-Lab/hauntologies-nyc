@@ -80,7 +80,7 @@ function requestContributionPoint(latlng,replace=false){
 }
 window.addEventListener('contributions-point-changed',event=>showProposedPoint(event.detail?.point));
 // A contributor sees their own unpublished places, marked by status; nobody else does.
-let ownPlacesLayer=null,ownPlaces=[];
+let ownPlacesLayer=null,ownPlaces=[],ownIds=new Set();
 function renderOwnPlaces(){
  if(!map)return;ownPlacesLayer??=L.layerGroup().addTo(map);ownPlacesLayer.clearLayers();
  for(const place of ownPlaces){
@@ -92,10 +92,10 @@ function renderOwnPlaces(){
   ownPlacesLayer.addLayer(marker);
  }
 }
-window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));renderOwnPlaces();renderPendingPlaces();});
+window.addEventListener('contributions-own-places',event=>{ownPlaces=(event.detail?.places||[]).filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude));ownIds=new Set(Array.isArray(event.detail?.ids)?event.detail.ids.filter(id=>typeof id==='string'):ownPlaces.map(p=>p.id));renderOwnPlaces();renderPendingPlaces();});
 // Everyone sees places sent for review as their own layer, before a reviewer decides.
 // A contribution to a mapped place sits as a badge beside that place's marker.
-let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0;const pendingMarkers=new Map();
+let pendingPlacesLayer=null,pendingPlaces=[],pendingRequest=0,pendingUnavailable=false,pendingLoaded=false;const pendingMarkers=new Map();
 // An approved note on a mapped place stays a note; only a new point is published on approval.
 const pendingLabel=place=>place.status==='approved'?(place.note||place.record_id?'Approved':'Approved, awaiting publication'):place.status==='changes_requested'?'Under review: more information requested':'Under review';
 // Where a pending place is: the contributor's own words, the place it adds to, or its cross streets.
@@ -103,14 +103,27 @@ function pendingWhere(place,record){
  if(record)return 'Adds to '+(record.title||'a mapped place')+' · '+whereLabel(record);
  return place.location_text||'';
 }
+// The contributor's public name, when they chose one; the server sends nothing else about them.
+const pendingBy=place=>typeof place.contributor==='string'&&place.contributor.trim()?place.contributor.trim():'';
+// A signed-in participant can open someone else's submitted or approved contribution in Review from here.
+const mine=place=>ownIds.has(place.id)||ownPlaces.some(p=>p.id===place.id);
+const reviewable=place=>Boolean(window.HauntologiesAccount?.canContribute())&&['submitted','approved'].includes(place.status)&&!mine(place);
+function reviewButton(place){
+ const button=document.createElement('button');button.type='button';button.className='pending-review-action';button.textContent='Review';button.setAttribute('aria-label','Review '+place.title);
+ button.addEventListener('click',()=>{map?.closePopup();window.dispatchEvent(new CustomEvent('contributions-review-requested',{detail:{submissionId:place.id}}));});return button;
+}
 function pendingPopup(place,record){
  const root=document.createElement('div');root.className='pending-place-popup';
  const status=document.createElement('p');status.className='pending-place-status';status.textContent=pendingLabel(place);
  const title=document.createElement('strong');title.textContent=place.title;root.append(status,title);
+ const by=pendingBy(place);if(by){const who=document.createElement('p');who.className='pending-place-contributor';who.textContent='By '+by;root.append(who);}
  const where=document.createElement('p');where.className='pending-place-where';where.textContent=pendingWhere(place,record);root.append(where);
  if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)where.textContent=v.label;}).catch(()=>{});
  if(place.description){const p=document.createElement('p');p.textContent=place.description;root.append(p);}
- const note=document.createElement('p');note.className='small';note.textContent=place.status==='approved'?'Shared by a contributor. Approved by a reviewer; publication is a separate step.':place.status==='changes_requested'?'Shared by a contributor. A reviewer has requested more information.':'Shared by a contributor. Not yet checked by a reviewer.';root.append(note);return root;
+ const shared='Shared by '+(by||'a contributor')+'. ';
+ const note=document.createElement('p');note.className='small';note.textContent=shared+(place.status==='approved'?'Approved by a reviewer; publication is a separate step.':place.status==='changes_requested'?'A reviewer has requested more information.':'Not yet checked by a reviewer.');root.append(note);
+ if(reviewable(place))root.append(reviewButton(place));
+ return root;
 }
 function pendingPoint(place,records){const record=place.record_id?records.get(place.record_id):null,lat=record?Number(record.latitude):place.latitude,lon=record?Number(record.longitude):place.longitude;return Number.isFinite(lat)&&Number.isFinite(lon)?{record,lat,lon}:null;}
 function renderPendingPlaces(){
@@ -141,25 +154,62 @@ function bringUpPending(place){
 function renderPendingList(records,own){
  const feed=$('pendingPlacesFeed');if(!feed)return;
  const shown=pendingPlaces.filter(place=>pendingPoint(place,records));
- feed.hidden=!shown.length;$('pendingPlacesCount').textContent=String(shown.length);feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
+ feed.hidden=!shown.length&&!pendingUnavailable;$('pendingPlacesCount').textContent=String(shown.length);renderPendingStatus();feed.querySelector('summary').setAttribute('aria-label',`Under review, ${shown.length} ${shown.length===1?'contribution':'contributions'}`);
  const list=$('pendingPlacesList'),openLocations=new Set([...list.querySelectorAll('details[open]')].map(node=>node.dataset.placeId));
  list.replaceChildren(...shown.map(place=>{
   const row=document.createElement('li'),record=place.record_id?records.get(place.record_id):null;
   const title=document.createElement('strong');title.className='pending-title';title.textContent=place.title;
-  const status=document.createElement('p');status.className='pending-status';status.textContent=[own.has(place.id)?'Yours':'',pendingLabel(place)].filter(Boolean).join(' · ');row.append(title,status);
+  const status=document.createElement('p');status.className='pending-status';status.textContent=[mine(place)?'Yours':'',pendingLabel(place)].filter(Boolean).join(' · ');row.append(title,status);
+  const by=pendingBy(place);if(by&&!mine(place)){const who=document.createElement('p');who.className='pending-contributor';who.textContent='By '+by;row.append(who);}
   if(record){const attached=document.createElement('p');attached.className='pending-target';const label=document.createElement('span');label.textContent='Adds to';const name=document.createElement('strong');name.textContent=record.title||'A mapped place';attached.append(label,name);row.append(attached);}
   const location=document.createElement('details'),toggle=document.createElement('summary'),where=document.createElement('p');location.className='pending-location';location.dataset.placeId=place.id;location.open=openLocations.has(place.id);toggle.textContent='Location';where.textContent=record?whereLabel(record):place.location_text||'Location marked on the map';location.append(toggle,where);row.append(location);
   if(!record&&!place.location_text&&window.PlaceSearch?.describe)window.PlaceSearch.describe(place.latitude,place.longitude).then(v=>{if(v?.label)where.textContent=v.label;}).catch(()=>{});
-  const button=document.createElement('button');button.type='button';button.className='pending-map-action';button.textContent='Show on map';button.setAttribute('aria-label','Show '+place.title+' on map');button.addEventListener('click',()=>bringUpPending(place));row.append(button);return row;
+  const button=document.createElement('button');button.type='button';button.className='pending-map-action';button.textContent='Show on map';button.setAttribute('aria-label','Show '+place.title+' on map');button.addEventListener('click',()=>bringUpPending(place));row.append(button);
+  if(reviewable(place))row.append(reviewButton(place));
+  return row;
  }));
+ renderCardPending(records);
+}
+// Each place card lists the contributions under review that add to it, with the credited names.
+function renderCardPending(records=new Map(allRecords().map(r=>[r.id,r]))){
+ const byRecord=new Map();
+ for(const place of pendingPlaces)if(place.record_id&&records.has(place.record_id))(byRecord.get(place.record_id)||byRecord.set(place.record_id,[]).get(place.record_id)).push(place);
+ for(const slot of document.querySelectorAll('.place-card .place-pending')){
+  const items=byRecord.get(slot.dataset.recordId)||[];slot.replaceChildren();slot.hidden=!items.length;if(!items.length)continue;
+  const heading=document.createElement('h4');heading.textContent=items.length===1?'Under review':'Under review ('+items.length+')';slot.append(heading);
+  const list=document.createElement('ul');
+  for(const place of items){
+   const row=document.createElement('li'),title=document.createElement('strong');title.textContent=place.title;row.append(title);
+   const meta=document.createElement('p');const by=pendingBy(place);meta.textContent=[mine(place)?'Yours':by?'By '+by:'',pendingLabel(place)].filter(Boolean).join(' · ');row.append(meta);
+   if(place.description){const text=document.createElement('p');text.className='place-pending-text';text.textContent=place.description;row.append(text);}
+   if(reviewable(place))row.append(reviewButton(place));
+   list.append(row);
+  }
+  slot.append(list);
+ }
+}
+// A failed read is said out loud in the list's own status line, with a retry, rather than leaving a
+// hidden list or a stale count with no explanation.
+function renderPendingStatus(){
+ const status=$('pendingPlacesStatus');if(!status)return;status.replaceChildren();
+ if(!pendingUnavailable)return;
+ status.append(document.createTextNode(pendingLoaded?'This list may be out of date. ':'The list of places under review is unavailable right now. '));
+ const retry=document.createElement('button');retry.type='button';retry.className='pending-retry';retry.textContent='Retry';
+ retry.addEventListener('click',()=>{retry.disabled=true;refreshPendingPlaces().finally(()=>{retry.disabled=false;});});status.append(retry);
 }
 let pendingSignature='';
 async function loadPendingPlaces(){
  const request=++pendingRequest;
- try{const data=await publicReads.json('/api/pending-places');if(request!==pendingRequest||!Array.isArray(data.places))return;
+ try{const data=await publicReads.json('/api/pending-places');if(request!==pendingRequest)return;
+  // A 200 without a places array is as unusable as a failed read, and is said so.
+  if(!Array.isArray(data?.places))throw new Error('Public map read malformed');
   const places=data.places.filter(p=>p&&typeof p.id==='string'&&typeof p.title==='string'),signature=JSON.stringify(places);
+  pendingLoaded=true;const recovered=pendingUnavailable;pendingUnavailable=false;
   // Redrawing closes an open popup, so an unchanged list is left alone.
-  if(signature===pendingSignature)return;pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();}catch{}
+  if(signature===pendingSignature){if(recovered)renderPendingPlaces();return;}pendingSignature=signature;pendingPlaces=places;renderPendingPlaces();
+  // Review, when open, learns of new submissions from the same public read.
+  window.dispatchEvent(new CustomEvent('contributions-pending-changed',{detail:{count:places.length}}));}
+ catch{if(request===pendingRequest){pendingUnavailable=true;renderPendingPlaces();}}
 }
 const refreshPendingPlaces=publicReads.singleFlight(loadPendingPlaces);
 window.addEventListener('contributions-records-changed',renderPendingPlaces);
@@ -431,6 +481,7 @@ function renderRecords(){
   b.innerHTML=`<i class="dot ${esc(r.category||'draft')} ${esc(n.geoStatus)}" aria-hidden="true"></i><span class="place-title">${esc(r.title)}</span>`;
   const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;
   const heading=document.createElement('div');heading.className='place-heading';heading.append(b);addPlaceEditAction(heading,r);card.append(heading);card.insertAdjacentHTML('beforeend',placeFacts(r));
+  const pendingSlot=document.createElement('div');pendingSlot.className='place-pending';pendingSlot.dataset.recordId=r.id;pendingSlot.hidden=true;card.append(pendingSlot);
   const actions=document.createElement('div');actions.className='place-actions';appendPlaceRecord(actions,r);addContributionAction(actions,r);card.append(actions);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
@@ -441,6 +492,7 @@ function renderRecords(){
  });
  if(!records.length){$('recordList').innerHTML='<div class="empty"><h3>Empty</h3><p>'+(invalidRange?'Check the year range':'No matching records')+'</p><button class="outline" id="emptyReset">Reset</button></div>';$('emptyReset').addEventListener('click',()=>resetFilters());$('detail').innerHTML='';}
  else renderDetail(records.find(r=>r.id===selected));
+ if(typeof renderCardPending==='function')renderCardPending();
  $('unlocatedList').closest('section').hidden=!records.some(r=>!hasPoint(r));
  if($('mapScope'))$('mapScope').textContent=`${mapped.length} mapped · ${records.length-mapped.length} unlocated`;
 }
@@ -582,4 +634,6 @@ function setupPlaceLayout(){
 }
 placeLayout=setupPlaceLayout();
 
-window.addEventListener('hauntologies-auth-changed',()=>{editRequest++;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();});
+window.addEventListener('hauntologies-auth-changed',event=>{editRequest++;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();
+ // Review shortcuts on pending places follow the signed-in state.
+ if(event.detail?.previous?.actor!==event.detail?.current?.actor)renderPendingPlaces();});
