@@ -1,8 +1,13 @@
-import { recordCredits } from './record-credits.mjs';
+import { publicCredit, recordCredits } from './record-credits.mjs';
+// A public credit label names its contributor only while they are on the roster. Every public
+// projection of release history reads this column, so leaving the roster hides the name everywhere
+// at once (records, published edits, the Contributors counts) and rejoining restores it.
+const ROSTER_HIDDEN=`EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id) AS roster_hidden`;
+const releaseCredit=row=>row.roster_hidden?null:publicCredit(row.raw_json);
 // Public projection of immutable, independently approved and verified releases.
 // Never return a submission DTO, current draft, source text, media or identity.
 export async function publishedEdits(db) {
-  const {results = []} = await db.prepare(`SELECT j.id,j.updated_at,j.manifest_json,r.raw_json
+  const {results = []} = await db.prepare(`SELECT j.id,j.updated_at,j.manifest_json,r.raw_json,${ROSTER_HIDDEN}
     FROM workflow_jobs j JOIN workflow_approvals a ON a.id=j.approval_id
       AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
@@ -11,34 +16,32 @@ export async function publishedEdits(db) {
     ORDER BY j.updated_at DESC,j.id ASC LIMIT 20`).all();
   return results.flatMap(row => {
     try {
-      const manifest=JSON.parse(row.manifest_json), published=JSON.parse(row.raw_json);
+      const manifest=JSON.parse(row.manifest_json);
       const targets=(manifest.targets||[]).filter(target=>target.after).map(target=>{
         const record=JSON.parse(target.after.derived_json),edited=record.edited_record?JSON.parse(target.after.raw_json):null;
         return {record_id:target.record_id,title:edited?.title||record.canonical_entry?.title||'Published place'};
       });
       if(!targets.length)return [];
-      const credit=published.public_credit;
-      const label=credit?.consent===true&&typeof credit.label==='string'?credit.label.trim():'';
-      return [{id:row.id,published_at:row.updated_at,targets,
-        ...(label&&label.length<=120&&!label.includes('@')?{credit:label}:{})}];
+      const label=releaseCredit(row);
+      return [{id:row.id,published_at:row.updated_at,targets,...(label?{credit:label}:{})}];
     } catch { return []; }
   });
 }
 
 // Public credit for the Contributors list: one count per live release whose contributor opted in.
-// Only the consented label leaves the server; uncredited releases are only counted in the total.
+// Only the consented label leaves the server; uncredited and roster-hidden releases are only counted in the total.
 export async function contributorCredits(db) {
-  const {results = []} = await db.prepare(`SELECT r.raw_json FROM workflow_jobs j
+  const {results = []} = await db.prepare(`SELECT r.raw_json,${ROSTER_HIDDEN} FROM workflow_jobs j
     JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
     JOIN workflow_submissions s ON s.id=j.submission_id
     WHERE j.status='verified' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)`).all();
   const counts=new Map();let total=0;
   for (const row of results) {
-    let credit=null;try{credit=JSON.parse(row.raw_json).public_credit;}catch{continue;}
+    try{JSON.parse(row.raw_json);}catch{continue;}
     total++;
-    const label=credit?.consent===true&&typeof credit.label==='string'?credit.label.trim().replace(/\s+/g,' '):'';
-    if(!label||label.length>120||label.includes('@'))continue;
+    const label=releaseCredit(row);
+    if(!label)continue;
     const key=label.toLocaleLowerCase('en-US'),entry=counts.get(key)||{name:label,count:0};entry.count++;counts.set(key,entry);
   }
   const contributors=[...counts.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'en-US'));

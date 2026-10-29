@@ -71,6 +71,48 @@ test('a consented public credit names the contributor on the pending layer; noth
   for (const secret of ['map_u', 'owner', '@', 'Bo Example']) assert.ok(!text.includes(secret), secret);
 });
 
+test('leaving the roster hides a published credit from every public feed at once; rejoining restores it', async t => {
+  const { contributorCredits, publishedEdits, setRosterListing } = await import('../server/published-edits.mjs');
+  const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v), author = 'map_u1';
+  run('INSERT INTO hny_auth_user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)', 'u1', '', 'ada@example.test', 1, '2026-10-22', '2026-10-22');
+  const s = await submit(h, { ...proposal({ title: 'Credited lantern' }), public_credit: { consent: true, label: 'Ada Example' } }, author);
+  const approved = ok(await call(h, 'review', { idempotency_key: key(), submission_id: s.id, expected_revision: s.revision, payload_hash: s.payload_hash, diff_hash: s.diff_hash,
+    checks: Object.fromEntries(CHECKS.map(k => [k, 'pass'])), rationale: 'Synthetic independent review.' }, 'reviewer'), 200).submission;
+  const staged = ok(await call(h, 'apply', { idempotency_key: key(), submission_id: approved.id, expected_revision: approved.revision, approval_hash: approved.approval.approval_hash }, 'publisher'), 201);
+  ok(await call(h, 'verify', { idempotency_key: key(), job_id: staged.job.id, map_list_check: { status: 'pass', evidence: 'Synthetic check of the map point and list entry.' } }, 'publisher'), 200);
+  // Every public credit projection, read through the deployed gate with no session.
+  const worker = createDemoWorker({ fetch: async () => new Response('app') }), env = { DB: h.db };
+  const feeds = async () => {
+    const out = {};
+    for (const path of ['/api/published-edits', '/api/published-records', '/api/contributor-credits', '/api/pending-places']) {
+      const response = await worker.fetch(new Request('https://map.test' + path), env, {});
+      assert.equal(response.status, 200, path); out[path] = await response.json();
+    }
+    return out;
+  };
+  const credited = async () => {
+    const f = await feeds();
+    assert.equal(f['/api/published-edits'].items.length, 1);
+    assert.equal(f['/api/published-edits'].items[0].credit, 'Ada Example');
+    assert.deepEqual(f['/api/contributor-credits'], { contributors: [{ name: 'Ada Example', count: 1 }], total: 1 });
+    assert.deepEqual(f['/api/published-records'].records.find(r => r.title === 'Credited lantern')?.contributors, ['Ada Example']);
+    assert.deepEqual(f['/api/pending-places'].places, [], 'published, so no longer pending');
+  };
+  await credited();
+  assert.deepEqual(await setRosterListing(h.db, author, false), { listed: false });
+  const hidden = await feeds();
+  assert.ok(!JSON.stringify(hidden).includes('Ada Example'), 'no public feed names an opted-out contributor');
+  // The release itself stays public and still counts; only the name is withheld.
+  assert.equal(hidden['/api/published-edits'].items.length, 1);
+  assert.ok(!Object.hasOwn(hidden['/api/published-edits'].items[0], 'credit'));
+  assert.deepEqual(hidden['/api/contributor-credits'], { contributors: [], total: 1 });
+  assert.equal(hidden['/api/published-records'].records.filter(r => r.title === 'Credited lantern').length, 1);
+  assert.deepEqual((await publishedEdits(h.db))[0].credit, undefined);
+  assert.deepEqual((await contributorCredits(h.db)).contributors, []);
+  assert.deepEqual(await setRosterListing(h.db, author, true), { listed: true });
+  await credited();
+});
+
 test('the signed-in roster offers the viewer their own registration name and no one else\'s', async t => {
   const { contributorRoster } = await import('../server/published-edits.mjs');
   const h = harness(t), run = (sql, ...v) => h.db.native.prepare(sql).run(...v);
