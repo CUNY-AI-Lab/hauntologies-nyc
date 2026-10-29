@@ -16,7 +16,7 @@ class Element {
  find(fn){for(const child of this.children){if(fn(child))return child;const found=child.find(fn);if(found)return found;}}
  emit(event){return this.handlers[event]?.({preventDefault(){}});}
 }
-function fixture(respond){
+function fixture(respond,record={id:'synthetic-place'}){
  const values=new Map(),posts=[],targets=[],events=[],listeners=new Map(),account={actor:'synthetic-a',generation:1};let uuid=0;
  const storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
  const window={HauntologiesAccount:{snapshot:()=>({...account}),canContribute:()=>true,isCurrent:a=>a.actor===account.actor&&a.generation===account.generation},addEventListener:(event,fn)=>listeners.set(event,fn),removeEventListener:event=>listeners.delete(event),dispatchEvent:event=>events.push(event.type)};
@@ -25,11 +25,17 @@ function fixture(respond){
   if(path.startsWith('/api/contributions/target')){const target={expected_version:targets.length+1,expected_hash:'hash-'+(targets.length+1)};targets.push(target);return Response.json({target});}
   const body=JSON.parse(options.body);posts.push(body);return respond(body,posts.length);
  }});
- vm.runInContext(source,context);const card=new Element('div');card.root=true;window.PlaceHistory.append(card,{id:'synthetic-place'});
+ vm.runInContext(source,context);const card=new Element('div');card.root=true;window.PlaceHistory.append(card,record);
  const details=card.find(e=>e.className==='workflow-details place-history');
- return {values,posts,targets,events,storage,account,listeners,async open(){details.open=true;await details.emit('toggle');await new Promise(setImmediate);const row=details.find(e=>e.className==='history-entry');await row.find(e=>e.tag==='button'&&e.textContent==='Undo').emit('click');const form=row.querySelector('form'),inputs=form.children.filter(e=>e.tag==='label').map(e=>e.children[0]);inputs[0].value='night.owl';inputs[1].value='Undo this change';return{form,name:inputs[0],summary:inputs[1],send:form.find(e=>e.tag==='button'&&e.type==='submit'),notice:form.children.at(-1),submit:()=>form.emit('submit')};}};
+ return {card,values,posts,targets,events,storage,account,listeners,async open(){details.open=true;await details.emit('toggle');await new Promise(setImmediate);const row=details.find(e=>e.className==='history-entry');await row.find(e=>e.tag==='button'&&e.textContent==='Undo').emit('click');const form=row.querySelector('form'),inputs=form.children.filter(e=>e.tag==='label').map(e=>e.children[0]);inputs[0].value='night.owl';inputs[1].value='Undo this change';return{form,name:inputs[0],summary:inputs[1],send:form.find(e=>e.tag==='button'&&e.type==='submit'),notice:form.children.at(-1),submit:()=>form.emit('submit')};}};
 }
 const success=()=>Response.json({receipt:{action:'undo',result:{published:true}}});
+
+test('a note without description still displays its source, fact and attribution without an empty paragraph',()=>{
+ const h=fixture(success,{id:'synthetic-place',notes:[{text:'',moniker:'night.owl',sources:'Synthetic archive',attributes:[{name:'Opening date',value:'1901'}]}]});
+ const section=h.card.find(e=>e.className==='workflow-details place-notes').find(e=>e.tag==='section');
+ assert.deepEqual(section.children.map(e=>[e.tag,e.textContent]),[['small','night.owl'],['p','Sources: Synthetic archive'],['p','Opening date: 1901']]);
+});
 
 for(const [status,error,reopen] of [[400,'public_moniker_required',false],[400,'public_moniker_required',true],[409,'stale_target',false],[409,'undo_conflict',true]])test(`Undo ${error} (${reopen?'reopened History':'same form'}) permits a corrected new request`,async()=>{
  const h=fixture((body,n)=>n===1?Response.json({error},{status}):success());let f=await h.open();f.name.value='invalid@example.test';await f.submit();
