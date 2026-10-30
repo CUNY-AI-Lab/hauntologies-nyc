@@ -97,3 +97,5 @@
 #contributorsDialog .contributors-builder { margin: 16px 0 0; padding: 12px 16px 16px; border-top: 1px solid #454238; color: #bdb5aa; font: 400 12px/1.5 Arial, Helvetica, sans-serif; }
 #contributorsDialog .contributors-counts small { display: block; color: #9f978a; font-size: 11px; }
 #contributorsPageLink { pointer-events:auto; display:inline-flex; align-items:center; min-height:44px; color:#e9caa1; font:400 12px/1.4 Arial,Helvetica,sans-serif; }
+#guidePageLink { pointer-events:auto; display:inline-flex; align-items:center; min-height:44px; margin-right:6px; color:#e9caa1; font:400 12px/1.4 Arial,Helvetica,sans-serif; text-decoration:none; }
+#guidePageLink:hover,#guidePageLink:focus-visible { text-decoration:underline; }

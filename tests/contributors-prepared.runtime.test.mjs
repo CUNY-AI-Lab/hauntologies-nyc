@@ -35,7 +35,8 @@ test('prepared no-bundle Worker serves page, shipped assets and both APIs on syn
  }
  const fetch=route=>worker.dispatchFetch('https://map.test'+route);
  const page=await fetch('/contributors');assert.equal(page.status,200);assert.match(await page.text(),/peopleList/);
- for(const asset of ['activity.js','activity.css','contributor-page.js','contributor-page.css','place-link.js']){
+ const guide=await fetch('/guide');assert.equal(guide.status,200);assert.match(await guide.text(),/Guide to the map/);
+ for(const asset of ['activity.js','activity.css','contributor-page.js','contributor-page.css','place-link.js','guide.js','guide.css']){
   const response=await fetch('/'+asset);assert.equal(response.status,200,asset);assert.equal(await response.text(),await readFile(path.join(client,asset),'utf8'));
  }
  const activityPage=await fetch('/activity');assert.equal(activityPage.status,200);assert.match(await activityPage.text(),/activityList/);
