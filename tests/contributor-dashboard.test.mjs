@@ -4,6 +4,8 @@ import { contributorsHarness, basePlace, proposal, publish, target } from './fix
 import { RecordEditModel as Model } from '../server/record-update.mjs';
 import { CHECKS } from '../server/workflow-core.mjs';
 import { projectPublicContributions, readPublicContributions, placeCompleteness, handlePublicContributions } from '../server/public-contributions.mjs';
+import {contributorCredits,publishedEdits,publishedRecords} from '../server/published-edits.mjs';
+import {LEGACY_TRANSITION_POLICY} from '../server/public-attribution.mjs';
 
 function edit(resolved, changes={title:'Lantern house corrected',description:'Synthetic corrected description',borough:'Manhattan',place_type:'house',source_citation:'Synthetic offline archive'}) {
  const before=Model.snapshot(resolved.record),after={...before,...changes};
@@ -80,6 +82,22 @@ test('verified legacy SQL requires live authorized publication and excludes its 
  let result=await output(h);assert.equal(result.totals.legacy,1);assert.equal(result.totals.published,0);assert.equal(result.contributors[0].name,'Night Owl');assert.equal(result.contributors[0].metrics.legacy.unit,'releases');
  const revoked=await h.call('revoke',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision});assert.equal(revoked.status,200);
  result=await output(h);assert.equal(result.totals.legacy,0);assert.equal(result.contributors.length,0);assert.ok(!JSON.stringify(result).includes('Older edited place'));
+});
+
+test('authorized legacy attribution follows the released revision through newer private work',async t=>{
+ const h=contributorsHarness(t,{publicationMode:'legacy',authorization:{reviewers:['reviewer'],publishers:['publisher']}}),owner='map_10000000-0000-4000-8000-000000000001';
+ const e={...edit(await target(h,basePlace.id),{title:'Public legacy place'}),public_credit:{consent:false,label:''}};
+ const submitted=await h.call('submit',{idempotency_key:crypto.randomUUID(),submission_json:JSON.stringify(e)},owner),s=submitted.body.submission;assert.equal(submitted.status,201);
+ const approved=await h.call('review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(CHECKS.map(key=>[key,'pass'])),rationale:'Synthetic independent review'},'reviewer');assert.equal(approved.status,200);
+ const staged=await h.call('apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:approved.body.submission.approval.approval_hash},'publisher');assert.equal(staged.status,201);
+ assert.equal((await h.call('verify',{idempotency_key:crypto.randomUUID(),job_id:staged.body.job.id,map_list_check:{status:'pass',evidence:'Synthetic map check'}},'publisher')).status,200);
+ assert.equal((await output(h)).contributors.length,0);
+ h.db.native.prepare('INSERT INTO workflow_events(id,submission_id,job_id,revision,actor_id,kind,event_json,created_at) VALUES (?,?,?,?,?,?,?,?)').run('synthetic_prefix_event',s.id,staged.body.job.id,s.revision,owner,'public_attribution',JSON.stringify({policy:LEGACY_TRANSITION_POLICY,public_credit:{consent:true,label:'prefix',identity:'email_prefix'}}),'2026-10-30T07:00:00.000Z');
+ const check=async()=>{assert.equal((await output(h)).contributors[0].name,'prefix');assert.equal((await contributorCredits(h.db)).contributors[0].name,'prefix');assert.equal((await publishedEdits(h.db))[0].credit,'prefix');assert.deepEqual((await publishedRecords(h.db))[0].contributors,['prefix']);};
+ await check();
+ const revised=await h.call('revise',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,submission_json:JSON.stringify(proposal('PRIVATE NEW WORK'))},owner);assert.equal(revised.status,200);await check();assert.ok(!JSON.stringify(await output(h)).includes('PRIVATE NEW WORK'));
+ h.db.native.prepare('INSERT INTO hny_auth_user(id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)').run(owner.slice(4),'Private','prefix@example.test',1,'2026-10-29','2026-10-29');h.db.native.prepare('INSERT INTO contributor_roster_hidden(user_id,created_at) VALUES (?,?)').run(owner.slice(4),'2026-10-30');
+ assert.equal((await output(h)).contributors.length,0);assert.equal((await contributorCredits(h.db)).contributors.length,0);assert.equal((await publishedEdits(h.db))[0].credit,undefined);assert.deepEqual((await publishedRecords(h.db))[0].contributors,undefined);
 });
 
 test('completeness preserves optional descriptions, offline sources, unknowns, valid zero and invalid geometry',()=>{
