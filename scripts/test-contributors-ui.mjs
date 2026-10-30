@@ -65,10 +65,28 @@ try{
  await page.evaluate(()=>{document.documentElement.style.zoom='2';});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:out+'/content-zoom-200.png',fullPage:true});await page.evaluate(()=>{document.documentElement.style.zoom='';});checks.push('200% content zoom has no horizontal page overflow');
  await page.goto(base);await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
  assert.equal(await page.locator('#toolsButton').innerText(),'Contribute');await page.locator('#toolsButton').click();
- assert.deepEqual(await page.locator('#toolsMenu > :is(button,a):visible').allTextContents(),['Edit','Tasks','Contributors']);
+ assert.deepEqual(await page.locator('#toolsMenu > :is(button,a):visible').allTextContents(),['Edit','Tasks','Activity','Contributors']);
  await page.screenshot({path:out+'/contribute-menu.png',fullPage:true});
  await page.locator('#submitTool').click();await page.locator('#draftPanel.active').waitFor();assert.equal(await page.locator('#sidecarTitle').innerText(),'Contribute');await page.locator('#closeResearch').click();
  await page.locator('#toolsButton').click();await page.locator('#tasksTool').click();await page.waitForFunction(()=>document.getElementById('sidecarTitle')?.textContent==='Tasks');await page.locator('#closeResearch').click();
- await page.locator('#toolsButton').click();await page.locator('#contributorsButton').click();await loaded();checks.push('Contribute menu orders Edit, Tasks, Contributors; existing form and tasks work; no unimplemented Activity link');
+ await page.locator('#toolsButton').click();await page.locator('#contributorsButton').click();await loaded();checks.push('Contribute menu orders Edit, Tasks, Activity, Contributors; existing form and tasks work');
+ await api('/api/auth/sign-out',{});
+ await page.goto(base+'/activity');await page.getByText('4 public direct publications.',{exact:true}).waitFor();
+ assert.equal(await page.locator('#activityList li').count(),4);assert.ok(!(await page.locator('body').innerText()).includes('@local.test'));
+ checks.push('Activity is public while signed out and uses four real synthetic publication events');
+ for(const [width,height] of [[1440,1000],[390,844],[320,740]]){
+  await page.setViewportSize({width,height});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:out+'/activity-'+width+'.png',fullPage:true});
+ }checks.push('Activity fits desktop and 390px/320px mobile');
+ await page.setViewportSize({width:1440,height:1000});await page.reload();await page.getByText('4 public direct publications.',{exact:true}).waitFor();
+ await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.className),'skip-link');await page.keyboard.press('Enter');assert.equal(await page.evaluate(()=>document.activeElement.id),'main');await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'refreshActivity');checks.push('Activity skip link and Refresh are keyboard accessible');
+ const activity=await api('/api/activity');
+ await page.route('**/api/activity',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...activity,total:25,events:Array.from({length:25},()=>({...activity.events[0],contributor:'<img src=x onerror=alert(1)>'}))})}));
+ await page.locator('#refreshActivity').click();await page.getByText('25 public direct publications.',{exact:true}).waitFor();assert.equal(await page.locator('#activityList li').count(),20);assert.equal(await page.locator('#activityList img').count(),0);
+ await page.locator('#moreActivity').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('#activityList li').count(),25);assert.equal(await page.evaluate(()=>document.activeElement===document.querySelectorAll('#activityList li')[20].querySelector('a')),true);checks.push('Activity renders literal public labels and Show more preserves keyboard focus');
+ await page.unroute('**/api/activity');await context.setOffline(true);await page.locator('#refreshActivity').click();await page.getByText('Public activity is unavailable. Select Refresh to try again.',{exact:true}).waitFor();assert.equal(await page.locator('#activityList li').count(),0);
+ await context.setOffline(false);await page.locator('#refreshActivity').click();await page.getByText('4 public direct publications.',{exact:true}).waitFor();checks.push('Activity clears stale names offline and recovers on Refresh');
+ await page.route('**/api/activity',route=>route.fulfill({status:200,contentType:'application/json',body:'{"events":[{"private":"invalid"}]}'}));await page.locator('#refreshActivity').click();await page.getByText('Public activity is unavailable. Select Refresh to try again.',{exact:true}).waitFor();assert.equal(await page.locator('#activityList li').count(),0);await page.unroute('**/api/activity');checks.push('Malformed Activity data fails visibly without rendering records');
+ await api('/api/auth/sign-in',{email:'contributor@local.test',password:'haunted-local-only'});await api('/api/contributions/revoke',{idempotency_key:crypto.randomUUID(),submission_id:a.submission.id,expected_revision:a.submission.revision});await api('/api/auth/sign-out',{});
+ await page.locator('#refreshActivity').click();await page.getByText('3 public direct publications.',{exact:true}).waitFor();assert.equal(await page.locator('#activityList li').count(),3);checks.push('Refresh removes a revoked real synthetic publication');
  assert.deepEqual(errors,[]);await writeFile(out+'/results.json',JSON.stringify({checks,errors,synthetic_only:true},null,2));console.log(JSON.stringify({checks,errors},null,2));
 }catch(error){await page.screenshot({path:out+'/failure.png',fullPage:true});console.error('Acceptance failed at',page.url(),'; page errors:',errors);throw error;}finally{await browser.close();}

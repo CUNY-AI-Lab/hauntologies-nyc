@@ -8,13 +8,13 @@ import { createDemoWorker } from '../deployment/demo-gate.mjs';
 test('public directory routes strip identity and cookies; aliases and writes stay closed',async()=>{
  const seen=[];
  const worker=createDemoWorker({fetch(request){seen.push(request);return new Response('public');}});
- for(const route of ['/api/contributors-summary','/api/place-completeness?place=synthetic','/api/public-image?id=watt_00000000-0000-4000-8000-000000000001']){
+ for(const route of ['/api/activity','/api/contributors-summary','/api/place-completeness?place=synthetic','/api/public-image?id=watt_00000000-0000-4000-8000-000000000001']){
   const result=await worker.fetch(new Request('https://map.test'+route,{headers:{cookie:'private-session','oai-authenticated-user-id':'private-actor'}}),{},{});
   assert.equal(result.status,200);assert.equal(seen.at(-1).headers.get('cookie'),null);assert.equal(seen.at(-1).headers.get('oai-authenticated-user-id'),null);
   assert.equal((await worker.fetch(new Request('https://map.test'+route,{method:'POST'}),{},{})).status,405);
  }
- for(const route of ['/api/Contributors-summary','/api//contributors-summary','/api/%63ontributors-summary','/api/Public-image','/api//public-image','/api/%70ublic-image'])assert.equal((await worker.fetch(new Request('https://map.test'+route),{},{})).status,401);
- assert.equal(seen.length,3);
+ for(const route of ['/api/Activity','/api//activity','/api/%61ctivity','/api/Contributors-summary','/api//contributors-summary','/api/%63ontributors-summary','/api/Public-image','/api//public-image','/api/%70ublic-image'])assert.equal((await worker.fetch(new Request('https://map.test'+route),{},{})).status,401);
+ assert.equal(seen.length,4);
 });
 
 test('prepared no-bundle Worker serves page, shipped assets and both APIs on synthetic local D1',async t=>{
@@ -35,9 +35,11 @@ test('prepared no-bundle Worker serves page, shipped assets and both APIs on syn
  }
  const fetch=route=>worker.dispatchFetch('https://map.test'+route);
  const page=await fetch('/contributors');assert.equal(page.status,200);assert.match(await page.text(),/peopleList/);
- for(const asset of ['contributor-page.js','contributor-page.css','place-link.js']){
+ for(const asset of ['activity.js','activity.css','contributor-page.js','contributor-page.css','place-link.js']){
   const response=await fetch('/'+asset);assert.equal(response.status,200,asset);assert.equal(await response.text(),await readFile(path.join(client,asset),'utf8'));
  }
+ const activityPage=await fetch('/activity');assert.equal(activityPage.status,200);assert.match(await activityPage.text(),/activityList/);
+ const activity=await fetch('/api/activity');assert.equal(activity.status,200);assert.equal(activity.headers.get('cache-control'),'no-store');assert.deepEqual((await activity.json()).events,[]);
  const summary=await fetch('/api/contributors-summary');assert.equal(summary.status,200);assert.equal(summary.headers.get('cache-control'),'no-store');
  const data=await summary.json();assert.equal(data.totals.published,0);assert.equal(data.totals.places,209);assert.equal(data.contributors.length,0);
  const detail=await fetch('/api/place-completeness?place='+encodeURIComponent(data.places[0].id)+'&snapshot='+data.snapshot_token);assert.equal(detail.status,200);

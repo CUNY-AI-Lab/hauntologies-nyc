@@ -23,6 +23,9 @@ test('real SQLite publication, five-field edit, note, undo and retry use event u
  const current=await target(h,id),undone=await h.call('undo',{idempotency_key:crypto.randomUUID(),event_id:e.body.receipt.result.event_id,expected_version:current.expected_version,expected_hash:current.expected_hash,moniker:'Night Owl',change_summary:'Undo the synthetic edit'});assert.equal(undone.status,200);
  const result=await output(h);assert.deepEqual(result.totals,{published:4,added:1,edits:1,notes:1,undo:1,unclassified:0,legacy:0,unique_places_edited:1,unattributed:0,unattributed_legacy:0,places:2});
  assert.equal(result.contributors.length,1);assert.equal(result.metrics.edits.unit,'events');assert.equal(result.metrics.added.unit,'places');
+ assert.deepEqual(result.activity.map(e=>e.kind).sort(),['create','edit','note','undo']);
+ assert.ok(result.activity.every(e=>e.contributor==='Night Owl' && e.place.title==='Lantern house'));
+ assert.deepEqual(result.activity.map(e=>e.at),result.activity.map(e=>e.at).sort().reverse());
  assert.equal(result.places.find(p=>p.id===id).contributions.edits.value,1);
  assert.equal(result.places.find(p=>p.id===id).title,'Lantern house');
  assert.ok(!JSON.stringify(result).includes('synthetic_actor'));assert.ok(!JSON.stringify(result).includes('workflow_'));assert.ok(!JSON.stringify(result).includes('receipt'));
@@ -45,6 +48,7 @@ test('revocation removes identities and counts while later owned edits and notes
  const before=await output(h),request={idempotency_key:crypto.randomUUID(),submission_id:created.body.submission.id,expected_revision:created.body.submission.revision};
  assert.equal((await h.call('revoke',request)).status,200);
  const after=await output(h);assert.equal(after.totals.published,2);assert.equal(after.totals.added,0);assert.equal(after.contributors.length,1);assert.equal(after.contributors[0].name,'Second Owl');assert.ok(!JSON.stringify(after).includes('Private after withdrawal'));assert.notEqual(before.snapshot_token,after.snapshot_token);
+ assert.deepEqual(after.activity.map(e=>e.kind).sort(),['edit','note']);
  const stale=await handlePublicContributions(new Request('https://map.test/api/place-completeness?place='+id+'&snapshot='+before.snapshot_token),{db:h.db,staticRecords:h.staticRecords});assert.equal(stale.status,409);
  assert.equal((await h.call('delete',{...request,idempotency_key:crypto.randomUUID()})).status,200);assert.equal((await output(h)).totals.published,2);
 });
@@ -80,8 +84,45 @@ test('verified legacy SQL requires live authorized publication and excludes its 
  assert.equal((await output(h)).totals.legacy,0);
  const verified=await h.call('verify',{idempotency_key:crypto.randomUUID(),job_id:staged.body.job.id,map_list_check:{status:'pass',evidence:'Synthetic map check'}},'publisher');assert.equal(verified.status,200);
  let result=await output(h);assert.equal(result.totals.legacy,1);assert.equal(result.totals.published,0);assert.equal(result.contributors[0].name,'Night Owl');assert.equal(result.contributors[0].metrics.legacy.unit,'releases');
+ assert.deepEqual(result.activity,[],'legacy job creation is not a direct-publication timestamp or event');
  const revoked=await h.call('revoke',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision});assert.equal(revoked.status,200);
  result=await output(h);assert.equal(result.totals.legacy,0);assert.equal(result.contributors.length,0);assert.ok(!JSON.stringify(result).includes('Older edited place'));
+});
+
+test('Activity returns only published events with an explicit allowlist and fails closed',async t=>{
+ const h=contributorsHarness(t);
+ for(const state of ['draft','submitted','approved','withheld','rejected','revoked']){
+  const created=await publish(h,proposal('Private '+state));assert.equal(created.status,200);
+  h.db.native.prepare('UPDATE workflow_submissions SET review_state=? WHERE id=?').run(state,created.body.submission.id);
+ }
+ await publish(h,proposal('Public place'));
+ const request=(path='/api/activity',init)=>handlePublicContributions(new Request('https://map.test'+path,init),{db:h.db,staticRecords:h.staticRecords});
+ const response=await request(),data=await response.json();assert.equal(response.headers.get('cache-control'),'no-store');
+ assert.equal(data.total,1);assert.equal(data.events.length,1);assert.deepEqual(Object.keys(data.events[0]).sort(),['at','contributor','kind','place']);
+ assert.equal(data.events[0].place.title,'Public place');
+ for(const secret of ['Private','synthetic_actor','raw_json','submission_id','event_id','receipt'])assert.ok(!JSON.stringify(data).includes(secret));
+ assert.equal((await request('/api/activity?place=x')).status,400);
+ assert.equal((await request('/api/activity',{method:'POST'})).status,405);
+ assert.equal(await (await request('/api/activity',{method:'HEAD'})).text(),'');
+ assert.equal((await handlePublicContributions(new Request('https://map.test/api/activity'),{db:null,staticRecords:[]})).status,503);
+});
+
+test('Activity bounds the most recent events without fabricating kinds, dates, or public identity',()=>{
+ const rows=Array.from({length:105},(_,i)=>({section:'event',id:'private-event-'+String(i).padStart(3,'0'),actor_id:'private-account',created_at:new Date(Date.UTC(2026,0,1,0,i)).toISOString(),credit_json:JSON.stringify({public_credit:{consent:true,label:'full@example.test',identity:'moniker'}}),event_json:JSON.stringify({record_id:basePlace.id,kind:i===104?'unknown':'note',moniker:'full@example.test',change_summary:'private history'})}));
+ const result=projectPublicContributions({staticRecords:[basePlace],rows});
+ assert.equal(result.totals.published,105);assert.equal(result.activity.length,100);assert.equal(result.activity[0].kind,'publication');assert.equal(result.activity[0].at,rows[104].created_at);
+ assert.ok(result.activity.every(e=>e.contributor===null));
+ assert.ok(!JSON.stringify(result.activity).includes('private'));assert.ok(!JSON.stringify(result.activity).includes('@'));
+ rows[0].created_at='unknown';assert.equal(projectPublicContributions({staticRecords:[basePlace],rows:[rows[0]]}).activity[0].at,null);
+});
+
+test('image alt descriptions remain editable through the existing direct publication path',async t=>{
+ const imagePlace={...basePlace,image:{url:'https://example.test/synthetic.png',alt:'A synthetic blue rectangle.',license:'CC0'}};
+ const h=contributorsHarness(t,{staticRecords:[imagePlace]});
+ const value=edit(await target(h,basePlace.id),{image_alt:'A synthetic red rectangle on a white background.'});
+ const published=await publish(h,value);assert.equal(published.status,200,JSON.stringify(published.body));
+ assert.equal((await target(h,basePlace.id)).record.image.alt,'A synthetic red rectangle on a white background.');
+ assert.equal((await target(h,basePlace.id)).record.image.license,'CC0');
 });
 
 test('authorized legacy attribution follows the released revision through newer private work',async t=>{

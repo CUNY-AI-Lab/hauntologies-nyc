@@ -51,6 +51,14 @@ test('flat public image attribution aliases retain their caption, credit, licens
  assert.deepEqual(nodes.filter(n=>n.tagName==='a').map(n=>n.href),['https://example.test/source','https://example.test/license']);
 });
 
+test('missing alt text never borrows a place title, caption, or another image description',()=>{
+ const record={title:'Unrelated haunted house title',image_alt:'Primary image description.',image_caption:'Primary caption',image_credit:'Primary creator',image_license:'CC BY',image_url:'https://example.test/primary.png',images:[{url:'https://example.test/second.png',caption:'A caption is not inspected alt text.'},{url:'https://example.test/third.png',alt:'  '},{url:'https://example.test/fourth.png',alt:'Exact supplied fourth description.'},{}]};
+ const card=render(record),images=descendants(card).filter(n=>n.tagName==='img');
+ assert.deepEqual(images.map(i=>i.alt),['Primary image description.','Image description unavailable.','Image description unavailable.','Exact supplied fourth description.']);
+ assert.equal(descendants(card).filter(n=>n.tagName==='dd'&&n.textContent==='Primary creator').length,1);
+ assert.equal(descendants(render({title:'Unrelated title',image:{url:'https://example.test/only.png',caption:'Unrelated caption'}})).find(n=>n.tagName==='img').alt,'Image description unavailable.');
+});
+
  test('Record omits summary fields and starts collapsed while retaining dates and distinct metadata',()=>{
  const card=render({title:'Pelham Bay Naval Training Station',location_text:'Image: Map',borough:'Bronx',event_date_start:'1917',contributors:['Public credit']},{description:'Former facility',location:'Bronx',latitude:40.86611,longitude:-73.81028});
  for(const repeated of ['Pelham Bay Naval Training Station','Former facility','Image: Map','Bronx','Coordinates','Public credit'])assert.ok(!card.textContent.includes(repeated),repeated);

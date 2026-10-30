@@ -99,7 +99,7 @@ async function contributions(req, url) {
 }
 
 function file404(pathname) {
-  const target = pathname === '/' ? path.join(repo, 'web/index.html') : pathname === '/contributors' ? path.join(repo, 'web/contributors.html') : pathname === '/register' ? path.join(repo, 'web/registration.html') : path.join(repo, 'public', decodeURIComponent(pathname));
+  const target = pathname === '/' ? path.join(repo, 'web/index.html') : pathname === '/activity' ? path.join(repo, 'web/activity.html') : pathname === '/contributors' ? path.join(repo, 'web/contributors.html') : pathname === '/register' ? path.join(repo, 'web/registration.html') : path.join(repo, 'public', decodeURIComponent(pathname));
   if (!target.startsWith(repo) || !existsSync(target) || statSync(target).isDirectory()) return new Response('Not found', { status: 404 });
   return new Response(readFileSync(target), { headers: { 'Content-Type': types[path.extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' } });
 }
@@ -107,7 +107,7 @@ function file404(pathname) {
 async function route(req) {
   const url = new URL(req.url, `http://127.0.0.1:${port}`), p = url.pathname;
   if(p==='/api/public-image')return handlePublicImage(new Request(url,{method:req.method}),db);
-  if (['/api/contributors-summary','/api/place-completeness'].includes(p)) return handlePublicContributions(new Request(url, {method:req.method}), {db,staticRecords});
+  if (['/api/activity','/api/contributors-summary','/api/place-completeness'].includes(p)) return handlePublicContributions(new Request(url, {method:req.method}), {db,staticRecords});
   if (p.startsWith('/api/auth/')) return auth(req, p.slice('/api/auth/'.length));
   if (p === '/api/access-status') return json({ enabled: true, sign_in_url: '/api/contributions/sign-in', account_mode: 'map', dashboard_enabled: false });
   if (p === '/api/registration-policy') return json({ restricted: false });
