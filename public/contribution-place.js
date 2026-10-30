@@ -34,7 +34,7 @@
   function rowsFor(query) {
     // The hint is for an empty form; once a place is chosen the plate says what it is.
     const chosen = window.ContributionPoint.get() || !$('freeformRecordContext').hidden;
-    if (!query) return pointMode() && !chosen && !state.quiet ? [{id: 'pick', action: 'pick', kind: '', title: 'Choose a mapped place on the map', subtitle: 'Or type an address, a place, an OSM link or coordinates'}] : [];
+    if (!query) return pointMode() && !chosen && !state.quiet ? [{id: 'pick', action: 'pick', kind: '', title: 'Choose a place on the map', subtitle: 'Or type an address, a place, an OSM link or coordinates'}] : [];
     const rows = [];
     const coords = M.parseCoordinates(query, {locate: (lat, lon) => window.NycGeometry?.findBorough(lat, lon) || null});
     if (coords?.status === 'ok') rows.push(pointRow({id: 'coords', kind: 'Coordinates', title: `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`,

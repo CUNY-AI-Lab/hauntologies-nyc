@@ -225,11 +225,10 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 window.addEventListener('contributions-point-pinned',()=>{const icon=proposedPointMarker?.getElement();if(!icon)return;icon.classList.remove('just-pinned');void icon.offsetWidth;icon.classList.add('just-pinned');});
 window.addEventListener('contributions-point-pick-requested',()=>{
  if(!map||!window.HauntologiesAccount?.canContribute())return;
- // Contribute stays on screen while a point is chosen. It stops being modal so the map takes the click;
- // returning to the Contribute tab after a pin or cancel restores modality.
+ // Keep Contribute on screen while the next map click chooses its point.
  for(const id of ['toolsMenu','layersPanel','filtersPanel'])$(id).hidden=true;
  for(const id of ['toolsButton','filtersButton','layersButton'])$(id).setAttribute('aria-expanded','false');
- setSidecarModal(false);contributionPicking=true;document.body.classList.add('contribution-picking');
+ contributionPicking=true;document.body.classList.add('contribution-picking');
  $('chooseContributionPoint').setAttribute('aria-pressed','true');
  const status=$('newLocationStatus');if(status.dataset.state!=='picking')statusBeforePicking={text:status.textContent,state:status.dataset.state};
  status.textContent='Select a spot on the map. Press Esc to cancel.';status.dataset.state='picking';
@@ -242,32 +241,9 @@ function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.i
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
 let toolOpener='toolsButton',placeLayout=null,editRequest=0;
 const toolPanels=['toolsMenu','layersPanel','filtersPanel','researchSidecar'];
-let sidecarModalState=null;
-function setSidecarModal(active){
- const sidecar=$('researchSidecar');
- if(!active){
-  if(!sidecarModalState)return;
-  for(const [node,inert] of sidecarModalState.background)node.inert=inert;
-  for(const [name,value] of sidecarModalState.attributes)value===null?sidecar.removeAttribute(name):sidecar.setAttribute(name,value);
-  sidecarModalState=null;return;
- }
- if(sidecarModalState)return;
- const background=new Map();
- for(let branch=sidecar;branch.parentElement&&branch!==document.body;branch=branch.parentElement){
-  for(const sibling of branch.parentElement.children){
-   // Native dialogs manage their own modality, including the record editor opened from Review.
-   if(sibling===branch||sibling.tagName==='DIALOG')continue;
-   background.set(sibling,sibling.inert);sibling.inert=true;
-  }
- }
- sidecarModalState={background,attributes:['role','aria-modal'].map(name=>[name,sidecar.getAttribute(name)])};
- sidecar.setAttribute('role','dialog');sidecar.setAttribute('aria-modal','true');
- if(!sidecar.contains(document.activeElement))$('sidecarTitle').focus({preventScroll:true});
-}
 function closeTools(focus=false){
  ++editRequest;
  clearProposedPoint();stopContributionPicking();
- setSidecarModal(false);
  for(const id of toolPanels)$(id).hidden=true;
  for(const id of ['toolsButton','filtersButton','mapToolsButton','layersButton','openResearch'])$(id).setAttribute('aria-expanded','false');
  document.body.classList.remove('sidecar-open','places-open');if(focus)$(toolOpener).focus({preventScroll:true});
@@ -284,8 +260,7 @@ function switchPanel(id){
  document.body.classList.toggle('places-open',id==='casePanel');
  if(id==='casePanel'){$('publishedEditsFeed').open=false;placeLayout?.layout();}
  if(id==='casePanel'){toolOpener='mapToolsButton';$('mapToolsButton').setAttribute('aria-expanded','true');}
- setSidecarModal(id==='draftPanel');
- if(id==='draftPanel')window.ContributionPoint?.show();
+ if(id==='draftPanel'){$('sidecarTitle').focus({preventScroll:true});window.ContributionPoint?.show();}
 }
 async function requireEditAccount(button, action){
  if(button.disabled||!window.HauntologiesAccount?.canContribute())return;
@@ -312,9 +287,14 @@ $('toolsButton').addEventListener('click',()=>{
 });
 $('filtersButton').addEventListener('click',()=>{const open=$('filtersPanel').hidden;closeTools();toolOpener='filtersButton';$('filtersPanel').hidden=!open;$('filtersButton').setAttribute('aria-expanded',String(open));if(open)$('search').focus()});
 document.addEventListener('pointerdown',e=>{
- if(document.querySelector('dialog[open]')||e.target.closest('.header-tools'))return;
- const panel=!$('filtersPanel').hidden?$('filtersPanel'):!$('researchSidecar').hidden&&$('casePanel').classList.contains('active')?$('researchSidecar'):null;
- if(panel&&!panel.contains(e.target))closeTools(true);
+ if(document.querySelector('dialog[open]')||e.target.closest('.header-tools,.contribution-navigation'))return;
+ const panel=toolPanels.map($).find(node=>!node.hidden);
+ if(!panel||panel.contains(e.target)||(contributionPicking&&emptyMapTarget(e.target)))return;
+ // Clicking elsewhere dismisses the panel without consuming that click or stealing
+ // focus from its target. Draft fields stay mounted for the next time it opens.
+ const focusWasInside=panel.contains(document.activeElement);
+ closeTools();
+ if(focusWasInside&&$('map').contains(e.target))$('map').focus({preventScroll:true});
 },{capture:true});
 $('mapToolsButton').addEventListener('click',()=>{
  if(!$('researchSidecar').hidden&&$('casePanel').classList.contains('active')){closeTools(true);return;}
@@ -326,15 +306,6 @@ $('openResearch').addEventListener('click',()=>switchPanel('casePanel'));
 for(const id of ['closeResearch','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.defaultPrevented&&!document.querySelector('dialog[open]')&&toolPanels.some(id=>!$(id).hidden)){e.preventDefault();closeTools(true);map?.closePopup()}});
-// A tool is a keyboard surface. Keep its controls reachable without tabbing into obscured pins.
-document.addEventListener('keydown',e=>{
- if(e.key!=='Tab'||document.querySelector('dialog[open]'))return;
- const panel=toolPanels.map($).find(n=>!n.hidden&&n.getAttribute('aria-modal')==='true');if(!panel)return;
- const controls=[...panel.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex="0"]')].filter(n=>n.getClientRects().length);
- if(!controls.length)return;const first=controls[0],last=controls.at(-1);
- if(e.shiftKey&&(document.activeElement===first||!controls.includes(document.activeElement))){e.preventDefault();last.focus()}
- else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
-});
 document.addEventListener('focusin',e=>{
  const target=e.target;if(!(target instanceof HTMLElement)||!target.matches('input,select,textarea,button,a,summary'))return;
  const scroller=target.closest('.panel,.popout-content');if(!scroller||!scroller.closest('.popout'))return;
@@ -634,6 +605,6 @@ function setupPlaceLayout(){
 }
 placeLayout=setupPlaceLayout();
 
-window.addEventListener('hauntologies-auth-changed',event=>{editRequest++;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();
+window.addEventListener('hauntologies-auth-changed',event=>{editRequest++;if(window.HauntologiesAccount?.isTemporaryTransition?.(event?.detail))return;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();
  // Review shortcuts on pending places follow the signed-in state.
  if(event.detail?.previous?.actor!==event.detail?.current?.actor)renderPendingPlaces();});

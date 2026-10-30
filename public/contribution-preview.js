@@ -53,7 +53,7 @@
     if(!window.HauntologiesAccount.isCurrent(account)||!thisDialog.open)return;
     requestAnimationFrame(()=>{if(thisDialog.open&&map===thisMap)thisMap.invalidateSize();});close.focus();
   }
-  window.addEventListener('hauntologies-auth-changed',()=>{if(dialog?.open)dialog.close();});
+  window.addEventListener('hauntologies-auth-changed',event=>{if(window.HauntologiesAccount?.isTemporaryTransition?.(event?.detail))return;if(dialog?.open)dialog.close();});
   window.addEventListener('contributions-preview-requested',event=>open(event.detail));
   window.addEventListener('contributions-draft-preview-requested',event=>open({proposal_envelope:event.detail.envelope,target:event.detail.target,id:'Unsaved proposal',operation_hash:'Unreviewed'}));
 })();
