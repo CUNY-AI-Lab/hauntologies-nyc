@@ -484,10 +484,11 @@ function renderRecords(){
   const n=AtlasModel.normalize(r),b=document.createElement('button');b.type='button';b.className='place-select';b.dataset.recordId=r.id;b.classList.toggle('active',selected===r.id);b.setAttribute('aria-pressed',String(selected===r.id));
   b.innerHTML=`<i class="dot ${esc(r.category||'draft')} ${esc(n.geoStatus)}" aria-hidden="true"></i><span class="place-title">${esc(r.title)}</span>`;
   const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;
-  const heading=document.createElement('div');heading.className='place-heading';heading.append(b);addPlaceEditAction(heading,r);card.append(heading);card.insertAdjacentHTML('beforeend',placeFacts(r));
+  const heading=document.createElement('div');heading.className='place-heading';const actions=document.createElement('div');actions.className='place-actions';heading.append(b,actions);addPlaceEditAction(actions,r);card.append(heading);card.insertAdjacentHTML('beforeend',placeFacts(r));
   const pendingSlot=document.createElement('div');pendingSlot.className='place-pending';pendingSlot.dataset.recordId=r.id;pendingSlot.hidden=true;card.append(pendingSlot);
-  const actions=document.createElement('div');actions.className='place-actions';const links=card.querySelector('.place-links');if(links?.children.length)actions.append(links);else links?.remove();addContributionAction(actions,r);card.append(actions);window.PlaceHistory?.append(card,r);appendPlaceRecord(card,r);
-  b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
+  const links=card.querySelector('.place-links');if(links?.children.length)actions.append(links);else links?.remove();window.PlaceHistory?.append(card,r);appendPlaceRecord(card,r);
+  const mapButton=card.querySelector('.place-map');if(mapButton){mapButton.disabled=!map;mapButton.addEventListener('click',()=>viewRecordOnMap(r));}
+  b.addEventListener('click',event=>{const selection=window.getSelection();if(event.detail>0&&selection&&!selection.isCollapsed&&selection.containsNode(b,true))return;if(selectingContributionPlace){selectRecord(r);return;}if(map&&hasPoint(r))viewRecordOnMap(r,false);else selectRecord(r);});(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
    const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+whereLabel(r,n),keyboard:true,riseOnHover:true});
    marker.on('click',()=>selectRecord(r));bindHoverTip(marker,esc(r.title)+'<br><small>'+esc(whereLabel(r,n))+'</small>',{direction:'top',offset:[0,-9]});pointLayer.addLayer(marker);markers.set(r.id,marker);
@@ -512,6 +513,13 @@ function visibleMapCenter(){
  const top=Math.min(brand.bottom+18,panel.top-45);return L.point(size.x/2,Math.max(24,(top+panel.top)/2));
 }
 function revealRecord(r){if(!map||!hasPoint(r))return;map.stop();const c=AtlasModel.normalize(r).geometry.coordinates,latlng=L.latLng(c[1],c[0]);map.setView(latlng,Math.max(map.getZoom(),16),{animate:false});const marker=markers.get(r.id);if(marker&&pointLayer.getVisibleParent&&pointLayer.getVisibleParent(marker)!==marker)map.setZoom(Math.min(map.getMaxZoom(),18),{animate:false});map.panBy(map.latLngToContainerPoint(latlng).subtract(visibleMapCenter()),{animate:false});}
+function viewRecordOnMap(r,focus=true){
+ if(!map||!hasPoint(r))return;
+ selected=r.id;
+ for(const button of $('casePanel').querySelectorAll('.place-select')){const active=button.dataset.recordId===r.id;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}
+ for(const [id,marker]of markers)marker.getElement()?.classList.toggle('selected',id===r.id);
+ map.closePopup();revealRecord(r);if(focus)$('map').focus({preventScroll:true});
+}
 function revealPlaceCard(card){if(!card)return;const panel=$('casePanel');panel.scrollTop+=card.getBoundingClientRect().top-panel.getBoundingClientRect().top-8;placeLayout?.remember();}
 function selectRecord(r){
  if(selectingContributionPlace&&window.HauntologiesAccount?.canContribute()){selectingContributionPlace=false;switchPanel('draftPanel');window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}));updateLayerStatus();return;}
@@ -524,11 +532,6 @@ $('search').addEventListener('input',renderRecords);
 for(const id of ['filterStatus','filterPeriod',...Object.keys(facetControls)])$(id).addEventListener('change',()=>{togglePeriod();renderRecords();fitRecords(filtered())});
 for(const id of ['periodStart','periodEnd'])$(id).addEventListener('input',()=>{renderRecords();fitRecords(filtered())});
 $('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFilters').addEventListener('click',()=>resetFilters());
-function addContributionAction(card,r){
- if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
- const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.requiresAccount='';button.hidden=!window.HauntologiesAccount?.canContribute();button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
- button.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;switchPanel('draftPanel');$('sidecarTitle').textContent='Edit';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
-}
 function addPlaceEditAction(heading,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
  const edit=document.createElement('button');edit.type='button';edit.className='place-edit';edit.dataset.requiresAccount='';edit.hidden=!window.HauntologiesAccount?.canContribute();edit.dataset.editRecordId=r.id;edit.textContent='Edit';edit.setAttribute('aria-label',`Edit ${r.title}`);edit.setAttribute('aria-haspopup','dialog');
@@ -539,7 +542,7 @@ function placeFacts(r){
  const coordinates=p.latitude===null||p.longitude===null
   ? '<p class="place-coordinate-note">Location unresolved</p>'
   : `<dl class="place-coordinates"><dt>Coordinates</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
- return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${p.mapUrl?link(p.mapUrl,'View on map'):''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+ return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${hasPoint(r)?'<button type="button" class="place-map">View on map</button>':''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
 }
 
 function appendPlaceRecord(card,r){

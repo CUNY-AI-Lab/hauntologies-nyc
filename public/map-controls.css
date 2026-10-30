@@ -86,7 +86,7 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 /* Taps on map controls act at once: Safari would otherwise read two quick taps on +/- as a page zoom. */
 .leaflet-control a,.leaflet-control button,.map-tool-tray a,.map-tool-tray button{touch-action:manipulation}
 
-/* Existing map controls grouped in reading and keyboard order: NYC, pin. */
+/* Map controls grouped in reading and keyboard order: NYC, zoom in, zoom out, pin. */
 #mapFooter{left:max(20px,env(safe-area-inset-left));display:flex;align-items:center;gap:4px}
 #mapFooter .recenter-map{position:relative;left:auto;bottom:auto}
 #mapFooter .plot-place-toggle{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;width:48px;min-width:48px;height:48px;padding:6px;border:0;background:transparent;touch-action:manipulation}
@@ -120,3 +120,10 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 .review-lantern .lantern-mouth{fill:#eeb353;stroke-width:.6}
 @keyframes lantern-glow{0%,26%,53%,79%,100%{opacity:1;filter:drop-shadow(0 0 2.5px #ffd978)}18%,61%,91%{opacity:.88;filter:drop-shadow(0 0 1.5px #ffae38)}22%,69%,95%{opacity:.96;filter:drop-shadow(0 0 2px #ffc85f)}48%,74%{opacity:.82;filter:drop-shadow(0 0 1px #ffae38)}}
 @media(prefers-reduced-motion:reduce){.review-lantern .lantern-eyes{animation:none;opacity:1;filter:drop-shadow(0 0 2px #ffae38)}}
+
+/* Keep zoom beside NYC, clear of the participation controls on narrow screens. */
+#mapFooter .zoom-tools { flex:none; }
+@media(max-width:520px){
+  body:has(#toolsButton:not([hidden])) { --panel-bottom:calc(var(--attribution-height,24px) + 112px); }
+  body:has(#toolsButton:not([hidden])) #mapFooter { bottom:calc(max(var(--dock-bottom),env(safe-area-inset-bottom)) + 52px); }
+}
