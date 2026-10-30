@@ -136,7 +136,7 @@
       if (dialog.open && !challenge) renderForm('sign-in', error.status === 401 ? '' : error.message);
     }
   }
-  function open() { opener = document.activeElement; if (typeof closeTools === 'function') closeTools(); if (!dialog.open) dialog.showModal(); if (!challenge) reconcile(); }
+  function open() { if(pausedSession()){reconcile();return;} opener = document.activeElement; if (typeof closeTools === 'function') closeTools(); if (!dialog.open) dialog.showModal(); if (!challenge) reconcile(); }
   function readChallenge() {
     const match = location.hash.match(/^#account-(verify|reset)=([A-Za-z0-9_-]{24,128})$/);
     if (match) { challenge = match[2]; history.replaceState(null, '', location.pathname + location.search); open(); renderForm(match[1]); return true; }

@@ -160,3 +160,17 @@ test('a failed poll behind an open modal keeps the sign-out path so a hidden mod
  h.node('ownEditsDialog').open=true;h.intervals[0]();h.answer(h.requests[1],{error:'unavailable'},503);await h.settle();
  assert.equal(h.api.snapshot().status,'signed_out');assert.equal(h.document.documentElement.dataset.accountPaused,'false');assert.equal(timers.length,0);
 });
+
+test('opening Account during a paused outage retries without putting an invisible modal over the page',async()=>{
+ const h=accountFixture(),session={actor_id:'actor-a',password_required:false,email:'synthetic@example.test'};
+ h.answer(h.requests[0],session);await h.settle();h.intervals[0]();h.answer(h.requests[1],{error:'unavailable'},503);await h.settle();
+ for(let attempt=0;attempt<2;attempt++){
+  await h.node('accountButton').emit('click');assert.equal(h.node('accountDialog').open,false);
+  h.answer(h.requests.at(-1),{error:'unavailable'},503);await h.settle();
+  assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.node('accountDialog').open,false);
+ }
+ h.window.dispatchEvent({type:'focus'});h.answer(h.requests.at(-1),session);await h.settle();assert.equal(h.api.canContribute(),true);
+ await h.node('accountButton').emit('click');assert.equal(h.node('accountDialog').open,true);
+ h.answer(h.requests.at(-1),session);await h.settle();h.answer(h.requests.at(-1),{total:0});await h.settle();
+ assert.equal(h.events.filter(e=>e.type==='contributions-session-ended').length,0);
+});

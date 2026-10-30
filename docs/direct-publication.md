@@ -6,6 +6,8 @@ Registered contributors who can currently edit the map publish new point places,
 
 Place cards keep Edit and History together. Core content remains visible; History, notes and additional Record information are collapsed below it. History loads the public changes on demand, each headed by its username with the time and labeled minus/plus values. Undo publishes an inverse revision against the current version. It preserves later unrelated changes and rejects overlapping ones. Inverses refer to active predecessor changes rather than copying their historical values, so later revocation cannot resurrect withdrawn text or sources through Undo.
 
+Background map redraws wait while an Undo form remains open, including when focus moves between its fields and buttons or a save needs confirmation. Publishing or cancelling closes the form, returns keyboard focus to History, and resumes a fresh map read. Account changes still clear private form state. A read started before the save cannot replace the newer result, and reloading History preserves any other open Undo forms. No unsent form values are added to public reads or persistent storage.
+
 ## Persistence and ownership
 
 The runtime selects `publicationMode: 'direct'`. Publication writes the private revision, submission state, immutable publication event, public record projection, target version/hash and idempotent receipt in one guarded D1 batch. Repeated requests use the same actor-bound receipt; stale targets and mismatched account assertions fail. Both validation and the final transaction use the caller's expected target version. Existing tables are reused; there is no migration or new service.
