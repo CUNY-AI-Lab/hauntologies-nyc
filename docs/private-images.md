@@ -1,14 +1,14 @@
 # Private images
 
-This guide covers the Images control in the contribution form: what it accepts, what happens before a file is saved, who can open it afterward and how the limits are enforced.
+This guide records the earlier Images control and the storage safeguards for saved images. In the direct-publication release in the merged source, the contribution form does not offer a new public image upload. Previously saved images remain private and owner-only, including after their contribution's text is published. Until that release is deployed, the live map uses the earlier review and verification workflow described below.
 
-## What the form accepts
+## What the earlier form accepts
 
 A contribution can carry up to three images in JPEG, PNG or WebP format. A chosen file can be no larger than 5 MiB and no larger than 8,192 pixels on a side or 16,777,216 pixels in total. SVG files and animated images are rejected. The browser checks the file signature and dimensions before decoding it, then redraws it into a derivative and lowers quality or dimensions until it fits the 1 MiB stored limit; PNG may become a lossy WebP. Camera and location metadata are removed, and the original file never leaves the device.
 
 Each image also carries contributor-authored Caption, Alt text, Credit, Source link and Rights metadata. Unknown rights do not become publication permission.
 
-## Saving and retrying
+## Saving and retrying in the earlier workflow
 
 The form saves text first and uploads images afterward. An image remains **Not uploaded yet** until the server confirms it, then shows **Uploading** and **Uploaded with your contribution**. If an image fails while its file is still held in the tab, **Resume upload** retries it against the same contribution and account. A server rejection for type, size or quota requires a replacement. Closing the tab with files waiting shows the browser's standard warning, but a crash or reload can still lose them.
 
@@ -16,7 +16,7 @@ A successful upload creates a new immutable revision and sets aside an earlier a
 
 ## Who can see an image
 
-Only the contributor and authorized reviewers can open an image, with publishers included once a contribution is approved. Images are private downloads with a server-generated filename, `no-store`, `nosniff` and a sandbox policy. No public asset URL exists, and approval does not publish images.
+In direct-publication mode, only the contributor can open a saved image. In the earlier review workflow, authorized reviewers could also open it, with publishers included once a contribution was approved. Images are private downloads with a server-generated filename, `no-store`, `nosniff` and a sandbox policy. No public asset URL exists, and publishing the text does not publish images.
 
 ## What the server checks
 
@@ -28,7 +28,7 @@ Image bytes live in the same D1 database as the other contribution data, in `con
 
 `GET /api/contributions/attachment?id=<attachment ID>` checks access to the linked private contribution before it sends any bytes. The regular contribution gate verifies the server identity first; client identity headers grant no access. The migration `0005_contribution_media.sql` adds the table and index, prevents attachment updates and does not modify or delete original records.
 
-The form stages sanitized files in memory. Files are not written to browser databases. With open review enabled, other verified map accounts can review currently submitted material and its referenced images, while unsubmitted drafts and removed references stay outside ordinary peer access. Explicitly configured privileged roles retain their broader review scope.
+The earlier form stages sanitized files in memory. Files are not written to browser databases. In legacy mode with open review enabled, other verified map accounts can review currently submitted material and its referenced images, while unsubmitted drafts and removed references stay outside ordinary peer access. Explicitly configured privileged roles retain their broader legacy review scope; direct mode restricts the raw contribution and its saved images to the owner.
 
 ## Next
 

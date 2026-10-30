@@ -14,17 +14,17 @@ Registration asks for your name and email address and shows a receipt on the scr
 
 ## The map
 
-The public map is live at https://hauntologies-nyc.ailab-452.workers.dev. Anyone can search places and addresses, filter by borough, place type, period and location certainty, and view aerial imagery from 1924 forward. Signing in lets you propose a place with sources and photographs, add a note to an existing place or propose a correction. Every proposal goes through review; an approved proposal reaches the public map only after the separate publication and verification steps.
+The public map is live at https://hauntologies-nyc.ailab-452.workers.dev. Anyone can search places and addresses, filter by borough, place type, period and location certainty, and view aerial imagery from 1924 forward. Event registration is separate at `/register`; map accounts use verified email and a password chosen after verification.
 
-The public map is already approved and live, with standalone event registration at `/register`. Map accounts use verified email and a password chosen after verification. Signed-in contributors can save and read their own proposals and private images. Open review lets verified map accounts review and publish others' submitted work, subject to the configured roles and independent-review rules. Contributors choose whether their name appears with each contribution, under review and once published. Attendee-dashboard access remains blocked.
+The guides here describe the direct-publication release in the merged source. Until that release is deployed, the live map uses the earlier review and verification workflow. In the direct-publication release, signed-in contributors can publish a point place, a note on a place, or an edit to a place's fields and sources. Each publication has a chosen public username and a short description of the change. Place cards show History, and contributors can revoke their own published work before deleting its private copy. Saved images remain private; the direct form does not offer a new public image upload. Attendee-dashboard access remains blocked.
 
 ## Where to go from here
 
 This repository holds the source for the map, the registration page and the guides that explain how they work. Read down this path until you reach the guide for your part:
 
-1. [Contribution access](docs/contribution-access.md) explains event registration, map accounts, the contribution form, review and publication.
-2. [Private images](docs/private-images.md) describes image limits, upload behavior and access after submission.
-3. [Area proposals and record annotations](server/EMBEDDED-CONTRIBUTIONS.md) lists the fields for the two contribution types the visible form does not offer.
+1. [Contribution access](docs/contribution-access.md) explains event registration, map accounts, direct publication and the contributor controls.
+2. [Private images](docs/private-images.md) describes saved private images and the earlier upload workflow.
+3. [Area proposals and record annotations](server/EMBEDDED-CONTRIBUTIONS.md) documents legacy service envelopes for area proposals and record annotations.
 4. [Running the site](docs/running-the-site.md) is for maintainers and covers local setup, settings, sign-in, email, releases and rollback.
 5. [Model-assisted ingestion](server/README.md) describes the disabled backend; its [tool contract](public/ingestion/TOOL-CONTRACT.md) and [extraction skill](public/ingestion/SKILL.md) set out its boundaries if it is ever enabled.
 
@@ -37,10 +37,9 @@ npm run install:ci
 npm run dev
 ```
 
-To try contributing and reviewing on your own machine, run `npm run local` and open http://127.0.0.1:8790. The two synthetic accounts use the password `haunted-local-only`:
+To try direct publication on your own machine, run `npm run local` and open http://127.0.0.1:8790. The two synthetic accounts use the password `haunted-local-only`:
 
-- `contributor@local.test` submits places and reviews the other account's work.
-- `reviewer@local.test` can also review and publish.
+- `contributor@local.test` and `reviewer@local.test` are separate synthetic contributors. Both can publish supported changes directly; their names do not grant review roles in this mode.
 
 The local server runs the real contribution service on SQLite in `.local/` (gitignored). `npm run local -- --fresh` starts over. Registration, password resets and image uploads need production services and are off locally.
 
@@ -52,7 +51,7 @@ npm run build && node scripts/prepare-account-release.mjs
 
 Preparation checks the existing Worker, account and D1 identifiers, projects the public catalog and writes `dist/server/wrangler.live.json`; it performs no deployment or database migration. Run the test suite after preparation.
 
-Production release is currently blocked: this repository has no configured CI deployment path. A future approved CI path must build and prepare the release, deploy the prepared configuration, and read back the serving version, `/api/access-status` (`enabled` with `account_mode: map`), signed-out protection, delivered assets and table counts. Separately, an authorized human must perform the verification/reset mailbox round trip and record rollout acceptance; CI must not receive mailbox credentials. Granting deployment access is a separate decision. Existing manual deployment notes are historical; do not run a local `wrangler deploy` from this repository.
+Production release requires the necessary approvals and a configured CI deployment credential. Follow the [code-only release procedure](docs/code-only-release.md) when no migration is needed; database work follows the separately authorized procedure in [Running the site](docs/running-the-site.md#release). An authorized human must separately perform the verification/reset mailbox round trip and record rollout acceptance; CI must not receive mailbox credentials. Existing manual deployment notes are historical; do not run a local `wrangler deploy` from this repository.
 
 The existing D1 binding is `DB`. Do not put participant data, credentials or private source archives in this repository. AI is disabled, and connecting Workers Builds or granting provider access is a separate decision.
 

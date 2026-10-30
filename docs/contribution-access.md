@@ -1,6 +1,8 @@
 # Contribution access
 
-This guide picks up where the [README](../README.md) leaves off. It explains event registration, map accounts, the contribution form, review and publication. Maintainers can continue to [Running the site](running-the-site.md) for settings and release steps.
+This guide picks up where the [README](../README.md) leaves off. It explains event registration, map accounts, the contribution form and direct publication. Maintainers can continue to [Running the site](running-the-site.md) for settings and release steps.
+
+The contribution instructions describe the direct-publication release in the merged source. Until that release is deployed, the live map uses the earlier review and verification workflow.
 
 ## Two sign-ups
 
@@ -25,51 +27,29 @@ If the email does not arrive, check spam and wait before asking again because pe
 
 Signing in takes an email address and password. **Reset password** sends a separate-purpose link that lasts 30 minutes; saving the new password revokes earlier sessions. A map session lasts seven days and the account check may renew it at most once a day. **Sign out** ends the current session.
 
-The contribution draft is saved on the device being used: an account draft lasts 14 days and a signed-out draft lasts one day. Signing out on purpose deletes that account's draft. Images are held only in the tab until the contribution is submitted, so a reload or crash can lose unuploaded files.
+The contribution draft is saved on the device being used: an account draft lasts 14 days and a signed-out draft lasts one day. Signing out keeps that account's draft on the device within its retention period.
 
 ## Contribute
 
-After signing in, choose **Edit** in the bottom-right corner, then **Contribute**. The form starts with **Place**. Type an address, street, building, existing map place, OpenStreetMap link or coordinates, choose a result, or choose **Pin** and click the map. Only points inside the five boroughs can be chosen. Choosing an existing place adds a note about it; it does not change the place itself. Use the editor on the place card for a place correction.
+After signing in, choose **Edit** in the bottom-right corner, then **Contribute**. The form starts with **Place**. Type an address, street, building, existing map place, OpenStreetMap link or coordinates, choose a result, or choose **Pin** and click the map. Only points inside the five boroughs can be chosen. Choosing an existing place adds a note about it; it does not change the place itself. Use **Edit** on the place card for a correction to the place's fields or sources.
 
-Once a place is selected, add a title when needed and write the description. Sources, images and facts are optional. **Show my name with this contribution** is checked by default, but the name field and the account-wide **Show my name on the map** setting determine the effective public credit; see [Public credit](#public-credit). The form accepts up to three images and shows the current upload state.
+For a new place, add a title and description. For an existing place, add a description, a source or a fact; its description can be blank. Sources and facts are optional when a description is supplied. Enter a **Public username** and use **Describe your change** to say briefly what you are adding or changing. Choose **Publish** to check the preview, then confirm publication. A successful publication puts the change on the map without a separate review step. The direct form does not offer a new public image upload.
 
-Choose **Submit**. The site validates the contribution and, when the check succeeds, saves it in the same flow. If it cannot check or save it, the preview or status message explains what to fix or offers a retry. **Check review status** opens the saved contribution. A pending save whose outcome is unknown should be checked in the queue before it is retried.
+## Public credit and history
 
-## What happens to a contribution
+Choose a username or moniker, not an email address. The username appears publicly with your contribution, including in the place's History and Contributors. The form remembers the last username on this device for the signed-in account. It does not use your account email or event registration name as a default, and the direct-publication flow has no separate name opt-out. Do not put private information in the username, description, facts or sources you publish.
 
-The saved contribution shows **Saved**, **In review**, **Approved** and **On the map**, with a next-step message. A submitted contribution waits for a reviewer other than its author. The reviewer checks evidence and limits, location and uncertainty, rights and permitted reuse, duplicates, privacy and public-credit consent, then chooses **Approve review** or **Revise and resubmit** with a required explanation. Approval does not publish.
+Open a place card and choose **History** to see its published changes, usernames, times and descriptions. Expand a change to compare its earlier and later values. Signed-in contributors can choose **Undo**, enter a public username and description, and publish an inverse change. Undo preserves unrelated later changes; if a later change overlaps, reload History and compare before deciding what to do.
 
-The **Review** panel opens on **Awaiting review**, with **Refresh** and a count of contributions from others. Rows are newest first and identify the kind of contribution and any credited name. The queue refreshes when the public Under review layer changes, with a bounded interval. If the public list cannot be read, the entry remains reachable and reports that the list is unavailable; after an earlier successful read it reports that the list is out of date and offers **Retry**. The Under review title card and map popup carry a visible **Under review** label.
+## Your saved work and removal
 
-After approval, an eligible publisher stages the change for verification. The publisher inspects the candidate map, list and source details in **Preview**, then records the map/list outcome and evidence in **Verify**. The five checks remain separate even when **Confirm all five checks** ticks them together. A passing verification activates exactly the staged bytes. Review-only contribution types never become map records automatically.
+Open **Account**, then **Edits** to find your own saved and published work. Existing submitted, changes-requested, approved or staged work does not become public automatically. Supported saved work has a **Publish** action; the owner must choose it and supply a public username and change description. Older unsupported formats, such as area proposals and multi-entry bundles, stay private. Their summary editor offers **Save privately**; their content can be used in a new place or note, or in an edit to an existing place.
 
-The contributor can revise a draft, submitted contribution or requested revision. A revision of an open proposal keeps its credit editor so a name can be added or removed; a typed revision edits its summary and keeps its original credit. The contributor can withdraw an unpublished contribution. Owners and explicitly listed moderators may permanently delete an unpublished contribution only when it has no release job; ordinary peers cannot delete another person's work. Published or staged release history is retained.
-
-## Reviewers, publishers and admins
-
-When `CONTRIBUTIONS_OPEN_REVIEW=true`, every verified map account may review and publish other people's submitted work, but not its own. Open peers do not receive other people's drafts, withheld work, private historical revisions, unpublished hosted targets or raw release snapshots. Explicitly configured roles retain their scoped privileged access. Every review and verification remains independent of the contributor, including for admins. Attendee-dashboard access remains blocked.
-
-`CONTRIBUTIONS_REVIEWER_IDS` lists selected reviewers, who also publish. `CONTRIBUTIONS_PUBLISHER_IDS` can add publishers only when a valid nonempty reviewer list exists. `CONTRIBUTIONS_ADMIN_IDS` adds both roles. Each list is a JSON array of at most 20 canonical immutable actor IDs; invalid entries reject the whole list. These are operator settings, never client claims.
-
-To request a role:
-
-1. Create and verify a map account, then sign in.
-2. While signed in, open https://hauntologies-nyc.ailab-452.workers.dev/api/auth/session in the same browser and copy the `map_` account ID.
-3. Send that ID to a maintainer, who adds it to the appropriate list as described in [Running the site](running-the-site.md).
-
-## Public credit
-
-Public contributor names come only from the consented credit label on each contribution. The form offers **Show my name with this contribution** and a name field, checked by default. When the account email matches an event RSVP, the field may be prefilled with that person's registration name; the device remembers the last choice per account. The hint describes the effective result: if **Show my name on the map** is off, it says that the name stays hidden and offers that switch inline.
-
-With consent and a nonblank label, the name appears with the contribution on the public Under review layer, in the Review queue and detail, and on the published record and Published edits after verification. Unchecking the box or leaving the name blank sends `consent:false` and keeps it unnamed everywhere. Account IDs, email addresses and RSVP names are never inferred as public credit. A roster opt-out withholds a label from every public projection, including pending places, published records, Published edits and contributor counts, while the release itself remains public.
-
-The account-wide switch governs every public place where the person's name appears, including earlier contributions. Turning it back on restores those labels. The authenticated roster lists non-opted-out registrants with their public names and contribution and published counts, plus account status. It also returns the current viewer's own registration name for credit-field prefill. Email addresses never leave that roster query, and RSVP records do not create roles.
+To remove your own published contribution, choose **Revoke** in Edits and confirm. Its effects and history are removed from the public map, while your private copy remains. Other contributors' changes and shared place IDs are preserved. To remove that private copy, choose **Delete** after revoking it. Deletion keeps minimal receipts and version markers and cannot erase copies already downloaded elsewhere. A legacy published contribution may be blocked from revocation or deletion when another release depends on it; the site reports that conflict instead of overwriting the later work.
 
 ## What stays private
 
-Raw contributions and images are visible only to the contributor, authorized reviewers and, once approved, publishers. A valid pointed new-place proposal can appear in the public Under review layer with its title, description and location, but not account identities, private images or source notes. A map account stores its email and a scrypt password hash, never the password itself. An unfinished account keeps its address so its setup proof can be used until password creation.
-
-Private images are not public assets and are not published automatically. See [Private images](private-images.md). Areas, attachments and unsupported proposals remain review-only. Record edits use target version/hash guards, and rollback retains raw proposals, receipts and audit history.
+Through the map, your raw contribution and any previously saved images are accessible only to you in direct-publication mode, even after its text is published. The published text, sources, facts, change description and chosen username are public. A map account stores its email and a scrypt password hash, never the password itself. An unfinished account keeps its address so its setup proof can be used until password creation. See [Private images](private-images.md) for the earlier image workflow and its limits.
 
 ## When something goes wrong
 
@@ -84,27 +64,26 @@ Private images are not public assets and are not published automatically. See [P
 | Email delivery is temporarily unavailable. Please try again later. | Wait and try again, and tell the event contact if it continues. |
 | Account service is temporarily unavailable. Please try again. | Wait and try again, and tell the event contact if it continues. |
 | Sign in to continue. | Your session ended; sign in again. Your draft remains on this device within its retention period. |
-| Save outcome unknown. Check the queue before retrying. | Choose **Check queue** or open **Review** and confirm whether the contribution exists before trying again. |
-| Choose an image no larger than 5 MB. | Shrink or crop the original before choosing it. |
-| This image could not be reduced below 1 MB. Choose a smaller image. | Choose a smaller or simpler picture. |
-| Contribution saved. Image not saved | Choose **Resume upload** while the files remain in the tab; after a reload, choose them again. |
+| Save outcome unknown. Check My edits before retrying. | Check **Account** → **Edits** and use the offered confirmation action to resolve the pending save before starting another. |
+| This place changed in an overlapping field. | Reload **History**, compare the changes and decide whether an edit is still needed. |
+| Another release depends on this contribution. | Revocation is blocked to protect that work; contact a maintainer rather than assuming it was removed. |
 
 ## Production release and verification
 
 Target Worker: `hauntologies-nyc`, Cloudflare account `452c33847cf5cb1e46f391fca32fd1b5`. Existing D1 database: `hauntologies-nyc` / `df7f1e92-e339-4e25-ac30-989dd68d8dfc`. Public origin: `https://hauntologies-nyc.ailab-452.workers.dev`.
 
-1. Record the current Worker version, a D1 Time Travel bookmark and counts for existing tables. Inspect the schema before applying additive migrations.
-2. Preserve migration order and apply only missing, reviewed migrations. `0005_contribution_media.sql` stores images, `0006_map_accounts.sql` stores namespaced accounts, credentials, sessions, challenges and rates, and `0007_roster_opt_out.sql` stores roster opt-outs.
-3. Build and run `node scripts/prepare-account-release.mjs`, then `node --test tests/*.test.mjs`. This prepares account and eligibility settings, open review and the restricted mail binding while preserving the public route and disabling preview URLs.
-4. Store a cryptographically generated Hauntologies-only `MAP_AUTH_SECRET` through Worker secret storage without saving it in files, output or source. Release Admission's restricted mail service before activating the map binding.
-5. Production release is currently blocked: this repository has no configured CI deployment path. A future approved path must build and prepare the release, deploy the prepared file, verify the serving version, account readiness, signed-out protection and delivered assets, and recheck table counts; the required build, deployment and readback evidence belongs in that CI path. Separately, an authorized human must perform verification and reset with an authorized mailbox and record rollout acceptance; CI must not receive mailbox credentials. A local command is not an approved production release method.
+Before a release, record the serving Worker version, a D1 Time Travel bookmark and counts for existing tables. Compare the actual schema with the migration ledger before considering a migration: a table may exist even when a corresponding migration is absent from the ledger. Apply only separately reviewed and authorized migrations, in order.
+
+Build with `npm run build`, prepare with `node scripts/prepare-account-release.mjs`, and run `node --test tests/*.test.mjs`. Preparation configures account eligibility and the restricted mail binding, preserves the public route and disables preview URLs. Keep `MAP_AUTH_SECRET` in Worker secret storage and release Admission's restricted mail service before activating the map binding.
+
+GitHub Actions validates changes; As of October 29, 2026, [PR 39](https://github.com/CUNY-AI-Lab/hauntologies-nyc/pull/39) proposes a guarded CI deployment workflow and remains a draft. An approved release path must deploy the prepared configuration and verify the serving version, account readiness, signed-out protection, delivered assets and table counts. An authorized human must separately perform verification and reset with an authorized mailbox and record rollout acceptance; CI must not receive mailbox credentials. Local deployment is not an approved production release method.
 
 Any production verification, reset, contribution or image acceptance test needs its own authorization and a disposable test identity. Local synthetic checks do not authorize participant reads or production writes. Rollback uses the prior Worker version after checking that bindings are retained; leave additive tables in place to preserve account data and audit history.
 
-The local suite covers verification-before-password, setup-proof retention, reset-purpose separation, concurrent credential creation, session expiry and renewal, origin and route rejection, durable rate enforcement, forged headers, cross-user proposal/image denial and private image readback. Browser checks cover registration, password creation, contribution save and account list, sign-out, reset, sign-in and the mobile dialog. Production verification results belong in the release record with the exact Worker version and observed responses.
+The local suite covers account and session safeguards, private access and direct publication, including history, revocation and deletion. Browser checks use local synthetic accounts. Production verification results belong in the release record with the exact Worker version and observed responses.
 
 ## Guest admission across account setup
 
 A valid guest access code is checked during event or account registration. The service records a normalized email hash and approval time in `hny_guest_admissions`; it stores neither the email address nor the code in that table. The emailed proof still verifies ownership before password creation. An admission decision survives code rotation and supports resumed password setup. It grants eligibility only; verified sessions continue to control contribution access and roles.
 
-Read [Private images](private-images.md) next if your contribution includes photographs or scans, [Area proposals and record annotations](../server/EMBEDDED-CONTRIBUTIONS.md) for the two contribution types the form does not offer, and [Running the site](running-the-site.md) if you build or release the site.
+Read [Private images](private-images.md) for saved photographs or scans, [Direct publication and revision history](direct-publication.md) for the publication and ownership rules, and [Running the site](running-the-site.md) if you build or release the site.
