@@ -634,6 +634,6 @@ function setupPlaceLayout(){
 }
 placeLayout=setupPlaceLayout();
 
-window.addEventListener('hauntologies-auth-changed',event=>{editRequest++;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();
+window.addEventListener('hauntologies-auth-changed',event=>{editRequest++;if(window.HauntologiesAccount?.isTemporaryTransition?.(event?.detail))return;selectingContributionPlace=false;stopContributionPicking();clearProposedPoint();if(!$('toolsMenu').hidden||$('draftPanel').classList.contains('active'))closeTools();
  // Review shortcuts on pending places follow the signed-in state.
  if(event.detail?.previous?.actor!==event.detail?.current?.actor)renderPendingPlaces();});

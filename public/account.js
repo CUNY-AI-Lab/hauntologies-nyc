@@ -75,7 +75,7 @@
         } else if (operation === 'reset') { challenge = null; identity(null); renderForm('sign-in', 'Password updated. Sign in with your new password.'); }
         else { challenge = null; checks++; sessionCheck=null; await reconcile(); }
       } catch (error) { if (error.code === 'registration_restricted') admission?.reject(); status.textContent = error.name === 'AbortError' ? 'The request took too long. Check your email or try signing in before retrying.' : error.code === 'invalid_token' && operation === 'verify' ? 'This verification link has already been used or is invalid. Request a new link.' : error.code === 'registration_restricted' && !email ? 'Complete guest registration first, then reopen your verification email.' : error.message; }
-      finally { busy = false; submit.disabled = false; }
+      finally { busy = false; submit.disabled = false; reconcilePaused(); }
     });
     if (mode === 'sign-in') { button('Reset password', () => renderForm('request-reset')); button("Don't have an account? Register here.", () => renderForm('register')); }
     else button('Back to sign in', () => { challenge = null; renderForm('sign-in'); });
@@ -85,7 +85,7 @@
     button('Refresh', reconcile); button('Sign out', async () => {
       if (busy) return; busy = true; const account=window.HauntologiesAccount?.snapshot();
       try { await api('/api/auth/sign-out', {}); window.dispatchEvent(new CustomEvent('contributions-session-ended', { detail: { signedOut: true } })); identity(null); renderForm('sign-in', 'Signed out.'); }
-      catch (error) { if(window.HauntologiesAccount?.isCurrent(account)){window.HauntologiesAccount.invalidate(account);status.textContent = 'Sign-out could not be confirmed. Sign in again before editing. '+error.message;} } finally { busy = false; }
+      catch (error) { if(window.HauntologiesAccount?.isCurrent(account)){window.HauntologiesAccount.invalidate(account);status.textContent = 'Sign-out could not be confirmed. Sign in again before editing. '+error.message;} } finally { busy = false; reconcilePaused(); }
     });
     const actor = session.actor_id;
     try {
@@ -98,6 +98,8 @@
   // leaving the page discards a dialog render, but the newest session answer still reaches the
   // button, so it never stays at "…".
   let sessionCheck=null;
+  function pausedSession() { const state=window.HauntologiesAccount?.snapshot();return state?.status==='unknown'&&Boolean(state.actor); }
+  function reconcilePaused() { if(document.visibilityState==='visible'&&!busy&&pausedSession())reconcile(); }
   function reconcile() {
     if(sessionCheck)return sessionCheck;
     const pending=checkSession();sessionCheck=pending;pending.finally(()=>{if(sessionCheck===pending)sessionCheck=null;});return pending;
@@ -108,12 +110,16 @@
       const value = await api('/api/auth/session');
       if (check !== checks) return;
       if(typeof value?.actor_id!=='string'||!value.actor_id||typeof value.password_required!=='boolean')throw new Error('Session could not be confirmed. Please sign in again.');
+      const prior=window.HauntologiesAccount?.snapshot(),retainDialog=prior?.status==='unknown'&&prior.actor===value.actor_id;
       const currentDialog = version === generation; identity(value);
       if (!currentDialog) return;
-      if (dialog.open) { if (value.password_required) renderForm('set-password'); else await showAccount(version); }
+      if (dialog.open) { if (value.password_required) renderForm('set-password'); else if(!retainDialog||!formHost.children.length) await showAccount(version); }
       if(!value.password_required)returnToEdit();
     } catch (error) {
       if (check !== checks) return;
+      // A temporary service failure does not prove the retained account signed out.
+      // Keep its private controls unavailable and retry on focus or the next interval.
+      if (pausedSession() && error.status !== 401 && error.status !== 403) return;
       const currentDialog = version === generation; identity(null);
       if (!currentDialog) return;
       if (error.status === 401) window.dispatchEvent(new CustomEvent('contributions-session-ended'));
@@ -130,15 +136,19 @@
     return false;
   }
   window.addEventListener('hauntologies-auth-changed', event => {
+    if (window.HauntologiesAccount?.isTemporaryTransition?.(event?.detail) && event.detail.current.status === 'unknown') { checks++; generation++; sessionCheck=null; const feed=byId('publishedEditsFeed'); if(feed)feed.hidden=true; return; }
     if (event.detail.current.status !== 'signed_in') { checks++; generation++; sessionCheck=null; const hadSession=!!session; session = null; if(hadSession&&dialog.open&&!challenge)renderForm('sign-in'); trigger.disabled=false; trigger.textContent='Sign in'; trigger.setAttribute('aria-label','Sign in'); byId('accountRegistrationSection').hidden=true; const feed=byId('publishedEditsFeed'); if(feed){feed.open=false;feed.hidden=true;} }
   });
-  document.addEventListener('visibilitychange', () => { if(document.visibilityState==='visible'&&!busy&&!dialog.open) reconcile(); else if(document.hidden) window.HauntologiesAccount?.suspend(); });
-  setInterval(() => { if(document.visibilityState==='visible'&&!busy&&!dialog.open) reconcile(); }, 30000);
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){checks++;generation++;sessionCheck=null;window.HauntologiesAccount?.pause();}
+    else if(document.visibilityState==='visible'&&!busy&&(!dialog.open||pausedSession()))reconcile();
+  });
+  setInterval(() => { if(document.visibilityState==='visible'&&!busy&&(!dialog.open||pausedSession())) reconcile(); }, 30000);
   trigger.addEventListener('click', open); window.addEventListener('account-open-requested', open);
   byId('closeAccount').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => { generation++; challenge = null; formHost.replaceChildren(); actions.replaceChildren(); list.replaceChildren(); (opener?.isConnected ? opener : trigger).focus({ preventScroll: true }); if(!busy)reconcile(); });
   window.addEventListener('hashchange', readChallenge);
-  window.addEventListener('focus', () => { if (!busy && !dialog.open) reconcile(); });
+  window.addEventListener('focus', () => { if (document.visibilityState==='visible'&&!busy&&(!dialog.open||pausedSession())) reconcile(); });
   window.addEventListener('pageshow', event => { if ((!busy && !dialog.open) || event.persisted) reconcile(); });
   window.addEventListener('pagehide', () => { window.HauntologiesAccount?.suspend(); generation++; challenge = null; formHost.replaceChildren(); list.replaceChildren(); });
   window.addEventListener('registration-confirmed', () => identity(session));

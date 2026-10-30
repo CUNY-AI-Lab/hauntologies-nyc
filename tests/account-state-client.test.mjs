@@ -7,7 +7,7 @@ function fixture(){
  const events=[],listeners=new Map(),controls=[{hidden:false}],documentListeners={},saved=new Map();let observe;
  const window={addEventListener(type,fn){const list=listeners.get(type)||[];list.push(fn);listeners.set(type,list);},dispatchEvent(event){events.push(event);for(const fn of listeners.get(event.type)||[])fn(event);}};
  const document={documentElement:{dataset:{}},body:{},querySelectorAll:()=>controls,addEventListener:(type,fn)=>{documentListeners[type]=fn;}};
- const context=vm.createContext({window,document,Date,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},localStorage:{setItem:(key,value)=>saved.set(key,value)},MutationObserver:class{constructor(fn){observe=fn;}observe(){}}});
+ const context=vm.createContext({window,document,Date,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},localStorage:{getItem:key=>saved.get(key)??null,setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)},MutationObserver:class{constructor(fn){observe=fn;}observe(){}}});
  vm.runInContext(read('public/account-state.js'),context);
  return{window,document,context,controls,events,documentListeners,saved,api:window.HauntologiesAccount,observe:()=>observe()};
 }
@@ -31,6 +31,16 @@ test('hidden/page-restored state fails closed without changing Event details or 
  const h=fixture();signIn(h);h.api.suspend();assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.controls[0].hidden,true);
  signIn(h);assert.equal(h.controls[0].hidden,false);
  assert.doesNotMatch(read('public/account-state.js'),/setView|setZoom|eventDetails/);
+});
+test('a temporarily hidden tab pauses access without ending the same account session',()=>{
+ const h=fixture();signIn(h);const before=h.api.snapshot(),ends=()=>h.events.filter(e=>e.type==='contributions-session-ended').length,starts=()=>h.events.filter(e=>e.type==='contributions-session-started').length;
+ h.api.pause();assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.api.snapshot().actor,'actor-a');assert.equal(h.api.canContribute(),false);assert.equal(h.api.isCurrent(before),false);assert.equal(h.controls[0].hidden,true);assert.equal(ends(),0);
+ signIn(h);assert.equal(h.api.snapshot().actor,'actor-a');assert.equal(h.api.canContribute(),true);assert.equal(h.controls[0].hidden,false);assert.equal(ends(),0);assert.equal(starts(),1);
+ h.api.pause();signIn(h,'actor-b');assert.equal(ends(),1);assert.equal(starts(),2);assert.equal(h.api.snapshot().actor,'actor-b');
+});
+test('navigation and explicit sign-out still end a paused account',()=>{
+ const h=fixture();signIn(h);h.api.pause();h.api.suspend();assert.equal(h.api.snapshot().actor,null);assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.events.filter(e=>e.type==='contributions-session-ended').length,1);
+ signIn(h);h.api.pause();h.window.dispatchEvent({type:'contributions-session-ended',detail:{signedOut:true}});assert.equal(h.api.snapshot().status,'signed_out');assert.equal(h.api.snapshot().actor,null);assert.ok(h.saved.has('hauntologies-signed-out:actor-a'));
 });
 test('dynamic controls and programmatic click/submit attempts remain blocked while signed out',()=>{
  const h=fixture();const dynamic={hidden:false};h.controls.push(dynamic);h.observe();assert.equal(dynamic.hidden,true);
@@ -86,6 +96,31 @@ test('focus/pageshow bursts coalesce one account check; periodic checks do not e
  h.node('accountDialog').open=true;h.answer(h.requests[0],{error:'sign_in_required'},401);await h.settle();
  const form=h.node('accountActions').children;assert.ok(form.length);const existing=h.node('accountActions').children;
  h.intervals[0]();h.documentListeners.visibilitychange();await h.settle();assert.equal(h.requests.length,1);assert.equal(h.node('accountActions').children,existing);
+});
+test('tab visibility keeps the same session and open feed until a fresh check succeeds',async()=>{
+ const h=accountFixture();h.answer(h.requests[0],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ const feed=h.node('publishedEditsFeed');feed.open=true;feed.hidden=false;const ended=()=>h.events.filter(e=>e.type==='contributions-session-ended').length;
+ h.document.hidden=true;h.document.visibilityState='hidden';h.documentListeners.visibilitychange();assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.api.snapshot().actor,'actor-a');assert.equal(feed.open,true);assert.equal(feed.hidden,true);assert.equal(ended(),0);
+ h.window.dispatchEvent({type:'focus'});assert.equal(h.requests.length,1,'focus on a hidden tab does not start a session check');
+ h.document.hidden=false;h.document.visibilityState='visible';h.documentListeners.visibilitychange();assert.equal(h.requests.length,2);h.answer(h.requests[1],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ assert.equal(h.api.snapshot().status,'signed_in');assert.equal(feed.open,true);assert.equal(feed.hidden,false);assert.equal(ended(),0);
+});
+test('a stale pre-hide session answer cannot restore the wrong account after a tab switch',async()=>{
+ const h=accountFixture();h.answer(h.requests[0],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ h.window.dispatchEvent({type:'focus'});assert.equal(h.requests.length,2);
+ h.document.hidden=true;h.document.visibilityState='hidden';h.documentListeners.visibilitychange();
+ h.document.hidden=false;h.document.visibilityState='visible';h.documentListeners.visibilitychange();assert.equal(h.requests.length,3);
+ h.answer(h.requests[2],{actor_id:'actor-b',password_required:false,email:'other@example.test'});await h.settle();
+ h.answer(h.requests[1],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ assert.equal(h.api.snapshot().actor,'actor-b');assert.equal(h.events.filter(e=>e.type==='contributions-session-ended').length,1);
+});
+test('a temporary session-check failure keeps the draft paused until verification can retry',async()=>{
+ const h=accountFixture();h.answer(h.requests[0],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ h.document.hidden=true;h.document.visibilityState='hidden';h.documentListeners.visibilitychange();
+ h.document.hidden=false;h.document.visibilityState='visible';h.documentListeners.visibilitychange();
+ h.answer(h.requests[1],{error:'unavailable'},503);await h.settle();assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.api.snapshot().actor,'actor-a');assert.equal(h.api.canContribute(),false);
+ h.window.dispatchEvent({type:'focus'});assert.equal(h.requests.length,3);h.answer(h.requests[2],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ assert.equal(h.api.snapshot().status,'signed_in');assert.equal(h.events.filter(e=>e.type==='contributions-session-ended').length,0);
 });
 test('signin starts a fresh check and ignores an older in-flight anonymous result',async()=>{
  const h=accountFixture();h.node('accountDialog').open=true;h.answer(h.requests[0],{error:'sign_in_required'},401);await h.settle();

@@ -312,7 +312,7 @@
   });
   function hidePrivateEditor(){editorGeneration++;if(current)current.lookup++;current=null;fieldsRoot.replaceChildren();message.value='';byId('recordPublicMoniker').value='';previewRoot.hidden=true;byId('recordEditorDiff').replaceChildren();byId('recordEditorPreviewMode').textContent='';submit.disabled=true;byId('recordEditorReceipt').replaceChildren();status('');if(dialog.open)dialog.close();}
   window.addEventListener('contributions-session-ended',hidePrivateEditor);
-  window.addEventListener('focus',async()=>{if(current){const state=current;try{const session=await api('/session');if(current===state&&session.actor_id!==state.actor_id)hidePrivateEditor();}catch{if(current===state)hidePrivateEditor();}}});
+  window.addEventListener('focus',async()=>{if(current&&window.HauntologiesAccount?.canContribute()){const state=current,account=window.HauntologiesAccount.snapshot();try{const session=await api('/session');if(current===state&&window.HauntologiesAccount.isCurrent(account)&&session.actor_id!==state.actor_id)hidePrivateEditor();}catch{if(current===state&&window.HauntologiesAccount.isCurrent(account))hidePrivateEditor();}}});
   byId('recordPublicMoniker').addEventListener('input',()=>{if(current){current.moniker=byId('recordPublicMoniker').value;try{localStorage.setItem('hauntologies-public-moniker:'+current.actor_id,JSON.stringify({label:current.moniker}));}catch{}changed();}});
   message.addEventListener('input',()=>{if(current){current.message=message.value;changed();}});
   form.addEventListener('submit',preview);submit.addEventListener('click',send);
