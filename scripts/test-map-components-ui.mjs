@@ -51,11 +51,12 @@ try {
   checks.push('200% content zoom fits without horizontal panel overflow');
   await page.locator('#closeResearch').click();await page.locator('#toolsButton').click();
   const rows=page.locator('#toolsMenu > :is(button,a):visible');
-  assert.deepEqual(await rows.allTextContents(),['Edit','Tasks','Contributors']);
+  assert.deepEqual(await rows.allTextContents(),['Edit','Tasks','Activity','Contributors']);
   const rowBoxes=await rows.evaluateAll(nodes=>nodes.map(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return{width:r.width,height:r.height,font:s.font,padding:s.padding};}));
-  assert.ok(rowBoxes.every(r=>r.height>=44));assert.deepEqual(rowBoxes[0],rowBoxes[1]);assert.deepEqual(rowBoxes[1],rowBoxes[2]);
+  assert.ok(rowBoxes.every(r=>r.height>=44));assert.deepEqual(rowBoxes[0],rowBoxes[1]);assert.deepEqual(rowBoxes[1],rowBoxes[2]);assert.deepEqual(rowBoxes[2],rowBoxes[3]);
   await page.screenshot({path:out+'/menu-desktop.png',fullPage:true});
   await page.locator('#submitTool').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'tasksTool');
+  await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'activityButton');
   await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'contributorsButton');
   await page.keyboard.press('Escape');assert.equal(await page.locator('#toolsMenu').isVisible(),false);
   checks.push('menu rows match, include the Contributors link and support keyboard navigation');
