@@ -18,6 +18,14 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       } catch { return new Response('Invalid path',{status:400}); }
       path=path.replace(/\/+/g,'/').toLowerCase();
       const mapEnabled = mapAccountsReady(env);
+      // Exact, read-only public projections. Their handler validates the query,
+      // bounds the read and emits its own allowlist without session information.
+      if (['/api/contributors-summary','/api/place-completeness'].includes(rawPath)) {
+        if (!['GET','HEAD'].includes(request.method)) return privateJson({error:'method_not_allowed'},405);
+        const headers = stripIdentityHeaders(request);
+        headers.delete('cookie');
+        return handler.fetch(new Request(request, {headers}), env, ctx);
+      }
       if (rawPath === '/api/registration-policy' && ['GET','HEAD'].includes(request.method)) {
         const response = privateJson({ restricted: registrationRestricted(env) });
         return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
