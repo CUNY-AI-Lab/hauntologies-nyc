@@ -41,7 +41,7 @@ try{
  }
  await page.setViewportSize({width:1440,height:1000});
  await page.locator('#placeSearch').fill('Synthetic Lantern');await placeLoaded();
- await page.locator('#placeInspector').getByRole('link',{name:'History',exact:true}).click();await page.locator('.place-history[open] .history-entry').first().waitFor();await page.locator('.place-history[open] .history-entry summary').first().click();assert.match(await page.locator('.place-history[open]').innerText(),/Night Owl/);checks.push('History URL resolves the selected public place');
+ await page.locator('#placeInspector').getByRole('link',{name:'History',exact:true}).click();await page.locator('.place-history[open] .history-entry').first().waitFor();assert.equal(await page.locator('.place-history[open] .history-entry summary').first().innerText(),'Night Owl');await page.locator('.place-history[open] .history-entry summary').first().click();assert.match(await page.locator('.place-history[open]').innerText(),/Night Owl/);checks.push('History URL resolves the selected public place');
  await page.goto(base+'/contributors');await loaded();await page.locator('#placeSearch').fill('Synthetic Lantern');await placeLoaded();
  await page.locator('#placeInspector').getByRole('link',{name:'Edit',exact:true}).click();await page.locator('#accountDialog[open]').waitFor();
  await page.locator('#accountDialog').getByLabel('Email',{exact:true}).fill('contributor@local.test');
@@ -72,7 +72,7 @@ try{
  await page.locator('#toolsButton').click();await page.locator('#contributorsButton').click();await loaded();checks.push('Contribute menu orders Edit, Tasks, Activity, Contributors; existing form and tasks work');
  await api('/api/auth/sign-out',{});
  await page.goto(base+'/activity');await page.getByText('4 public direct publications.',{exact:true}).waitFor();
- assert.equal(await page.locator('#activityList li').count(),4);assert.ok(!(await page.locator('body').innerText()).includes('@local.test'));
+ assert.equal(await page.locator('#activityList li').count(),4);assert.ok((await page.locator('.activity-action').allTextContents()).every(text=>!text.endsWith('.')&&!text.includes('added a note')));assert.ok((await page.locator('.activity-action').allTextContents()).includes('Night Owl updated a place'));assert.ok(!(await page.locator('body').innerText()).includes('@local.test'));
  checks.push('Activity is public while signed out and uses four real synthetic publication events');
  for(const [width,height] of [[1440,1000],[390,844],[320,740]]){
   await page.setViewportSize({width,height});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:out+'/activity-'+width+'.png',fullPage:true});
