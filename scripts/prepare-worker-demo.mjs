@@ -34,7 +34,7 @@ await fs.writeFile(new URL('../dist/server/wrangler.demo.json',import.meta.url),
 // These public handlers are bundled through server/runtime.ts by Vinext. Keep
 // their browser assets in the no-bundle release and verify the shipped modules
 // with tests/contributors-prepared.runtime.test.mjs (no production connection).
-for (const asset of ['contributor-page.js','contributor-page.css','place-link.js']) {
+for (const asset of ['activity.js','activity.css','contributor-page.js','contributor-page.css','place-link.js']) {
   await fs.access(new URL('../dist/client/'+asset,import.meta.url));
 }
 console.log('Prepared hauntologies-nyc with DB binding and registration; contribution/review APIs blocked, public and preview routes disabled.');

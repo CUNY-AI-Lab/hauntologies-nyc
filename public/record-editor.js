@@ -100,6 +100,10 @@
     if(Object.hasOwn(state.rawValues,field.key))control.value=state.rawValues[field.key];
     if(state.proposedValues?.has(field.key)&&!state.proposedDisplays.has(field.key))state.proposedDisplays.set(field.key,control.value);
     state.controls.set(field.key,control);label.append(control);wrap.append(label);
+    if(field.key==='image_alt'){
+      const help=node('p','Describe what is visible in this image. Automatic descriptions are unavailable; place titles and captions are not used as substitutes.');
+      help.id=control.id+'-help';help.className='field-hint';control.setAttribute('aria-describedby',help.id);wrap.append(help);
+    }
     let viewLink;
     if(field.type==='url'){
       viewLink=node('a',field.group==='Image'?'View image source':'View source');viewLink.className='record-edit-link';viewLink.target='_blank';viewLink.rel='noopener noreferrer';wrap.append(viewLink);

@@ -20,7 +20,7 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       const mapEnabled = mapAccountsReady(env);
       // Exact, read-only public projections. Their handler validates the query,
       // bounds the read and emits its own allowlist without session information.
-      if (['/api/contributors-summary','/api/place-completeness','/api/public-image'].includes(rawPath)) {
+      if (['/api/activity','/api/contributors-summary','/api/place-completeness','/api/public-image'].includes(rawPath)) {
         if (!['GET','HEAD'].includes(request.method)) return privateJson({error:'method_not_allowed'},405);
         const headers = stripIdentityHeaders(request);
         headers.delete('cookie');

@@ -22,7 +22,7 @@ export function handleRequest(request:Request){
   const e=env as Record<string,any>;
   const geography={boundaries,gazetteer};
   if(new URL(request.url).pathname==='/api/public-image')return handlePublicImage(request,e.DB);
-  if (['/api/contributors-summary', '/api/place-completeness'].includes(new URL(request.url).pathname)) {
+  if (['/api/activity','/api/contributors-summary', '/api/place-completeness'].includes(new URL(request.url).pathname)) {
     return handlePublicContributions(request, { db: e.DB, staticRecords });
   }
   if(new URL(request.url).pathname.startsWith('/api/contributions/')){

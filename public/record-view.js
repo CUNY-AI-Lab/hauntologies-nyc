@@ -22,16 +22,18 @@
       ['Rights',record.rights_or_license],['Record license',record.record_license],['Rights notes',record.rights_notes]
     ]);
     if(facts.children.length)body.append(facts);
-    const photos=[...(record.image||record.image_url?[record.image||{}]:[]),...(Array.isArray(record.images)?record.images:[])];
+    const primary=record.image||record.image_url?{...(record.image||{}),url:record.image?.url||record.image_url,alt:record.image?.alt??record.image_alt,caption:record.image?.caption||record.image_caption,credit:record.image?.creator||record.image?.credit||record.image_credit,license:record.image?.license||record.image_license,sourceUrl:record.image?.sourceUrl||record.image_source_url,licenseUrl:record.image?.licenseUrl||record.image_license_url}:null;
+    const photos=[...(primary?[primary]:[]),...(Array.isArray(record.images)?record.images:[])];
     for(const photo of photos){
+    if(!photo||typeof photo!=='object')continue;
     const publishedUrl=typeof photo.url==='string'&&/^\/api\/public-image\?id=watt_[0-9a-f-]{36}$/.test(photo.url)?photo.url:null;
-    const url=publishedUrl||(photo.localUrl&&/^assets\/[A-Za-z0-9_./-]+$/.test(photo.localUrl)?photo.localUrl:safeUrl(photo.url||record.image_url));
+    const url=publishedUrl||(photo.localUrl&&/^assets\/[A-Za-z0-9_./-]+$/.test(photo.localUrl)?photo.localUrl:safeUrl(photo.url));
     if(url){
-      const figure=document.createElement('figure'),image=document.createElement('img');image.src=url;image.alt=photo.alt||record.image_alt||photo.caption||record.image_caption||record.title;image.loading='lazy';figure.append(image);
-      if(photo.caption||record.image_caption)figure.append(text('figcaption',photo.caption||record.image_caption));
-      const credit=metadata([['Image credit',photo.creator||photo.credit||record.image_credit],['Image license',photo.license||record.image_license]]);
+      const figure=document.createElement('figure'),image=document.createElement('img');image.src=url;image.alt=typeof photo.alt==='string'&&photo.alt.trim()?photo.alt:'Image description unavailable.';image.loading='lazy';figure.append(image);
+      if(photo.caption)figure.append(text('figcaption',photo.caption));
+      const credit=metadata([['Image credit',photo.creator||photo.credit],['Image license',photo.license]]);
       if(credit.children.length)figure.append(credit);
-      const sourceUrl=safeUrl(photo.sourceUrl||record.image_source_url),licenseUrl=safeUrl(photo.licenseUrl||record.image_license_url);
+      const sourceUrl=safeUrl(photo.sourceUrl),licenseUrl=safeUrl(photo.licenseUrl);
       if(sourceUrl)figure.append(link(sourceUrl,'Image source'));
       if(licenseUrl)figure.append(link(licenseUrl,'Image license'));
       body.append(figure);

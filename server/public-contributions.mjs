@@ -106,7 +106,7 @@ export function projectPublicContributions({ staticRecords = [], rows = [], now 
   if (grouped.record.length > RECORD_LIMIT || grouped.event.length > EVENT_LIMIT || grouped.legacy.length > LEGACY_LIMIT || staticRecords.length > RECORD_LIMIT) throw new Error('public_projection_limit');
   const records = new Map(staticRecords.map(record => [record.id, publicCatalogRecord(record)]));
   for (const row of grouped.record) for (const record of publicRecord(row)) records.set(record.id, record);
-  const totals = counts(), people = new Map(), seen = new Set(), added = new Set(), edited = new Set();
+  const totals = counts(), people = new Map(), seen = new Set(), added = new Set(), edited = new Set(), activityEvents = [];
   const placeActivity = new Map([...records.keys()].map(id => [id, counts()]));
   let coverageStart = null;
   let unattributed = 0, unattributedLegacy = 0;
@@ -127,6 +127,10 @@ export function projectPublicContributions({ staticRecords = [], rows = [], now 
     const credit = publicCredit(row.credit_json);
     const name = !row.roster_hidden && consent?.identity === 'moniker' && credit && typeof event.moniker === 'string' && normalized(credit) === normalized(event.moniker) ? credit : null;
     const person = personFor(row, name);
+    const title = records.get(event.record_id).title;
+    activityEvents.push({ sort_id: row.id, kind: ['create','edit','note','undo'].includes(event.kind) ? event.kind : 'publication',
+      at: typeof row.created_at === 'string' && Number.isFinite(Date.parse(row.created_at)) ? new Date(row.created_at).toISOString() : null,
+      contributor: name, place: { id: event.record_id, title: typeof title === 'string' && title.trim() ? title : 'Untitled place' } });
     if (person) { person.published++; person.place_ids.add(event.record_id); if (!person.latest || row.created_at > person.latest) person.latest = row.created_at; }
     else unattributed++;
     if (event.kind === 'create') { added.add(event.record_id); person?.addedIds.add(event.record_id); activity.added = 1; }
@@ -155,7 +159,8 @@ export function projectPublicContributions({ staticRecords = [], rows = [], now 
   const overridden = new Set(grouped.record.map(row => row.id));
   const places = [...records.values()].map(record => ({ ...placeCompleteness(record), origin: overridden.has(record.id) ? 'published' : 'base', contributions:metricsFor(placeActivity.get(record.id)) })).sort((a, b) => a.title.localeCompare(b.title, 'en-US') || a.id.localeCompare(b.id));
   const metrics = metricsFor({...totals, unique_places_edited: edited.size});
-  return { schema_version: '1.0', as_of: now, scope: 'All recorded history currently public', coverage_start: coverageStart, identity_scope: 'response', metrics, totals: { ...totals, unique_places_edited: edited.size, unattributed, unattributed_legacy: unattributedLegacy, places: places.length }, contributors, places };
+  const activity = activityEvents.sort((a,b) => (b.at || '').localeCompare(a.at || '') || a.sort_id.localeCompare(b.sort_id)).slice(0,100).map(({sort_id,...event}) => event);
+  return { schema_version: '1.0', as_of: now, scope: 'All recorded history currently public', coverage_start: coverageStart, identity_scope: 'response', metrics, totals: { ...totals, unique_places_edited: edited.size, unattributed, unattributed_legacy: unattributedLegacy, places: places.length }, contributors, places, activity };
 }
 
 export async function readPublicContributions(db, staticRecords) {
@@ -164,21 +169,22 @@ export async function readPublicContributions(db, staticRecords) {
   const projection = projectPublicContributions({ staticRecords, rows: results });
   // A public-content fingerprint fences changes between summary and detail reads.
   // Exclude response IDs/time and all private identity material from this digest.
-  const publicState = { totals:projection.totals, places:projection.places, contributors:projection.contributors.map(({id,...person})=>person).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))) };
+  const publicState = { totals:projection.totals, places:projection.places, activity:projection.activity, contributors:projection.contributors.map(({id,...person})=>person).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))) };
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(publicState)));
   projection.snapshot_token = [...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,'0')).join('');
   return projection;
 }
 
 export async function handlePublicContributions(request, { db, staticRecords }) {
-  const url = new URL(request.url), summary = url.pathname === '/api/contributors-summary';
+  const url = new URL(request.url), summary = url.pathname === '/api/contributors-summary', activity = url.pathname === '/api/activity';
   const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' };
   const respond = (body, status = 200) => request.method === 'HEAD' ? new Response(null, { status, headers }) : Response.json(body, { status, headers });
   if (!['GET', 'HEAD'].includes(request.method)) return respond({ error: 'method_not_allowed' }, 405);
-  if (summary ? url.searchParams.size : [...url.searchParams.keys()].some(key => !['place','snapshot'].includes(key)) || url.searchParams.getAll('place').length !== 1 || !idValid(url.searchParams.get('place')) || url.searchParams.getAll('snapshot').length > 1 || url.searchParams.has('snapshot') && !/^[a-f0-9]{64}$/.test(url.searchParams.get('snapshot'))) return respond({ error: 'invalid_query' }, 400);
+  if (summary || activity ? url.searchParams.size : [...url.searchParams.keys()].some(key => !['place','snapshot'].includes(key)) || url.searchParams.getAll('place').length !== 1 || !idValid(url.searchParams.get('place')) || url.searchParams.getAll('snapshot').length > 1 || url.searchParams.has('snapshot') && !/^[a-f0-9]{64}$/.test(url.searchParams.get('snapshot'))) return respond({ error: 'invalid_query' }, 400);
   try {
     const projection = await readPublicContributions(db, staticRecords);
-    if (summary) return respond({ ...projection, places: projection.places.map(({ fields, ...place }) => place) });
+    if (activity) return respond({ schema_version: '1.0', as_of: projection.as_of, scope: 'Direct publications currently public', total: projection.totals.published, limit: 100, events: projection.activity });
+    if (summary) { const { activity: omitted, ...directory } = projection; return respond({ ...directory, places: projection.places.map(({ fields, ...place }) => place) }); }
     if (url.searchParams.has('snapshot') && url.searchParams.get('snapshot') !== projection.snapshot_token) return respond({error:'public_snapshot_changed'},409);
     const place = projection.places.find(place => place.id === url.searchParams.get('place'));
     if (!place) return respond({ error: 'place_not_public' }, 404);

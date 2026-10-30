@@ -1,0 +1,17 @@
+.activity-page main { max-width:900px; }
+.activity-page .directory-header nav { display:flex; align-items:center; gap:20px; }
+.activity-page .directory-header nav a { min-height:44px; display:inline-flex; align-items:center; }
+.activity-page .directory-back { padding-left:0; }
+#activityStatus { color:var(--muted); font-size:12px; min-height:18px; margin-bottom:14px; }
+#activityList { list-style:none; margin:24px 0; padding:0; border-top:1px solid var(--line); }
+#activityList li { padding:18px 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+.activity-action { font-size:14px; line-height:1.6; margin:0 0 5px; }
+.activity-place { font-family:var(--serif); font-size:21px; line-height:1.4; }
+.activity-date { display:block; margin-top:8px; color:var(--muted); font-size:12px; }
+.activity-history { display:inline-flex; min-height:44px; align-items:center; font-size:12px; }
+#moreActivity { min-height:44px; }
+@media(max-width:480px) {
+  .activity-page .directory-header { align-items:flex-start; }
+  .activity-page .directory-brand { font-size:19px; }
+  .activity-page .directory-header nav { gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+}
