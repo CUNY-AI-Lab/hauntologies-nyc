@@ -668,7 +668,7 @@
   }
   function empty(container,message){container.replaceChildren(el('p',message,'empty'));}
   function switchView(id,focus=true){
-    const title=byId('sidecarTitle');if(title)title.textContent=({taskView:'Tasks',submissionView:'Contribute',reviewView:'Your contribution'})[id]||title.textContent;
+    const title=byId('sidecarTitle');if(title)title.textContent=({taskView:'Tasks',submissionView:'Edit',reviewView:'Your contribution'})[id]||title.textContent;
     document.querySelectorAll('.workflow-view').forEach(n=>n.hidden=n.id!==id);document.querySelectorAll('[data-workflow-view]').forEach(b=>{const active=b.dataset.workflowView===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
     if(focus)byId(id).querySelector('h3')?.focus();
   }

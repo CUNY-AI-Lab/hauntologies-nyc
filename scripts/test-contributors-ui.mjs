@@ -67,7 +67,7 @@ try{
  assert.equal(await page.locator('#toolsButton').innerText(),'Contribute');await page.locator('#toolsButton').click();
  assert.deepEqual(await page.locator('#toolsMenu > :is(button,a):visible').allTextContents(),['Edit','Tasks','Activity','Contributors']);
  await page.screenshot({path:out+'/contribute-menu.png',fullPage:true});
- await page.locator('#submitTool').click();await page.locator('#draftPanel.active').waitFor();assert.equal(await page.locator('#sidecarTitle').innerText(),'Contribute');await page.locator('#closeResearch').click();
+ await page.locator('#submitTool').click();await page.locator('#draftPanel.active').waitFor();assert.equal(await page.locator('#sidecarTitle').innerText(),'Edit');await page.locator('#closeResearch').click();
  await page.locator('#toolsButton').click();await page.locator('#tasksTool').click();await page.waitForFunction(()=>document.getElementById('sidecarTitle')?.textContent==='Tasks');await page.locator('#closeResearch').click();
  await page.locator('#toolsButton').click();await page.locator('#contributorsButton').click();await loaded();checks.push('Contribute menu orders Edit, Tasks, Activity, Contributors; existing form and tasks work');
  await api('/api/auth/sign-out',{});

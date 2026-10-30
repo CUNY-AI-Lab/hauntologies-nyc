@@ -1,0 +1,95 @@
+// Local synthetic account only. This runner never writes to production.
+import assert from 'node:assert/strict';
+import {mkdir, writeFile} from 'node:fs/promises';
+const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const base = process.env.LOCAL_MAP_URL || 'http://127.0.0.1:8798';
+if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(base)) throw Error('Synthetic localhost only');
+const browser = await chromium.launch({headless:true, ...(process.env.BROWSER_EXECUTABLE ? {executablePath:process.env.BROWSER_EXECUTABLE} : {})});
+const context = await browser.newContext({viewport:{width:1440,height:1000}, reducedMotion:'reduce'});
+const page = await context.newPage(), errors = [], checks = [], out = 'output/playwright/map-components';
+await mkdir(out, {recursive:true});
+page.on('pageerror', error => errors.push(error.message));
+await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll('#casePanel, #accountDialog')].filter(e=>e.getClientRects().length).every(e=>e.scrollWidth<=e.clientWidth+1)), 'no horizontal overflow');
+const box = locator => locator.boundingBox();
+try {
+  const login = await context.request.post(base+'/api/auth/sign-in', {data:{email:'contributor@local.test',password:'haunted-local-only'}, headers:{origin:base}});
+  assert.ok(login.ok());
+  await page.goto(base);
+  await page.waitForFunction(() => window.HauntologiesAccount?.canContribute() && sourceInventory?.records?.length);
+  const place = await page.evaluate(() => {const r=sourceInventory.records.find(r=>r.title.includes('Parkchester General')); if(!r)throw Error('Static acceptance place unavailable'); selectRecord(r); return {id:r.id,title:r.title};});
+  const card = page.locator('.place-card').filter({has:page.locator('[data-record-id="'+place.id+'"]')});
+  await card.waitFor();
+  const edit = card.locator('.place-edit'), history = card.locator('.place-heading .textbutton');
+  let [a,b] = await Promise.all([box(edit),box(history)]);
+  assert.equal(a.y,b.y); assert.equal(a.height,b.height);
+  const controlStyles=await page.evaluate(id=>[...document.querySelectorAll('.place-card[data-place-id="'+id+'"] .place-heading :is(.place-edit,.textbutton)')].map(e=>{const s=getComputedStyle(e);return [s.font,s.padding,s.border,s.textDecorationLine];}),place.id);
+  assert.deepEqual(controlStyles[0],controlStyles[1]);
+  checks.push('Edit and History share a baseline, type, padding and control height');
+  await history.click();await card.locator('.place-history[open]').waitFor();
+  await card.getByText('No published changes yet.',{exact:true}).waitFor();
+  const disclosure = card.locator('.place-history > summary');
+  assert.equal((await box(disclosure)).x+14,a.x);
+  const linkBoxes=await card.locator('.place-actions a').evaluateAll(nodes=>nodes.map(e=>({height:e.getBoundingClientRect().height,href:e.href})));
+  assert.ok(linkBoxes.length>=1);assert.ok(linkBoxes.every(link=>link.height===a.height && /^https?:/.test(link.href)));
+  await page.screenshot({path:out+'/place-desktop.png',fullPage:true});
+  checks.push('History loads, aligns with card content and retains working map/source URLs');
+  await edit.click();await page.locator('#recordEditorDialog[open]').waitFor();
+  assert.equal(await page.locator('#record-edit-title').inputValue(),place.title);
+  await page.keyboard.press('Escape');await page.locator('#recordEditorDialog').waitFor({state:'hidden'});
+  checks.push('Edit still opens the selected record and Escape closes the editor');
+  for(const [width,height] of [[390,844],[320,740],[844,390]]) {
+    await page.setViewportSize({width,height});await card.locator('.place-select').scrollIntoViewIfNeeded();
+    await noOverflow();
+    if(width<=760)for(const control of [edit,history,card.locator('.place-contribute')])assert.ok((await box(control)).height>=44);
+    await page.screenshot({path:out+'/place-'+width+'.png',fullPage:true});
+  }
+  checks.push('390px, 320px and landscape fit; phone actions have 44px touch targets');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.evaluate(()=>document.documentElement.style.zoom='2');await noOverflow();
+  await page.screenshot({path:out+'/place-zoom-200.png',fullPage:true});await page.evaluate(()=>document.documentElement.style.zoom='');
+  checks.push('200% content zoom fits without horizontal panel overflow');
+  await page.locator('#closeResearch').click();await page.locator('#toolsButton').click();
+  const rows=page.locator('#toolsMenu > :is(button,a):visible');
+  assert.deepEqual(await rows.allTextContents(),['Edit','Tasks','Contributors']);
+  const rowBoxes=await rows.evaluateAll(nodes=>nodes.map(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return{width:r.width,height:r.height,font:s.font,padding:s.padding};}));
+  assert.ok(rowBoxes.every(r=>r.height>=44));assert.deepEqual(rowBoxes[0],rowBoxes[1]);assert.deepEqual(rowBoxes[1],rowBoxes[2]);
+  await page.screenshot({path:out+'/menu-desktop.png',fullPage:true});
+  await page.locator('#submitTool').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'tasksTool');
+  await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'contributorsButton');
+  await page.keyboard.press('Escape');assert.equal(await page.locator('#toolsMenu').isVisible(),false);
+  checks.push('menu rows match, include the Contributors link and support keyboard navigation');
+  await page.locator('#toolsButton').click();await page.locator('#submitTool').click();
+  await page.waitForFunction(()=>document.getElementById('sidecarTitle').textContent==='Edit');
+  assert.equal(await page.locator('#sidecarTitle').innerText(),'Edit');
+  assert.equal(await page.locator('#toolsButton').innerText(),'Contribute');
+  assert.equal(await page.locator('#contributionPlaceHint').innerText(),'Click an existing location to edit, or pin a new place.');
+  await page.locator('#contributionPlace').focus();
+  await page.getByRole('option',{name:/Click an existing location to edit/}).waitFor();
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:out+'/edit-panel-390.png',fullPage:true});
+  await page.locator('#closeResearch').click();
+  checks.push('inlaid panel and its accessible headings say Edit; existing-location guidance is visible; menu label remains Contribute');
+  await page.locator('#accountButton').click();await page.locator('#accountDialog[open]').waitFor();
+  await page.waitForFunction(()=>!document.getElementById('accountContributions').textContent.includes('Loading'));
+  await page.locator('#accountRegistrationSection > details > summary').click();
+  assert.equal(await page.locator('#accountEventLink').getAttribute('href'),'/register');
+  for(const [width,height] of [[1440,1000],[390,844],[320,740]]) {
+    await page.setViewportSize({width,height});await noOverflow();
+    assert.ok((await box(page.locator('#accountEventLink'))).height>=44);
+    await page.screenshot({path:out+'/account-'+width+'.png',fullPage:true});
+  }
+  await page.locator('#openOwnEdits').click();await page.locator('#ownEditsDialog[open]').waitFor();await page.keyboard.press('Escape');
+  checks.push('Account registration and Edits remain usable with consistent controls at desktop and phone widths');
+  await context.request.post(base+'/api/auth/sign-out',{data:{},headers:{origin:base}});
+  await page.goto(base);await page.locator('#accountButton').getByText('Sign in',{exact:true}).waitFor();
+  const pumpkin=page.getByRole('link',{name:'Contributors',exact:true}).filter({has:page.locator('svg')});
+  assert.equal(await pumpkin.count(),1);assert.equal(await pumpkin.getAttribute('href'),'/contributors');
+  assert.ok((await box(pumpkin)).height>=44);await pumpkin.focus();await page.keyboard.press('Enter');
+  await page.waitForURL(base+'/contributors');await page.getByRole('heading',{name:'Contributors',exact:true}).waitFor();
+  checks.push('pumpkin is a named, keyboard-accessible public Contributors link while signed out');
+  assert.deepEqual(errors,[]);
+  await writeFile(out+'/results.json',JSON.stringify({checks,errors,synthetic_only:true},null,2));
+  console.log(JSON.stringify({checks,errors},null,2));
+} catch(error) { await page.screenshot({path:out+'/failure.png',fullPage:true});throw error; }
+finally { await browser.close(); }

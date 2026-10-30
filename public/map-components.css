@@ -1,0 +1,148 @@
+/* Shared control rhythm for place cards, participation menus and account details. */
+:root {
+  --map-control-edge: #6d6455;
+  --map-control-fill: #151613;
+  --map-control-hover: #29271f;
+}
+
+#contributorsPageLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  color: #dfb780;
+  text-decoration: none;
+}
+#contributorsPageLink svg { width: 27px; height: 27px; }
+#contributorsPageLink .lantern-shell { fill: #483016; }
+#contributorsPageLink .lantern-eyes { fill: #ffdf77; stroke: #ffdf77; }
+#contributorsPageLink .lantern-mouth { fill: #eeb353; stroke: #eeb353; }
+#contributorsPageLink:hover { color: #ffdfaa; background: #27231c; }
+
+#toolsMenu { padding: 4px; }
+#toolsMenu > :is(button, a) {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 400 13px/1.4 Arial, Helvetica, sans-serif;
+  text-align: left;
+  text-decoration: none;
+}
+#toolsMenu > :is(button, a):hover { background: var(--map-control-hover); }
+#toolsMenu > :is(button, a)::before,
+#toolsMenu > :is(button, a)::after { content: none; }
+
+#researchSidecar .recordlist .place-card { border-radius: 0; }
+#researchSidecar .recordlist .place-heading {
+  grid-template-columns: max-content max-content 1fr;
+  gap: 0 8px;
+  padding: 0 14px 12px;
+}
+#researchSidecar .recordlist .place-heading .place-select {
+  margin: 0;
+  padding: 14px 0 10px;
+}
+#researchSidecar .recordlist .place-card .place-heading :is(.place-edit, .textbutton),
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  grid-column: auto;
+  width: auto;
+  min-width: 64px;
+  min-height: 36px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--map-control-edge);
+  background: var(--map-control-fill);
+  color: var(--sun);
+  font: 400 12px/1.4 Arial, Helvetica, sans-serif;
+  text-decoration: none;
+}
+#researchSidecar .recordlist .place-card .place-heading :is(.place-edit, .textbutton):hover,
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute):hover {
+  border-color: #b69a76;
+  background: var(--map-control-hover);
+  color: var(--ink);
+}
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute)::before,
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute)::after { content: none; }
+#casePanel .place-card .place-facts { padding: 0 14px 12px; }
+#casePanel .place-card .place-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0 14px 14px;
+}
+#casePanel .place-card .place-actions .place-links { display: contents; }
+#casePanel .place-card .place-actions:empty { display: none; }
+
+#casePanel .place-card > :is(.place-history, .place-notes, .place-record) {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+#casePanel .place-card > :is(.place-history, .place-notes, .place-record) > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--ink);
+  font: 400 13px/1.4 Arial, Helvetica, sans-serif;
+}
+#casePanel .place-card > :is(.place-history, .place-notes, .place-record) > summary:hover { background: #ffffff05; }
+#casePanel .place-card > :is(.place-history, .place-notes, .place-record) > :not(summary) {
+  margin: 0;
+  padding: 0 14px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+#casePanel .place-card .place-history > :empty { display: none; }
+#casePanel .place-card .history-entry > summary { padding-block: 10px; }
+
+#accountDialog .registration-content { gap: 16px; padding: 18px; }
+#accountDialog #accountStatus { font-size: 14px; line-height: 1.5; }
+#accountActions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+#accountDialog :is(#accountActions > button, #accountEventLink, #openOwnEdits) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--map-control-edge);
+  background: var(--map-control-fill);
+  color: var(--ink);
+  font: 400 13px/1.4 Arial, Helvetica, sans-serif;
+  text-decoration: none;
+}
+#accountDialog :is(#accountActions > button, #accountEventLink, #openOwnEdits):hover { background: var(--map-control-hover); border-color: #b69a76; }
+#accountDialog :is(#accountActions > button, #openOwnEdits)::after { content: none; }
+#accountRegistrationSection > details { margin: 0 0 16px; padding: 0 0 16px; border-block: 1px solid var(--line); }
+#accountRegistrationSection > details:not([open]) { padding-bottom: 0; }
+#accountRegistrationSection > details > summary { padding: 12px 0; font-size: 13px; }
+#accountRegistration { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+#accountDialog .account-edits-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+#accountDialog #accountContributions { min-width: 0; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+
+#contributorsPageLink:focus-visible,
+#toolsMenu > :is(button, a):focus-visible,
+#researchSidecar .place-card a:focus-visible,
+#accountDialog :is(a, button, summary):focus-visible { outline: 2px solid #ffd39e; outline-offset: 3px; }
+
+@media (max-width: 760px), (pointer: coarse) {
+  #researchSidecar .recordlist .place-card .place-heading :is(.place-edit, .textbutton),
+  #researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute) { min-height: 44px; }
+}
