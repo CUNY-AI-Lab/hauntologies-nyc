@@ -33,9 +33,10 @@ test('prepared no-bundle Worker serves page, shipped assets and both APIs on syn
    if(trigger?/END\s*;/i.test(line):/;\s*$/.test(line)){if(statement.trim())await db.prepare(statement.trim()).run();statement='';trigger=false;}
   }
  }
- const fetch=route=>worker.dispatchFetch('https://map.test'+route);
- const page=await fetch('/contributors');assert.equal(page.status,200);assert.match(await page.text(),/peopleList/);
- for(const asset of ['activity.js','activity.css','contributor-page.js','contributor-page.css','place-link.js']){
+ const fetch=route=>worker.dispatchFetch('https://map.test'+route,{redirect:'manual'});
+ const page=await fetch('/contributors');assert.equal(page.status,302);assert.equal(page.headers.get('location'),'/#contributors');
+ const map=await fetch('/');assert.equal(map.status,200);assert.match(await map.text(),/contributorsDropdown/);
+ for(const asset of ['activity.js','activity.css','contributors-dropdown.js','contributor-page.css','place-link.js']){
   const response=await fetch('/'+asset);assert.equal(response.status,200,asset);assert.equal(await response.text(),await readFile(path.join(client,asset),'utf8'));
  }
  const activityPage=await fetch('/activity');assert.equal(activityPage.status,200);assert.match(await activityPage.text(),/activityList/);

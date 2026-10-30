@@ -8,9 +8,10 @@ test('main Contribute menu uses Edit, Tasks, Activity, Contributors',()=>{
  const menu=html.slice(html.indexOf('<nav id="toolsMenu"'),html.indexOf('</nav>',html.indexOf('<nav id="toolsMenu"')));
  const visible=[...menu.matchAll(/<(button|a)\b([^>]+)>([^<]*)<\/(?:button|a)>/g)].filter(match=>!/(?:^|\s)hidden(?:\s|$)/.test(match[2])).map(match=>match[3]);
  assert.deepEqual(visible,['Edit','Tasks','Activity','Contributors']);
- assert.match(menu,/<a id="contributorsButton"[^>]+href="\/contributors">/);
- assert.ok(!html.includes('src="contributors.js"'),'old popup must not replace the new page link');
- assert.match(html,/<a id="contributorsPageLink" href="\/contributors"[^>]*>/,'signed-out users retain a normal public link');
+ assert.match(menu,/<button id="contributorsButton"[^>]+aria-controls="contributorsDropdown">/);
+ assert.ok(!html.includes('src="contributors.js"'),'legacy modal remains unmounted');
+ assert.match(html,/<details id="contributorsDropdown"[^>]*><summary id="contributorsToggle">/,'signed-out users retain the public dropdown');
+ assert.ok(html.includes('src="contributors-dropdown.js"'));
 });
 test('place-specific editing and existing Edit/Tasks handlers retain their actions',()=>{
  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),contributions=readFileSync(new URL('../public/contributions.js',import.meta.url),'utf8');

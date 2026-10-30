@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const byId=id=>document.getElementById(id), list=byId('activityList'), status=byId('activityStatus');
-  const verbs={create:'added a place',edit:'edited a place',note:'added a note',undo:'published an undo',publication:'published a contribution'};
+  const verbs={create:'added a place',edit:'edited a place',note:'updated a place',undo:'published an undo',publication:'published a contribution'};
   let events=[], shown=0, generation=0;
   const node=(tag,text,className)=>{const element=document.createElement(tag);if(text!==undefined)element.textContent=text;if(className)element.className=className;return element;};
   function valid(data) {
@@ -13,7 +13,7 @@
   function more() {
     const previous=shown, moveFocus=document.activeElement===byId('moreActivity'); shown=Math.min(shown+20,events.length);
     for(const event of events.slice(previous,shown)) {
-      const item=node('li'), action=node('p',(event.contributor || 'Unattributed contributor')+' '+verbs[event.kind]+'.','activity-action');
+      const item=node('li'), action=node('p',(event.contributor || 'Unattributed contributor')+' '+verbs[event.kind],'activity-action');
       const place=node('a',event.place.title,'activity-place');place.href='/?place='+encodeURIComponent(event.place.id);
       const time=node(event.at?'time':'span',event.at?new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}).format(new Date(event.at))+' UTC':'Publication date unavailable','activity-date');
       if(event.at)time.dateTime=event.at;

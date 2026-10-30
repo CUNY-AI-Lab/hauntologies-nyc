@@ -16,7 +16,7 @@ async function openUndo(f){
  await page.reload();await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
  if(await page.locator('#mapControlsButton').isVisible())await page.locator('#mapControlsButton').click();await page.locator('#filtersButton').click();await page.locator('#search').fill(f.title);await page.locator('#mapToolsButton').click();
  const card=page.locator('.place-card[data-place-id="'+f.id+'"]');await card.waitFor();await card.getByRole('button',{name:'History',exact:true}).click();
- const entry=card.locator('.history-entry').filter({has:page.getByText(f.summary,{exact:true})});await entry.locator(':scope > summary').click();await entry.getByRole('button',{name:'Undo',exact:true}).click();
+ const items=(await api('/api/place-history?id='+f.id)).items,index=items.findIndex(item=>item.id===f.event);assert.ok(index>=0);const entry=card.locator('.history-entry').nth(index);await entry.locator(':scope > summary').click();await entry.getByRole('button',{name:'Undo',exact:true}).click();
  const form=entry.locator('form');await form.getByLabel('Public username').fill('night.owl');await form.getByLabel('Describe your change').fill('Undo synthetic note');return form;
 }
 const submit=async(form,name='Publish undo')=>{const response=page.waitForResponse(r=>r.url().endsWith('/api/contributions/undo'));await form.getByRole('button',{name,exact:true}).click();return response;};
