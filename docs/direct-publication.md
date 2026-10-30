@@ -4,7 +4,7 @@ The behavior below follows the source on `main`. The live map can trail `main` u
 
 Registered contributors who can currently edit the map publish new point places, notes on existing places, and typed field/source edits directly. The form requires a chosen public username and a brief change description. Email and account/event names are never attribution defaults. The chosen username is remembered on the current device per account; this adds no account/profile schema or signup requirement. There is no new attribution opt-out toggle.
 
-Place cards keep Edit and History together. Core content remains visible; History, notes and additional Record information are collapsed below it. History loads the public changes on demand with username, time, description and labeled minus/plus values. Undo publishes an inverse revision against the current version. It preserves later unrelated changes and rejects overlapping ones. Inverses refer to active predecessor changes rather than copying their historical values, so later revocation cannot resurrect withdrawn text or sources through Undo.
+Place cards keep Edit and History together. Core content remains visible; History, notes and additional Record information are collapsed below it. History loads the public changes on demand, each headed by its username with the time and labeled minus/plus values. Undo publishes an inverse revision against the current version. It preserves later unrelated changes and rejects overlapping ones. Inverses refer to active predecessor changes rather than copying their historical values, so later revocation cannot resurrect withdrawn text or sources through Undo.
 
 ## Persistence and ownership
 

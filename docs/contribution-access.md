@@ -41,7 +41,7 @@ To add images, open **Images** and choose up to three JPEG, PNG or WebP files. E
 
 Choose a username or moniker, not an email address. The username appears publicly with your contribution, including in the place's History and Contributors. The form remembers the last username on this device for the signed-in account. It does not use your account email or event registration name as a default, and the direct-publication flow has no separate name opt-out. Do not put private information in the username, description, facts or sources you publish.
 
-Open a place card and choose **History** to see its published changes, usernames, times and descriptions. Expand a change to compare its earlier and later values. Signed-in contributors can choose **Undo**, enter a public username and description, and publish an inverse change. Undo preserves unrelated later changes; if a later change overlaps, reload History and compare before deciding what to do.
+Open a place card and choose **History** to see its published changes, each headed by the contributor's username with its time. Expand a change to compare its earlier and later values. Signed-in contributors can choose **Undo**, enter a public username and description, and publish an inverse change. Undo preserves unrelated later changes; if a later change overlaps, reload History and compare before deciding what to do.
 
 ## Your saved work and removal
 
