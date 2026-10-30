@@ -10,7 +10,7 @@ const out='output/playwright/guide-integration';await mkdir(out,{recursive:true}
 await context.route('**/*',route=>new URL(route.request().url()).origin===base?route.continue():route.abort());
 const noOverflow=async()=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&[...document.querySelectorAll('#taskView,.directory-header')].filter(e=>e.getClientRects().length).every(e=>e.scrollWidth<=e.clientWidth+1)),'no horizontal overflow');
 try{
- await page.goto(base);await page.locator('#guidePageLink').click();await page.getByRole('heading',{name:'Guide to the map',exact:true}).waitFor();assert.equal(new URL(page.url()).pathname,'/guide');checks.push('signed-out title-card Guide link reaches the separate page');
+ await page.goto(base);assert.equal(await page.locator('#guidePageLink').count(),0);await page.goto(base+'/guide');await page.getByRole('heading',{name:'Guide to the map',exact:true}).waitFor();checks.push('Guide remains a public separate page without a duplicate title-card link');
  assert.equal(await page.locator('.guide-step').count(),7);assert.equal(await page.locator('.guide-meta').innerText(),'Oct 30, 2026 · @Zach M');
  for(const [width,height]of [[1440,1000],[390,844],[320,740],[844,390],[640,450]]){
   await page.setViewportSize({width,height});await noOverflow();

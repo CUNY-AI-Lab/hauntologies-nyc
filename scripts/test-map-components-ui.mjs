@@ -106,7 +106,15 @@ try {
   await page.goto(base);await page.locator('#accountButton').getByText('Sign in',{exact:true}).waitFor();
   const pumpkin=page.locator('#contributorsToggle');
   assert.equal(await pumpkin.locator('svg').count(),1);
-  assert.ok((await box(pumpkin)).height>=44);await pumpkin.focus();await page.keyboard.press('Enter');
+  assert.equal(await pumpkin.getAttribute('aria-label'),'Contributors');
+  for(const [width,height] of [[1440,1000],[390,844],[320,740]]) {
+    await page.setViewportSize({width,height});await noOverflow();
+    const icon=await box(pumpkin.locator('svg')),target=await box(pumpkin);
+    assert.equal(icon.width,28);assert.equal(icon.height,28);assert.ok(target.width>=44&&target.height>=44);
+    assert.equal(await page.locator('#guidePageLink').count(),0);
+    await page.screenshot({path:out+'/lantern-'+width+'.png',fullPage:true});
+  }
+  await pumpkin.focus();await page.keyboard.press('Enter');
   await page.locator('#contributorsDropdown[open]').waitFor();await page.getByRole('heading',{name:'Public contributions',exact:true}).waitFor();assert.equal(new URL(page.url()).pathname,'/');
   checks.push('pumpkin is a named, keyboard-accessible public Contributors dropdown while signed out');
   assert.deepEqual(errors,[]);

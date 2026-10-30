@@ -9,11 +9,17 @@ test('main Contribute menu uses Edit, Tasks, Activity, Contributors, Guide',()=>
  const visible=[...menu.matchAll(/<(button|a)\b([^>]+)>([^<]*)<\/(?:button|a)>/g)].filter(match=>!/(?:^|\s)hidden(?:\s|$)/.test(match[2])).map(match=>match[3]);
  assert.deepEqual(visible,['Edit','Tasks','Activity','Contributors','Guide']);
  assert.match(menu,/<a id="guideButton"[^>]+href="\/guide">Guide<\/a>/,'the guide is in the Contribute menu');
- assert.match(html,/<a id="guidePageLink" href="\/guide">Guide<\/a>/,'signed-out visitors reach the guide from the title card');
+ assert.ok(!html.includes('guidePageLink'),'Guide is not duplicated in the title card');
+ assert.equal((html.match(/href="\/guide"/g)||[]).length,1,'the map links to Guide only through Contribute');
  assert.match(menu,/<button id="contributorsButton"[^>]+aria-controls="contributorsDropdown">/);
  assert.ok(!html.includes('src="contributors.js"'),'legacy modal remains unmounted');
- assert.match(html,/<details id="contributorsDropdown"[^>]*><summary id="contributorsToggle">/,'signed-out users retain the public dropdown');
+ assert.match(html,/<details id="contributorsDropdown"[^>]*><summary id="contributorsToggle" aria-label="Contributors" title="Contributors">/,'signed-out users retain the public dropdown');
  assert.ok(html.includes('src="contributors-dropdown.js"'));
+ const toggle=html.match(/<summary id="contributorsToggle"[^>]*>([\s\S]*?)<\/summary>/)[1];
+ assert.match(toggle,/<svg[^>]+aria-hidden="true"/);
+ assert.match(toggle,/class="lantern-eyes"/);
+ assert.match(toggle,/class="lantern-mouth"/);
+ assert.ok(!toggle.includes('>Contributors<'),'the named Contributors control remains the lantern icon');
 });
 test('place-specific editing and existing Edit/Tasks handlers retain their actions',()=>{
  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),contributions=readFileSync(new URL('../public/contributions.js',import.meta.url),'utf8');

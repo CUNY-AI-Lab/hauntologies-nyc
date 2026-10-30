@@ -18,10 +18,12 @@
 }
 
 /* A compact public list anchored to the map title. */
-#contributorsToggle svg { width:22px; height:22px; flex:none; }
+#contributorsToggle { width:44px; min-width:44px; min-height:44px; justify-content:center; padding:8px!important; color:var(--sun); }
+#contributorsToggle svg { display:block; width:28px; height:28px; flex:none; }
+#contributorsToggle::before,#contributorsToggle::after,#contributorsToggle > .disclosure-mark { display:none; }
 #contributorsToggle .lantern-shell { fill:#483016; }
-#contributorsToggle .lantern-eyes { fill:#ffdf77; stroke:#ffdf77; }
-#contributorsToggle .lantern-mouth { fill:#eeb353; stroke:#eeb353; }
+#contributorsToggle .lantern-eyes { fill:#ffdf77; stroke:#ffdf77; stroke-width:.6; filter:drop-shadow(0 0 1.5px #ffae38); }
+#contributorsToggle .lantern-mouth { fill:#eeb353; stroke:#eeb353; stroke-width:.6; }
 #contributorsPanel { right:auto; width:320px; max-width:calc(100vw - 24px); max-height:calc(100dvh - var(--contributors-top, 240px) - 16px); overflow:auto; overscroll-behavior:contain; padding:8px 16px 14px; }
 #contributorsPanel .contributors-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 #contributorsPanel h2 { margin:0; font:600 11px/1.5 Arial,Helvetica,sans-serif; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
@@ -37,5 +39,3 @@
 #contributorsPanel .contributors-collaborators > summary { display:flex; align-items:center; min-height:44px; padding:10px 0; color:var(--ink); font:400 13px/1.5 Arial,Helvetica,sans-serif; cursor:pointer; }
 #contributorsPanel .contributors-collaborators ul { list-style:none; margin:8px 0 0; padding:0; display:grid; gap:6px; color:var(--ink); font-size:13px; }
 #contributorsPanel .contributors-builder { margin:16px 0 0; padding-top:12px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
-#guidePageLink { pointer-events:auto; display:inline-flex; align-items:center; min-height:44px; margin-right:6px; color:#e9caa1; font:400 12px/1.4 Arial,Helvetica,sans-serif; text-decoration:none; }
-#guidePageLink:hover,#guidePageLink:focus-visible { text-decoration:underline; }
