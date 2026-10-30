@@ -366,7 +366,7 @@
     }
   });
   function sourceText(){return [byId('freeformSources').value,...[...byId('extraSources').querySelectorAll('textarea')].map(input=>input.value)].filter(Boolean).join('\n\n');}
-  function draftValue(){return {version:1,place_text:byId('contributionPlace')?.value||'',object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,change_summary:byId('contributionChangeSummary').value,sources:sourceText(),attributes:attributeValues(),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
+  function draftValue(){return {version:1,place_text:byId('contributionPlace')?.value||'',object_title:byId('contributionObjectTitle').value,explanation:byId('contributionSummary').value,change_summary:byId('contributionChangeSummary').value,sources:sourceText(),attributes:attributeValues(true),place_mode:byId('contributionPlaceMode').value,record_id:openRequestedRecordId,title:openTargetLabel,geometry:revisionOriginal?.payload?.geometry??pointGeometry(),point_fields:pointFields(),revision:revisionOf?{id:revisionOf.id,revision:revisionOf.revision}:draftRevisionBlocked};}
   function saveDraft(){if(!privateActor||!isOpenForm())return;try{const value=draftValue();if(value.place_text||value.object_title||value.explanation||value.sources||value.attributes.length||value.record_id||value.point_fields.latitude||value.point_fields.longitude){value.saved_at=Date.now();localStorage.setItem(draftStorageKey,JSON.stringify(value));try{sessionStorage.removeItem(draftStorageKey);}catch{}draftNotice('Draft saved on this device at '+draftTime(value)+'.'+(stagedImages.length?' Images are not kept in drafts.':''),true);}else{forgetDraft(draftStorageKey);draftNotice('');}}catch{draftNotice('This browser is not keeping drafts. Copy your text before leaving the page.');}}
   function clearSavedDraft(request){
     try{const saved=JSON.parse(request.body.submission_json);if(saved.type!=='open_proposal')return;
@@ -442,12 +442,14 @@
     if(openRequestedRecordId&&!entries.has(openRequestedRecordId))entries.set(openRequestedRecordId,openTargetLabel||openRequestedRecordId);
     select.replaceChildren(new Option('Choose a place',''));for(const [id,title] of [...entries].sort((a,b)=>a[1].localeCompare(b[1])))select.append(new Option(title,id));select.value=openRequestedRecordId||openTargets[0]?.record_id||'';select.title=select.selectedOptions[0]?.textContent||'';
   }
-  function attributeValues(){return [...byId('contributionAttributes').children].map(row=>Object.fromEntries(['name','value'].map(key=>{const control=row.querySelector('[data-attribute='+key+']');return [key,control.value===row.originalDisplay[key]?row.originalValue[key]:control.value];})));}
+  // Ignore untouched optional facts; use the same rows for payloads and error links.
+  function attributeRows(){return [...byId('contributionAttributes').children].filter(row=>['name','value'].some(key=>row.querySelector('[data-attribute='+key+']').value.trim()));}
+  function attributeValues(includeEmpty=false){return (includeEmpty?[...byId('contributionAttributes').children]:attributeRows()).map(row=>Object.fromEntries(['name','value'].map(key=>{const control=row.querySelector('[data-attribute='+key+']');return [key,control.value===row.originalDisplay[key]?row.originalValue[key]:control.value];})));}
   function addAttribute(value={name:'',value:''}){
     const root=byId('contributionAttributes');if(root.children.length>=20)return;
-    const row=el('div',undefined,'contribution-attribute'),name=el('input'),content=el('textarea');name.type='text';name.maxLength=80;content.rows=2;content.maxLength=4000;
+    const row=el('div',undefined,'contribution-attribute'),name=el('input'),content=el('textarea');name.type='text';name.maxLength=80;name.placeholder='Opening date';content.rows=2;content.maxLength=4000;content.placeholder='1901';
     name.dataset.attribute='name';content.dataset.attribute='value';name.value=value.name;content.value=value.value;row.originalValue=structuredClone(value);row.originalDisplay={name:name.value,value:content.value};
-    const id='attribute-'+(++rowCounter);name.id=id+'-name';content.id=id+'-value';const nameLabel=el('label','Name'),valueLabel=el('label','Value');nameLabel.htmlFor=name.id;valueLabel.htmlFor=content.id;nameLabel.append(name);valueLabel.append(content);
+    const id='attribute-'+(++rowCounter);name.id=id+'-name';content.id=id+'-value';const nameLabel=el('label','Fact'),valueLabel=el('label','Detail');nameLabel.htmlFor=name.id;valueLabel.htmlFor=content.id;nameLabel.append(name);valueLabel.append(content);
     row.append(nameLabel,valueLabel,button('Remove',()=>{row.remove();byId('addContributionAttribute').disabled=false;invalidatePreview();saveDraft();},'textbutton'));root.append(row);byId('addContributionAttribute').disabled=root.children.length>=20;return name;
   }
   function chooseOpenReference(id,title=''){openTargetLoad=loadOpenReference(id,title);return openTargetLoad;}
@@ -664,7 +666,7 @@
       if(path==='change_summary')return byId('contributionChangeSummary');
       if(/^image-\d+-rights$/.test(path))return byId(path);
       if(path==='payload.geometry'||path.startsWith('payload.geometry.')||path==='targets'||path.startsWith('targets.'))return byId('contributionPlace');
-      const attribute=path.match(/^payload\.attributes\.(\d+)(?:\.(name|value))?$/);if(attribute)return byId('contributionAttributes').children[Number(attribute[1])]?.querySelector('[data-attribute="'+(attribute[2]||'name')+'"]');
+      const attribute=path.match(/^payload\.attributes\.(\d+)(?:\.(name|value))?$/);if(attribute)return attributeRows()[Number(attribute[1])]?.querySelector('[data-attribute="'+(attribute[2]||'name')+'"]');
       return null;
     }
     if(simpleFlow()!=='other'){if(path==='clarificationTarget'||path==='targets')return byId('clarificationTarget');if(['payload.text','payload.description'].includes(path))return byId('contributionSummary');if(path==='payload.geometry_basis')return simpleControl('geo_basis');if(path==='payload.geometry_status')return simpleControl('area_status');const key=path.replace(/^payload\./,'').replace(/^Entries\.0\./,'').replace(/^dates\./,'');const input=simpleControl(key);if(input)return input;if(key==='geometry'||key.startsWith('geometry.'))return simpleControl(simpleValue('area_input')==='geojson'?'geometry_json':'south');if(key==='geo_source_ref')return byId('submissionSources').querySelector('[data-row-field=role]');if(key==='sources')return byId('addSubmissionSource');}
@@ -778,7 +780,7 @@
     if(imageBatch){imageStatus('Contribution saved. Images not saved',true);return;}
     if(isOpenForm()&&byId('contributionPlaceMode').value==='existing'&&!openRequestedRecordId&&!openTargets.length)errors.push({field:'targets',message:'Choose an existing place'});
     const locationError=pointError();if(locationError)errors.push(locationError);
-    for(const [i,row] of attributes.entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
+    for(const [i,row] of attributes.entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a label for this fact, or remove it'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a detail for this fact, or remove it'});}
     if(errors.length){renderErrors(errors);return;}
     if(pointForm()&&readPoint())await window.ContributionPlace?.named();
     if(!window.HauntologiesAccount.isCurrent(account))return;

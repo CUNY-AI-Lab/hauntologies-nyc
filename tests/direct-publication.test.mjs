@@ -58,7 +58,7 @@ test('new place is immediately public with stable ID, moniker, history and no ma
  const h=harness(t),request={idempotency_key:key(),submission_json:JSON.stringify(proposal()),moniker,change_summary:'Add a place'};
  const first=ok(await call(h,'publish',request),200),again=ok(await call(h,'publish',request),200);
  assert.equal(first.submission.status,'published');assert.equal(again.reused,true);assert.deepEqual(first.receipt,again.receipt);
- const records=await publishedRecords(h.db);assert.equal(records.length,1);assert.match(records[0].id,/^place_/);assert.equal(records[0].title,'New place');assert.deepEqual(records[0].contributors,[moniker]);assert.equal(records[0].canonical_reviewed,undefined);
+ const records=await publishedRecords(h.db);assert.equal(records.length,1);assert.match(records[0].id,/^place_/);assert.equal(records[0].title,'New place');assert.deepEqual(records[0].contributors,[moniker]);assert.equal(records[0].canonical_reviewed,undefined);assert.equal(records[0].category,undefined,'a new place is not automatically attributed a claim category');assert.equal(Model.snapshot(records[0]).category,null);
  const history=await directHistory(h.db,records[0].id);assert.equal(history.items.length,1);assert.equal(history.items[0].summary,'Add a place');assert.ok(!JSON.stringify(history).includes('author'));assert.equal(count(h,'workflow_approvals'),0);assert.equal(count(h,'workflow_jobs'),0);
 });
 test('separate notes and typed source/field edits publish and preserve unrelated values',async t=>{
@@ -73,7 +73,7 @@ test('existing places accept facts or sources without a description and keep the
  const h=harness(t);
  const factTarget=await target(h),fact={...proposal('Fact'),summary:'',targets:[{record_id:factTarget.record_id,expected_version:factTarget.expected_version,expected_hash:factTarget.expected_hash}],payload:{explanation:'',attributes:[{name:'Opening date',value:'1901'}]}};
  await publish(h,fact,'author',{change_summary:'Add opening date'});
- let [record]=await publishedRecords(h.db);assert.equal(record.description,place.description);assert.deepEqual(record.notes[0].attributes,[{name:'Opening date',value:'1901'}]);assert.equal(record.notes[0].text,'');
+ let [record]=await publishedRecords(h.db);assert.equal(record.description,place.description);assert.deepEqual(record.notes[0].attributes,[{name:'Opening date',value:'1901'}]);assert.equal(record.notes[0].text,'');assert.equal(record.category,place.category,'adding a note preserves an existing category');
  const sourceTarget=await target(h),source={...proposal('Source'),targets:[{record_id:sourceTarget.record_id,expected_version:sourceTarget.expected_version,expected_hash:sourceTarget.expected_hash}],sources:[{citation:'Synthetic archive',url:'https://example.org/archive'}],payload:{}};
  delete source.summary;
  await publish(h,source,'other',{change_summary:'Add a source'});
