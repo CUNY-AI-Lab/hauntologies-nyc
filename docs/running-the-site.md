@@ -10,7 +10,7 @@ The site is a Vinext app, which is Vite with a Next.js-compatible app router, de
 
 ## Run it locally
 
-Use Node.js 22.13 or newer and install the dependencies with `npm run install:ci`. To try the map with accounts, run `npm run local`, which serves the pages and the real contribution service on SQLite at http://127.0.0.1:8790 with two synthetic accounts. `npm run dev` starts the framework development server without the account gate, so sign-in, History and the public read routes answer only through `npm run local` or a prepared Worker. Build, prepare the release configuration, lint and run the tests with the commands below, in that order.
+Use Node.js 22.13 or newer and install the dependencies with `npm run install:ci`. To try the map with accounts, run `npm run local`, which serves the pages and the real contribution service on SQLite at http://127.0.0.1:8790 with two synthetic accounts. `npm run dev` and `npm start` run the framework server without the account gate, so sign-in, History and the published-records feed answer only through `npm run local` or the prepared release Worker; the app routes `/api/activity`, `/api/contributors-summary`, `/api/place-completeness` and `/api/public-image` answer in both. Build, prepare the release configuration, lint and run the tests with the commands below, in that order.
 
 ```sh
 npm run build
@@ -19,7 +19,7 @@ npm run lint
 npm test
 ```
 
-`npm test` runs `node --test "tests/*.test.mjs"`, the same suite CI runs. Rebuild before you test after a change to `public/` or `web/`, since the prepared-runtime tests read `dist/`. Lint reports warnings without failing; CI fails on lint errors.
+`npm test` runs `node --test "tests/*.test.mjs"`, the same suite CI runs. Rebuild and prepare before you test after a change to `public/`, `web/`, `server/` or `deployment/`, since the prepared-runtime tests read `dist/`. Lint reports warnings without failing; CI fails on lint errors.
 
 Migrations under `drizzle/` from `0004` onward are written by hand, and `drizzle/meta` stops at `0002`. `npm run db:generate` therefore refuses to run instead of generating a duplicate `CREATE TABLE`; write and review a SQL migration by hand.
 
@@ -123,7 +123,7 @@ The account tests sign in with email proof, check the seven-day cookie and its d
 
 Registration tests cover admission by CUNY address or code without storing codes, durable limits on code guesses, replayed receipts and rate budgets. Direct-publication tests cover publication, guarded concurrent edits, History and Undo, owner revocation and deletion, explicit publication of supported saved work, selected public images and the revision each owner mutation names. Public projection tests cover Activity, Contributors and place details without private identifiers. Legacy-mode role and live-edit tests retain coverage of independent review, approval, verification and rollback. Gate tests confirm that encoded or repeated path separators cannot reach contribution routes, client identity headers are removed and private image downloads keep their cache protection.
 
-Seven browser acceptance scripts, `scripts/test-*.mjs`, drive Chromium through Playwright against the local server; CI does not run them. Start `npm run local -- --port 8791 --fresh` for `test-direct-ui.mjs`, `test-direct-recovery.mjs` and `test-undo-recovery.mjs`, or `npm run local -- --port 8798 --fresh` for `test-direct-controls.mjs`, `test-public-images-ui.mjs`, `test-contributors-ui.mjs` and `test-map-components-ui.mjs`, then run the script with `node`. Set `LOCAL_MAP_URL=http://127.0.0.1:<port>` to point a script at another local port. Each script refuses any address other than `127.0.0.1`, signs in only with the synthetic accounts and writes screenshots under `output/`, which Git ignores. Set `PLAYWRIGHT_MODULE` and `BROWSER_EXECUTABLE` to reuse an existing Playwright installation and browser.
+Eight browser acceptance scripts, `scripts/test-*.mjs`, drive Chromium through Playwright against the local server; CI does not run them. Start `npm run local -- --port 8791 --fresh` for `test-direct-ui.mjs`, `test-direct-recovery.mjs` and `test-undo-recovery.mjs`, or `npm run local -- --port 8798 --fresh` for `test-direct-controls.mjs`, `test-public-images-ui.mjs`, `test-contributors-ui.mjs`, `test-map-components-ui.mjs` and `test-place-card-refresh-ui.mjs`, then run the script with `node`. Set `LOCAL_MAP_URL=http://127.0.0.1:<port>` to point a script at another local port. Each script refuses any address other than `127.0.0.1`, signs in only with the synthetic accounts and writes screenshots under `output/`, which Git ignores. Set `PLAYWRIGHT_MODULE` and `BROWSER_EXECUTABLE` to reuse an existing Playwright installation and browser.
 
 ## What this repository leaves out
 

@@ -51,7 +51,7 @@ To remove your own published contribution, choose **Revoke** in Edits and confir
 
 ## What stays private
 
-Through the map, your raw contribution is accessible only to you, even after its text is published. A saved image becomes public only when you select it for publication and it names its rights; every other saved image stays visible to you alone. Revoking the contribution, or an Undo of its publication, closes public access to its images. The published text, sources, facts, selected images with their metadata, change description and chosen username are public. A map account stores its email and a scrypt password hash, never the password itself. An unfinished account keeps its address so its setup proof can be used until password creation. See [Private images](private-images.md) for the earlier image workflow and its limits.
+Through the map, your raw contribution is accessible only to you, even after its text is published. A saved image becomes public only when you select it for publication and it names its rights; every other saved image stays visible to you alone. Revoking the contribution, or an Undo of its publication, closes public access to its images. The published text, sources, facts, selected images with their metadata, change description and chosen username are public. A map account stores its email and a scrypt password hash, never the password itself. An unfinished account keeps its address so its setup proof can be used until password creation. See [Private images](private-images.md) for image limits and who can see a saved image.
 
 ## When something goes wrong
 

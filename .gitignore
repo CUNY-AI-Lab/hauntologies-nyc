@@ -57,7 +57,7 @@ next-env.d.ts
 *.db
 .dev.vars*
 /public/data/source-inventory.json
-# Local map server data (npm run local) and private transition plans. Scripts
+# Local map server data (npm run local) and private transition plans. Some scripts
 # resolve .local/ and output/ from the working directory, so match them anywhere.
 .local/
 output/
