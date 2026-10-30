@@ -23,6 +23,14 @@ try{
  await page.goto(base);await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());await page.locator('#toolsButton').click();
  assert.deepEqual(await page.locator('#toolsMenu > :is(button,a):visible').allTextContents(),['Edit','Tasks','Activity','Guide','Contributors']);
  await page.locator('#activityButton').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'guideButton');await page.keyboard.press('Enter');await page.getByRole('heading',{name:'Guide to the map',exact:true}).waitFor();checks.push('Contribute places Guide directly after Activity and before Contributors, with keyboard navigation');
+ await page.goto(base);await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
+ for(const [width,height]of [[1440,1000],[390,844]]){
+  await page.setViewportSize({width,height});if(width<761)await page.locator('#mapControlsButton').click();
+  await page.locator('#placeSearchToggle').click();await page.locator('#plotPlaceButton').click();
+  assert.equal(await page.locator('#plotPlaceButton').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#placeSearchToggle').getAttribute('aria-expanded'),'false');
+  await page.keyboard.press('Escape');assert.equal(await page.locator('#plotPlaceButton').getAttribute('aria-pressed'),'false');assert.equal(await page.evaluate(()=>document.activeElement.id),'plotPlaceButton');
+ }
+ checks.push('plotter stays right of Search, closes search and cancels with Escape on desktop and phone');
  await page.goto(base);await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());await page.locator('#toolsButton').click();await page.locator('#tasksTool').click();await page.waitForFunction(()=>document.querySelectorAll('#taskLedger .task-card').length===8);
  assert.deepEqual(await page.locator('#taskLedger .task-group > h4').allTextContents(),['Pull requests','Existing entries','New entries','Datasets and maps']);assert.equal(await page.locator('#taskLedger .task-card').count(),8);
  assert.equal(await page.locator('.task-create').evaluate(e=>e.open),false);assert.equal(await page.locator('#taskLedger .task-card .task-body ol').count(),8);checks.push('eight starting tasks in four groups with concrete steps and collapsed suggestion form');
