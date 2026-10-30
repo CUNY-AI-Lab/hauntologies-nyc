@@ -28,6 +28,12 @@ try{
  assert.equal(page.url(),base+'/#contributors');assert.equal(await page.locator('#contributorsList li').count(),3);
  assert.equal(await page.getByText('Shared username, separate contributor',{exact:true}).count(),2);
  assert.ok(!(await page.locator('#contributorsPanel').innerText()).includes('@local.test'));
+ const collaborators=page.locator('#contributorsPanel .contributors-collaborators');
+ assert.equal(await collaborators.evaluate(el=>el.tagName),'DETAILS');assert.equal(await collaborators.evaluate(el=>el.open),false);
+ assert.equal(await collaborators.locator('ul').isVisible(),false);assert.equal(await page.locator('.contributors-builder').innerText(),'Built by Zach Muhlbauer');
+ await collaborators.locator('summary').focus();await page.keyboard.press('Enter');await collaborators.locator('ul').waitFor({state:'visible'});
+ assert.deepEqual(await collaborators.locator('li').allTextContents(),['Sam O’Hana Grainger','Zachary Lloyd','Jason Nielsen','Cen Liu','Matthew K. Gold']);
+ await page.keyboard.press('Enter');await collaborators.locator('ul').waitFor({state:'hidden'});
  assert.equal(await page.locator('#placeInspector').count(),0);checks.push('old page redirects to the map dropdown with separate same-name contributors and public credit only');
  for(const [width,height] of [[1440,1000],[390,844],[320,740],[844,390]]){
   await page.setViewportSize({width,height});
@@ -41,6 +47,9 @@ try{
  await page.locator('#contributorsToggle').click();await loaded();await page.locator('#map').click({position:{x:700,y:400}});assert.equal(await page.locator('#contributorsDropdown').getAttribute('open'),null);checks.push('keyboard open, Tab, Escape, exclusive disclosures and outside dismissal work');
  await page.locator('#contributorsToggle').click();await loaded();
  const fixture=await api('/api/contributors-summary');
+ await page.route('**/api/contributors-summary',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...fixture,contributors:[{...fixture.contributors[0],published:2,legacy:2}]})}));await page.locator('#refreshContributors').click();await loaded();
+ assert.equal(await page.locator('.contributor-count').innerText(),'2 contributions');assert.ok(!(await page.locator('#contributorsPanel').innerText()).includes('earlier release'));await page.unroute('**/api/contributors-summary');
+ checks.push('Collaborators is collapsed and keyboard accessible, builder credit stays visible, and historical contributions have no earlier-release annotation');
  await page.route('**/api/contributors-summary',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
  await page.locator('#refreshContributors').click();await page.getByText('Contributors are unavailable. Select Refresh to try again.',{exact:true}).waitFor();assert.equal(await page.locator('#contributorsList li').count(),0);
  await page.unroute('**/api/contributors-summary');await page.locator('#refreshContributors').click();await loaded();checks.push('failed refresh clears old usernames and manual retry recovers');

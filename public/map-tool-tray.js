@@ -1,5 +1,5 @@
 'use strict';
-// Search, Filters, Layers and zoom drop down beneath Tools: on hover with a mouse, or on click and tap.
+// Search, Filters and Layers drop down beneath Tools on phones; desktop controls stay visible.
 // The tray stays open while it holds focus or the search is open, and folds when Filters or Layers
 // opens its panel, which sits where the column would.
 (() => {
