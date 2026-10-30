@@ -104,7 +104,7 @@
       "steps": [
         "Find a source that names the place and describes what was reported there. Note its address or coordinates.",
         "Search Places to make sure the location is not already on the map.",
-        "Choose Contribute, then Edit. Find or pin the location, add a title, description and source, then enter your public username and describe the change. Read the preview and publish."
+        "Choose Contribute, then Edit. Find or pin the location, add a title, description and source, then enter your public username and describe the change. Check your entries and choose Publish."
       ],
       "evidence_deliverable": "A new place inside the five boroughs, with a description and a source.",
       "skill_level": "beginner",

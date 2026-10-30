@@ -15,7 +15,7 @@ async function fixture(label){const title='Synthetic Undo '+label+' '+Date.now()
 async function openUndo(f){
  await page.reload();await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
  if(await page.locator('#mapControlsButton').isVisible())await page.locator('#mapControlsButton').click();await page.locator('#filtersButton').click();await page.locator('#search').fill(f.title);await page.locator('#mapToolsButton').click();
- const card=page.locator('.place-card[data-place-id="'+f.id+'"]');await card.waitFor();await card.getByRole('button',{name:'History',exact:true}).click();
+ const card=page.locator('.place-card[data-place-id="'+f.id+'"]');await card.waitFor();await card.locator('.place-history > summary').click();
  const items=(await api('/api/place-history?id='+f.id)).items,index=items.findIndex(item=>item.id===f.event);assert.ok(index>=0);const entry=card.locator('.history-entry').nth(index);await entry.locator(':scope > summary').click();await entry.getByRole('button',{name:'Undo',exact:true}).click();
  const form=entry.locator('form');await form.getByLabel('Public username').fill('night.owl');await form.getByLabel('Describe your change').fill('Undo synthetic note');return form;
 }
@@ -30,7 +30,7 @@ try{
 
  const stale=await fixture('stale version');form=await openUndo(stale);let interleave=true;
  await page.route('**/api/contributions/undo',async route=>{if(interleave){interleave=false;await note(stale.id,'Later independent note');}await route.continue();});
- const conflicted=await submit(form),staleBody=conflicted.request().postDataJSON();assert.equal(conflicted.status(),409);assert.equal((await conflicted.json()).error,'stale_target');await form.getByText('This place changed in an overlapping field. Reload History and compare the changes.',{exact:true}).waitFor();assert.equal(await stored(actor,stale.event),null);
+ const conflicted=await submit(form),staleBody=conflicted.request().postDataJSON();assert.equal(conflicted.status(),409);assert.equal((await conflicted.json()).error,'stale_target');await form.getByText('This place changed in an overlapping field. Reload Changelog and compare the changes.',{exact:true}).waitFor();assert.equal(await stored(actor,stale.event),null);
  form=await openUndo(stale);await form.getByLabel('Describe your change').fill('Undo after comparing current History');const refreshed=await submit(form),refreshedBody=refreshed.request().postDataJSON();assert.equal(refreshed.status(),200);assert.notEqual(refreshedBody.idempotency_key,staleBody.idempotency_key);assert.ok(refreshedBody.expected_version>staleBody.expected_version);assert.notEqual(refreshedBody.expected_hash,staleBody.expected_hash);assert.equal(refreshedBody.change_summary,'Undo after comparing current History');assert.equal(await undoCount(stale.id),1);const record=(await api('/api/published-records')).records.find(r=>r.id===stale.id);assert.deepEqual(record.notes.map(n=>n.text),['Later independent note']);checks.push('409 stale target clears saved request; retry fetches current version and preserves unrelated note');await page.unroute('**/api/contributions/undo');
 
  const uncertain=await fixture('response loss');form=await openUndo(uncertain);let loseResponse=true,original;

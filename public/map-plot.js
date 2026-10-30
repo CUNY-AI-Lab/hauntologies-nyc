@@ -1,5 +1,5 @@
 'use strict';
-// Plot a place: the pin beside search arms the map. The next click drops a spot, zooms to it
+// Plot a place: the pin to the right of Search arms the map. The next click drops a spot, zooms to it
 // and names it by its cross streets and neighbourhood (NYC GeoSearch); a second click on the
 // spot confirms it and opens Contribute with that point and name filled in. A click elsewhere
 // moves the spot; Esc or the pin again cancels.
@@ -82,7 +82,9 @@
     L.DomEvent.stop(event.originalEvent);
     plot(event.latlng);
   });
-  document.addEventListener('keydown', event => {
+  function cancelOnEscape(event) {
     if (event.key === 'Escape' && armed && !event.defaultPrevented) { event.preventDefault(); arm(false); button.focus({preventScroll: true}); }
-  });
+  }
+  button.addEventListener('keydown', cancelOnEscape);
+  document.addEventListener('keydown', cancelOnEscape);
 })();

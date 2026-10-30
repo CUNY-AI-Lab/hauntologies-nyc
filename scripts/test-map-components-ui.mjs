@@ -20,14 +20,13 @@ try {
   const place = await page.evaluate(() => {const r=sourceInventory.records.find(r=>r.title.includes('Parkchester General')); if(!r)throw Error('Static acceptance place unavailable'); selectRecord(r); return {id:r.id,title:r.title};});
   const card = page.locator('.place-card').filter({has:page.locator('[data-record-id="'+place.id+'"]')});
   await card.waitFor();
-  const edit = card.locator('.place-edit'), history = card.locator('.place-heading .textbutton');
-  let [a,b] = await Promise.all([box(edit),box(history)]);
-  assert.equal(a.y,b.y); assert.equal(a.height,b.height);
-  const controlStyles=await page.evaluate(id=>[...document.querySelectorAll('.place-card[data-place-id="'+id+'"] .place-heading :is(.place-edit,.textbutton)')].map(e=>{const s=getComputedStyle(e);return [s.font,s.padding,s.border,s.textDecorationLine];}),place.id);
-  assert.deepEqual(controlStyles[0],controlStyles[1]);
+  const edit = card.locator('.place-edit'), history = card.locator('.place-history > summary');
+  const a = await box(edit);
+  assert.equal(await history.innerText(),'Changelog');
+  assert.equal(await card.locator('.place-heading .textbutton').count(),0);
   assert.equal(await card.locator('.place-contribute').count(),0);
   assert.ok(await card.locator('.place-heading .place-actions').evaluate(node=>node.getBoundingClientRect().bottom<=node.closest('.place-card').querySelector('.place-facts').getBoundingClientRect().top));
-  checks.push('Edit, History and map/source actions share the heading above the facts with no duplicate Contribute button');
+  checks.push('Edit and map/source actions share the heading with no duplicate Changelog button');
   const titleBox=await box(card.locator('.place-title'));await page.mouse.move(titleBox.x+2,titleBox.y+titleBox.height/2);await page.mouse.down();await page.mouse.move(titleBox.x+titleBox.width-2,titleBox.y+titleBox.height/2,{steps:12});await page.mouse.up();
   assert.match(await page.evaluate(()=>String(window.getSelection())),/Parkchester/);await page.screenshot({path:out+'/selectable-title.png',fullPage:true});
   await page.evaluate(()=>window.getSelection().removeAllRanges());await card.locator('.place-title').dblclick();assert.ok((await page.evaluate(()=>String(window.getSelection()))).length>0);
@@ -40,7 +39,7 @@ try {
   const linkBoxes=await card.locator('.place-actions a').evaluateAll(nodes=>nodes.map(e=>({height:e.getBoundingClientRect().height,href:e.href})));
   assert.ok(linkBoxes.length>=1);assert.ok(linkBoxes.every(link=>link.height===a.height && /^https?:/.test(link.href)));
   await page.screenshot({path:out+'/place-desktop.png',fullPage:true});
-  checks.push('History loads and aligns with card content; source links remain available');
+  checks.push('Changelog loads and aligns with card content; source links remain available');
   const mapAction=card.getByRole('button',{name:'View on map',exact:true}),originalUrl=page.url();
   await mapAction.focus();await page.keyboard.press('Enter');
   assert.equal(page.url(),originalUrl);assert.equal(context.pages().length,1);

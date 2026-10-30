@@ -21,7 +21,7 @@
       const place=node('a',event.place.title,'activity-place');place.href='/?place='+encodeURIComponent(event.place.id);
       const time=node(event.at?'time':'span',event.at?new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}).format(new Date(event.at))+' UTC':'Publication date unavailable','activity-date');
       if(event.at)time.dateTime=event.at;
-      const history=node('a','Place history','activity-history');history.href=place.href+'&action=history';history.setAttribute('aria-label','History for '+event.place.title);
+      const history=node('a','Place changelog','activity-history');history.href=place.href+'&action=history';history.setAttribute('aria-label','Changelog for '+event.place.title);
       const meta=node('div',undefined,'activity-meta');meta.append(time,history);
       item.append(action,place);if(count>1)item.append(node('p','And '+(count-1)+' other place'+(count===2?'':'s'),'activity-other-places'));item.append(meta);list.append(item);
     }
