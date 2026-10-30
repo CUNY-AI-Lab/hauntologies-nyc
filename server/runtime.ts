@@ -19,6 +19,8 @@ const staticRecords=parseStaticRecords(inventoryText,pilotText);
 const boundaries=JSON.parse(boundaryText);
 
 export function handleRequest(request:Request){
+  // Bindings pass straight into untyped .mjs services, which validate them at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const e=env as Record<string,any>;
   const geography={boundaries,gazetteer};
   if(new URL(request.url).pathname==='/api/public-image')return handlePublicImage(request,e.DB);

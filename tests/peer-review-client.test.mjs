@@ -8,7 +8,7 @@ class Node {
  append(...nodes){for(const node of nodes){node.parent=this;this.children.push(node);if(this.tag==='select'&&this.children.length===1)this.value=node.value;}}
  replaceChildren(...nodes){this.children=[];this.append(...nodes);}
  setAttribute(key,value){this.attributes[key]=value;}
- closest(selector){for(let node=this;node;node=node.parent)if(selector==='dialog'&&node.tag==='dialog'||selector==='.workflow-jobs'&&node.className==='workflow-jobs')return node;return null;}
+ closest(selector){if(selector==='dialog'&&this.tag==='dialog'||selector==='.workflow-jobs'&&this.className==='workflow-jobs')return this;return this.parent?this.parent.closest(selector):null;}
  addEventListener(type,fn){this.listeners[type]=fn;}
  focus(){}
  close(){this.closed=true;}
