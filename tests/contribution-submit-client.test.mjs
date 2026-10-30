@@ -7,7 +7,7 @@ const handler=source.slice(source.indexOf('  let previewInFlight=false;'),source
 function fixture(){
  let calls=0,saves=0,resolve,reject;
  const control={value:'Synthetic note',disabled:false},deferred=new Promise((a,b)=>{resolve=a;reject=b;});
- const context=vm.createContext({imageProcessing:false,imageBusy:false,busy:false,pendingWrite:null,imageBatch:null,revisionOf:null,draftRevisionBlocked:false,openRequestedRecordId:'',openTargets:[],openTargetFailed:false,openTargetPending:false,identityGeneration:1,privateActor:'synthetic-actor',preview:null,window:{HauntologiesAccount:{canContribute:()=>true,snapshot:()=>({actor:'synthetic-actor',generation:1}),isCurrent:()=>true}},
+ const context=vm.createContext({imageProcessing:false,imageBusy:false,busy:false,pendingWrite:null,imageBatch:null,stagedImages:[],revisionOf:null,draftRevisionBlocked:false,openRequestedRecordId:'',openTargets:[],openTargetFailed:false,openTargetPending:false,identityGeneration:1,privateActor:'synthetic-actor',preview:null,window:{HauntologiesAccount:{canContribute:()=>true,snapshot:()=>({actor:'synthetic-actor',generation:1}),isCurrent:()=>true}},
  byId:()=>control,renderErrors:()=>{},isOpenForm:()=>false,attributeValues:()=>[],pointError:()=>null,pointForm:()=>false,buildEnvelope:()=>({synthetic:true}),api:async()=>{calls++;return deferred;},sessionActor:async()=>'synthetic-actor',caps:()=>({can_submit:true}),submitPreview:async()=>{saves++;},renderPreview:()=>{},serviceFailure:()=>{}});
  vm.runInContext(handler+';globalThis.run=previewForm;',context);
  return {run:()=>context.run({preventDefault(){}}),resolve,reject,calls:()=>calls,saves:()=>saves,control};

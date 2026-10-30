@@ -14,12 +14,14 @@ import pilotText from '../public/pilot.js?raw';
 import { parseStaticRecords } from './static-targets.mjs';
 import { reviewAuthorization } from './review-authorization.mjs';
 import { handlePublicContributions } from './public-contributions.mjs';
+import { handlePublicImage } from './public-images.mjs';
 const staticRecords=parseStaticRecords(inventoryText,pilotText);
 const boundaries=JSON.parse(boundaryText);
 
 export function handleRequest(request:Request){
   const e=env as Record<string,any>;
   const geography={boundaries,gazetteer};
+  if(new URL(request.url).pathname==='/api/public-image')return handlePublicImage(request,e.DB);
   if (['/api/contributors-summary', '/api/place-completeness'].includes(new URL(request.url).pathname)) {
     return handlePublicContributions(request, { db: e.DB, staticRecords });
   }

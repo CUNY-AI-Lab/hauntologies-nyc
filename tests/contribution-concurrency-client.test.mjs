@@ -55,7 +55,7 @@ test('a delayed old-account 401 cannot clear the new account UI',async()=>{
 test('old submit completion cannot unlock a newer account submission',async()=>{
  const handler=source.slice(source.indexOf('  async function submitPreview(){'),source.indexOf('  function showSavedReadback('));let complete,started;
  const ready=new Promise(resolve=>started=resolve),control={disabled:false,value:'Synthetic change'},envelope={type:'open_proposal',synthetic:true};
- const context=vm.createContext({identityGeneration:1,privateActor:'actor-a',pendingWrite:null,busy:false,imageProcessing:false,imageBusy:false,imageBatch:null,draftRevisionBlocked:false,revisionOf:null,preview:{raw:JSON.stringify(envelope,null,2),envelope,result:{validation:{valid:true}}},
+ const context=vm.createContext({identityGeneration:1,privateActor:'actor-a',pendingWrite:null,busy:false,imageProcessing:false,imageBusy:false,imageBatch:null,stagedImages:[],draftRevisionBlocked:false,revisionOf:null,preview:{raw:JSON.stringify(envelope,null,2),envelope,result:{validation:{valid:true}}},
   caps:()=>({can_submit:true}),buildEnvelope:()=>envelope,byId:()=>control,sessionActor:async()=>'actor-a',crypto:{randomUUID:()=> 'synthetic-request'},retainWrite:request=>{context.pendingWrite=request;},
   api:()=>new Promise(resolve=>{complete=resolve;started();}),requireReceipt:r=>r,requireOriginalActor:async()=>{},renderErrors(){},serviceFailure(){},showReconciliation(){},clearSavedDraft(){},showReceipt(){},beginImages:async()=>{},loadDashboard:async()=>{}});
  vm.runInContext(handler+';globalThis.submit=submitPreview;',context);const pending=context.submit();await ready;

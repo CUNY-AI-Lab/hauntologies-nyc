@@ -17,6 +17,7 @@ import { createWorkflowService } from '../server/workflow-service.mjs';
 import { parseStaticRecords } from '../server/static-targets.mjs';
 import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage, setRosterListing } from '../server/published-edits.mjs';
 import { handlePublicContributions } from '../server/public-contributions.mjs';
+import { handlePublicImage } from '../server/public-images.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -105,6 +106,7 @@ function file404(pathname) {
 
 async function route(req) {
   const url = new URL(req.url, `http://127.0.0.1:${port}`), p = url.pathname;
+  if(p==='/api/public-image')return handlePublicImage(new Request(url,{method:req.method}),db);
   if (['/api/contributors-summary','/api/place-completeness'].includes(p)) return handlePublicContributions(new Request(url, {method:req.method}), {db,staticRecords});
   if (p.startsWith('/api/auth/')) return auth(req, p.slice('/api/auth/'.length));
   if (p === '/api/access-status') return json({ enabled: true, sign_in_url: '/api/contributions/sign-in', account_mode: 'map', dashboard_enabled: false });

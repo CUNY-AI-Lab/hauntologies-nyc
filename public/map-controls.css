@@ -5,6 +5,12 @@
 #mapToolsButton,#mapControlsButton,#toolsButton,#accountButton,#recenterMap{font-size:14px}
 /* Two 48px buttons side by side (zoom, plot and search) set the column's width for every row. */
 .header-tools{min-width:98px}
+@media(min-width:761px){
+  #mapControlsButton{display:none}
+  .header-tools .map-tool-tray{position:static;visibility:visible;clip-path:none;transition:none}
+  .header-tools .map-tool-tray::after{display:none}
+  .filters-popout,.layers-popout{right:128px}
+}
 .map-tool-tray{width:100%;min-width:0}
 .contribution-navigation button{min-width:92px}
 .recenter-map{min-width:82px}

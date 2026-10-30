@@ -236,7 +236,7 @@ window.addEventListener('contributions-point-pick-requested',()=>{
 });
 window.addEventListener('contributions-point-pick-cancelled',()=>{stopContributionPicking();$('draftTab').click();$('chooseContributionPoint').focus();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contributionPicking){event.preventDefault();stopContributionPicking();$('draftTab').click();$('chooseContributionPoint')?.focus();}});
-const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'Demolition list':['haunting','reported_haunting'].includes(r.category)?'Ghost story':r.category==='archival_gap'?'Archival gap':r.category==='vanished_place'?'Vanished place':r.category==='pending'?'Pending review':r.category==='submitted'?'Submitted record':'Place';
+const layerName=r=>r.status==='draft'?'Local draft':r.category==='demolished'?'Demolition list':['haunting','reported_haunting'].includes(r.category)?'Ghost story':r.category==='archival_gap'?'Archival gap':r.category==='vanished_place'?'Vanished place':r.category==='pending'?'Pending review':r.category==='submitted'?'Submitted record':AtlasModel.categoryFor(r.category).label;
 function validCoordinates(lat,lon){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&String(lat).trim()!==''&&String(lon).trim()!==''&&Number(lat)>=40.45&&Number(lat)<=40.98&&Number(lon)>=-74.30&&Number(lon)<=-73.65}
 function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(drafts));return true}catch{$('formStatus').textContent='Browser storage is unavailable. Keep this tab open and export your draft now.';$('formStatus').classList.add('error');return false}}
 let toolOpener='toolsButton',placeLayout=null,editRequest=0;
@@ -406,7 +406,7 @@ const facetControls={filterBorough:'boroughs',filterType:'placeTypes',filterEvid
 const facetLabels={filterEvidence:{reported_story:'Reported story',source_list:'Source list',source_grounded:'Historical case',archival_gap:'Archival question',unknown:'Unknown'},filterReview:{legacy:'Not recorded',owner_approved:'Owner approved',unknown:'Unknown'},filterGeo:{approximate:'Approximate'}};
 function populateFacets(){
  const facets=AtlasModel.facets(allRecords());
- const collection=$('filterStatus'),previous=collection.value;collection.replaceChildren(new Option('All','all'));for(const cat of [...new Set(allRecords().map(r=>r.category))]){const rows=allRecords().filter(r=>r.category===cat);collection.add(new Option(layerName(rows[0]),cat))}const featuredRows=allRecords().filter(r=>r.featured);if(featuredRows.length){const option=new Option('Five borough starters','featured');option.id='featuredOption';collection.add(option)}collection.value=[...collection.options].some(o=>o.value===previous)?previous:'all';
+ const collection=$('filterStatus'),previous=collection.value;collection.replaceChildren(new Option('All','all'));for(const category of facets.categories)collection.add(new Option(category.label,category.value));const featuredRows=allRecords().filter(r=>r.featured);if(featuredRows.length){const option=new Option('Five borough starters','featured');option.id='featuredOption';collection.add(option)}collection.value=[...collection.options].some(o=>o.value===previous)?previous:'all';
  for(const [id,key] of Object.entries(facetControls)){
   const el=$(id),old=el.value;el.replaceChildren(new Option('All','all'));
   for(const item of facets[key])el.add(new Option(facetLabels[id]?.[item.value]||item.label,item.value));
@@ -416,7 +416,7 @@ function populateFacets(){
 function filtered(){
  const f=$('filterStatus').value;
  const records=AtlasModel.filter(allRecords(),{query:$('search').value,borough:$('filterBorough').value,placeType:$('filterType').value,evidence:$('filterEvidence').value,review:$('filterReview').value,geoStatus:$('filterGeo').value,period:$('filterPeriod').value==='custom'?'range':$('filterPeriod').value,fromYear:$('filterPeriod').value==='custom'?$('periodStart').value:'',toYear:$('filterPeriod').value==='custom'?$('periodEnd').value:''});
- return records.filter(r=>f==='all'||(f==='featured'&&r.featured)||r.category===f||(f==='draft'&&r.status==='draft')||(f==='unlocated'&&!hasPoint(r)));
+ return records.filter(r=>f==='all'||(f==='featured'&&r.featured)||AtlasModel.normalize(r).category===f||(f==='draft'&&r.status==='draft')||(f==='unlocated'&&!hasPoint(r)));
 }
 const markerSymbols={
  haunting:'<path d="M5 20V10a7 7 0 0 1 14 0v10l-3-2-4 2-4-2z"/><path d="M9 10h.01M15 10h.01" stroke-width="3"/>',

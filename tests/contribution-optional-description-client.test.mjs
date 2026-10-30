@@ -15,7 +15,7 @@ function fixture(){
  const context=vm.createContext({byId:id=>controls[id],openRequestedRecordId:'synthetic_place',openTargets:[{record_id:'synthetic_place'}],openTargetLabel:'Synthetic place',openTargetPending:false,openTargetFailed:false,openTargetStatus:0,revisionOriginal:null,revisionOf:null,draftRevisionBlocked:null,
    isOpenForm:()=>!context.revisionOriginal||context.revisionOriginal.type==='open_proposal',pointForm:()=>controls.contributionPlaceMode.value==='new',populatePlaceChoices(){},showPoint(){},
    window:{HauntologiesAccount:{canContribute:()=>true,snapshot:()=>({actor:'synthetic-actor',generation:1}),isCurrent:()=>true}},
-   imageProcessing:false,imageBusy:false,busy:false,pendingWrite:null,imageBatch:null,identityGeneration:1,privateActor:'synthetic-actor',preview:null,
+   imageProcessing:false,imageBusy:false,busy:false,pendingWrite:null,imageBatch:null,stagedImages:[],identityGeneration:1,privateActor:'synthetic-actor',preview:null,
    attributeValues:()=>facts,sourceText:()=>sources,pointError:()=>null,readPoint:()=>null,renderErrors:value=>{errors=value;},buildEnvelope:()=>({type:'open_proposal'}),
    api:async()=>{calls++;return {preview:{validation:{valid:true}}};},sessionActor:async()=>'synthetic-actor',caps:()=>({can_submit:true}),submitPreview:async()=>{saves++;},renderPreview(){},serviceFailure(){}});
  vm.runInContext(code+';globalThis.out={showOpenReference,previewForm};',context);

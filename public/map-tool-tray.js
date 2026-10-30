@@ -7,6 +7,7 @@
   const group = byId('mapToolGroup'), button = byId('mapControlsButton'), tray = byId('mapToolTray');
   if (!group || !button || !tray) return;
   const hoverable = matchMedia('(hover: hover) and (pointer: fine)');
+  const directControls = matchMedia('(min-width: 761px)');
   let pinned = false, hovering = false, leaveTimer = 0;
   const panelOpen = () => [...tray.querySelectorAll('[aria-expanded]')].some(item => item.getAttribute('aria-expanded') === 'true');
   const opensPopout = item => item.matches?.('[aria-controls]') && byId(item.getAttribute('aria-controls'))?.classList.contains('popout');
@@ -15,6 +16,14 @@
   const isOpen = () => group.hasAttribute('data-open');
 
   function sync() {
+    // Desktop controls stay directly reachable, including while a panel is open.
+    button.hidden = directControls.matches;
+    if (directControls.matches) {
+      pinned = hovering = false;
+      group.setAttribute('data-open', ''); tray.dataset.settled = 'true';
+      button.setAttribute('aria-expanded', 'true');
+      return;
+    }
     // Keyboard focus holds the tray; focus returned after a mouse dismissal does not.
     const keyboardFocus = tray.contains(document.activeElement) && document.activeElement.matches(':focus-visible');
     if (popoutOpen()) pinned = hovering = false;
@@ -22,6 +31,7 @@
     group.toggleAttribute('data-open', open);
     button.setAttribute('aria-expanded', String(open));
   }
+  directControls.addEventListener('change', sync);
   function fold(focus = false) {
     pinned = hovering = false; clearTimeout(leaveTimer);
     if (panelOpen() && typeof closeTools === 'function') closeTools();

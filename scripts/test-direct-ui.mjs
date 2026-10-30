@@ -11,7 +11,7 @@ const errors=[],checks=[];page.on('pageerror',e=>errors.push(e.message));page.on
 const api=async(path,body)=>{const r=await context.request[body?'post':'get'](base+path,body?{data:body,headers:{origin:base}}:{});const data=await r.json();assert.ok(r.ok(),JSON.stringify(data));return data;};
 const signIn=email=>api('/api/auth/sign-in',{email,password:'haunted-local-only'});
 const ready=()=>page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
-const showPlace=async title=>{await page.locator('#mapControlsButton').click();await page.locator('#filtersButton').click();await page.locator('#search').fill(title);await page.locator('#mapToolsButton').click();};
+const showPlace=async title=>{if(await page.locator('#mapControlsButton').isVisible())await page.locator('#mapControlsButton').click();await page.locator('#filtersButton').click();await page.locator('#search').fill(title);await page.locator('#mapToolsButton').click();};
 const cardFor=id=>page.locator('.place-card').filter({has:page.locator('[data-record-id="'+id+'"]')});
 try{
  await signIn('contributor@local.test');await page.goto(base);await ready();

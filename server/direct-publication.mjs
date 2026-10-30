@@ -1,5 +1,6 @@
 import {fail,hash,stable,idValid,snapshotHash} from './workflow-core.mjs';
 import {RecordEditModel} from './record-update.mjs';
+import {selectedPublicImages} from './public-images.mjs';
 const copy=v=>structuredClone(v),equal=(a,b)=>stable(a??null)===stable(b??null);
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const dangerous=new Set(['__proto__','prototype','constructor']);
@@ -10,8 +11,8 @@ function difference(before,after,path=[]){
  if(before&&after&&!Array.isArray(before)&&!Array.isArray(after)&&typeof before==='object'&&typeof after==='object')return [...new Set([...Object.keys(before),...Object.keys(after)])].flatMap(k=>dangerous.has(k)?[]:difference(before[k],after[k],[...path,k]));
  return [{path,before:before??null,after:after??null}];
 }
-export function normalizedRecord(record){const value=copy(record||{}),sources={};for(const [i,source] of (value.sources||[]).entries()){if(source&&typeof source==='object'){const id=source.source_id||'base_'+i;sources[id]={...source,source_id:id};}}delete value.sources;for(const key of ['notes','contributors','canonical_reviewed','merged_version','review_state','status','direct_publication'])delete value[key];return {record:value,sources};}
-const materialize=(state,id)=>({...copy(state.record),id,title:state.record.title||'Untitled place',sources:Object.entries(state.sources||{}).map(([source_id,source])=>({...source,source_id})),direct_publication:true,status:'published',review_state:'published'});
+export function normalizedRecord(record){const value=copy(record||{}),sources={},images={};for(const image of value.images||[])if(image?.attachment_id)images[image.attachment_id]=image;delete value.images;for(const [i,source] of (value.sources||[]).entries()){if(source&&typeof source==='object'){const id=source.source_id||'base_'+i;sources[id]={...source,source_id:id};}}delete value.sources;for(const key of ['notes','contributors','canonical_reviewed','merged_version','review_state','status','direct_publication'])delete value[key];return {record:value,sources,images};}
+const materialize=(state,id)=>({...copy(state.record),id,title:state.record.title||'Untitled place',sources:Object.entries(state.sources||{}).map(([source_id,source])=>({...source,source_id})),...(Object.keys(state.images||{}).length?{images:Object.values(state.images)}:{}),direct_publication:true,status:'published',review_state:'published'});
 const active=rows=>rows.filter(row=>row.review_state==='published');
 function eventData(row){return {...JSON.parse(row.event_json),id:row.id,submission_id:row.submission_id,created_at:row.created_at};}
 export function directProjection(id,base,rows){
@@ -74,6 +75,7 @@ export function createDirectPublisher({store,resolveTarget,preview,audit,receipt
      changes=difference(normalizedRecord({}),normalizedRecord(record));kind='create';
     }
    }else fail('unsupported_direct_type',409);
+   for(const image of selectedPublicImages(envelope.attachments,b.public_image_ids))changes.push({path:['images',image.attachment_id],before:null,after:image});
    return commit(actor,b,'publish',head,raw,p,{submission_id:id,record_id:recordId,kind,summary,moniker:moniker.trim(),changes,...(note?{note}:{})},state,at);
   },
   async undo(actor,b,at){

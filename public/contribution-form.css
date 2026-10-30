@@ -331,7 +331,6 @@ body.places-open #researchSidecar .return-to-edits { margin-left:0; }
 .history-entry pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:.8rem;margin:.3rem 0;}
 .history-entry pre:first-of-type{color:#e2a995;}.history-entry pre:last-of-type{color:#c7d7a8;}
 .history-entry form{display:grid;gap:.5rem;}
-#freeformImages{display:none;}
 #reviewTool,[data-workflow-view="reviewView"]{display:none;}
 /* Keep long titles full width; Edit and History share one compact action row. */
 #researchSidecar .recordlist .place-heading{display:grid;grid-template-columns:auto auto 1fr;gap:0 6px;padding:0 10px 0 0;}

@@ -14,7 +14,7 @@ async function note(id,text){const target=(await api('/api/contributions/target?
 async function fixture(label){const title='Synthetic Undo '+label+' '+Date.now(),root=await publish(proposal(title),'Add recovery fixture'),id=root.receipt.result.record_id,summary='Note to undo: '+label,edit=await note(id,summary);return{title,id,summary,event:edit.receipt.result.event_id};}
 async function openUndo(f){
  await page.reload();await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
- await page.locator('#mapControlsButton').click();await page.locator('#filtersButton').click();await page.locator('#search').fill(f.title);await page.locator('#mapToolsButton').click();
+ if(await page.locator('#mapControlsButton').isVisible())await page.locator('#mapControlsButton').click();await page.locator('#filtersButton').click();await page.locator('#search').fill(f.title);await page.locator('#mapToolsButton').click();
  const card=page.locator('.place-card[data-place-id="'+f.id+'"]');await card.waitFor();await card.getByRole('button',{name:'History',exact:true}).click();
  const entry=card.locator('.history-entry').filter({has:page.getByText(f.summary,{exact:true})});await entry.locator(':scope > summary').click();await entry.getByRole('button',{name:'Undo',exact:true}).click();
  const form=entry.locator('form');await form.getByLabel('Public username').fill('night.owl');await form.getByLabel('Describe your change').fill('Undo synthetic note');return form;
