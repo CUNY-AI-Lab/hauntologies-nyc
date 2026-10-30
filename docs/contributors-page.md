@@ -24,9 +24,13 @@ Phone: Contributors / Places view buttons, naturally scrolling content, 44px tar
 
 Review against the brief: the palette and square corners deliberately match the map. Small totals support the work rather than dominate the page. Omit new branding, cards, charts, scores and decorative badges.
 
+## Current public surface
+
+The separate `/contributors` page now redirects to the map’s Contributors dropdown. The dropdown displays public contributor counts, including earlier verified releases. The public summary and one-place completeness APIs remain available. The layout discussion above records the original page design.
+
 ## Data contract
 
-One explicitly public projection supplies both read-only endpoints. Every successful, currently public direct publication counts once by event ID. Edits count events, not individual fields. Places added counts distinct record IDs created by those events. Notes, Undo and unknown event kinds remain separate. Verified legacy releases are reported separately without guessing their kind. Imports and base inventory do not enter contribution totals.
+One explicitly public projection supplies both read-only endpoints. Every successful, currently public direct publication counts once by event ID. Edits count events, not individual fields. Places added counts distinct record IDs created by those events. Notes, Undo and unknown event kinds remain separate. Earlier verified releases also count once by publication job ID. Their immutable release operations and released revision type identify additions, field/source edits, and notes; unknown types remain unclassified and make affected metric coverage partial. Earlier release counts are components of the headline total, not additional contributions. Verification events or successful verification receipts supply historical publication time; staging time is never substituted. Imports and base inventory do not enter contribution totals.
 
 Only a consented public moniker can name a contributor. Group internally by verified actor plus normalized moniker. Do not link changed monikers, merge same-name actors, or use names stored on accounts/registrations. Random response IDs deliberately cannot identify a person across refreshes. Persistent public profiles would require a separate consent/storage contract; no migration is included.
 
