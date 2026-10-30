@@ -2,7 +2,7 @@
 
 This guide picks up where the [README](../README.md) leaves off. It explains event registration, map accounts, the contribution form and direct publication. Maintainers can continue to [Running the site](running-the-site.md) for settings and release steps.
 
-The contribution instructions describe the direct-publication release in the merged source. Until that release is deployed, the live map uses the earlier review and verification workflow.
+These instructions follow the source on `main`. The live map can trail `main` until the release owner deploys the latest revision, so a control described here may not appear on the live site yet.
 
 ## Two sign-ups
 
@@ -31,25 +31,27 @@ The contribution draft is saved on the device being used: an account draft lasts
 
 ## Contribute
 
-After signing in, choose **Edit** in the bottom-right corner, then **Contribute**. The form starts with **Place**. Type an address, street, building, existing map place, OpenStreetMap link or coordinates, choose a result, or choose **Pin** and click the map. Only points inside the five boroughs can be chosen. Choosing an existing place adds a note about it; it does not change the place itself. Use **Edit** on the place card for a correction to the place's fields or sources.
+After you sign in, choose **Contribute** in the bottom-right corner, then **Edit**. The same menu opens **Tasks**, **Activity** and **Contributors**. The form starts with **Place**. Type an address, street, building, existing map place, OpenStreetMap link or coordinates, choose a result, or choose **Pin** and click the map. Only points inside the five boroughs can be chosen. Choosing an existing place adds a note about it; it does not change the place itself. Use **Edit** on the place card for a correction to the place's fields or sources.
 
-For a new place, add a title and description. For an existing place, add a description, a source or a fact; its description can be blank. Sources and facts are optional when a description is supplied. Enter a **Public username** and use **Describe your change** to say briefly what you are adding or changing. Choose **Publish** to check the preview, then confirm publication. A successful publication puts the change on the map without a separate review step. The direct form does not offer a new public image upload.
+For a new place, add a title and description. For an existing place, add a description, a source or a fact; its description can be blank. Sources and facts are optional when a description is supplied. Enter a **Public username** and use **Describe your change** to say briefly what you are adding or changing. Choose **Publish**. When the server accepts the contribution, it goes straight onto the map without a separate review step; otherwise the form lists what to fix.
+
+To add images, open **Images** and choose up to three JPEG, PNG or WebP files. Each image needs a **Rights** entry naming the license or permission for public display, and the form holds publication until every image has one. Remove an image to publish without it. Write **Alt text** that describes what the image shows, and add a **Credit** and **Source link** when you have them. A published image appears on the place card with its credit and rights.
 
 ## Public credit and history
 
 Choose a username or moniker, not an email address. The username appears publicly with your contribution, including in the place's History and Contributors. The form remembers the last username on this device for the signed-in account. It does not use your account email or event registration name as a default, and the direct-publication flow has no separate name opt-out. Do not put private information in the username, description, facts or sources you publish.
 
-Open a place card and choose **History** to see its published changes, usernames, times and descriptions. Expand a change to compare its earlier and later values. Signed-in contributors can choose **Undo**, enter a public username and description, and publish an inverse change. Undo preserves unrelated later changes; if a later change overlaps, reload History and compare before deciding what to do.
+Open a place card and choose **History** to see its published changes, each headed by the contributor's username with its time. Expand a change to compare its earlier and later values. Signed-in contributors can choose **Undo**, enter a public username and description, and publish an inverse change. Undo preserves unrelated later changes; if a later change overlaps, reload History and compare before deciding what to do.
 
 ## Your saved work and removal
 
-Open **Account**, then **Edits** to find your own saved and published work. Existing submitted, changes-requested, approved or staged work does not become public automatically. Supported saved work has a **Publish** action; the owner must choose it and supply a public username and change description. Older unsupported formats, such as area proposals and multi-entry bundles, stay private. Their summary editor offers **Save privately**; their content can be used in a new place or note, or in an edit to an existing place.
+Open **Account**, then **Edits** to find your own saved and published work. Existing submitted, changes-requested, approved or staged work does not become public automatically. Supported saved work has a **Publish** action; the owner must choose it and supply a public username and change description. The Publish form lists each saved image with a **Publish image** checkbox. Only images with known rights can be checked, and unchecked images stay private. Older unsupported formats, such as area proposals and multi-entry bundles, stay private. Their summary editor offers **Save privately**; their content can be used in a new place or note, or in an edit to an existing place.
 
 To remove your own published contribution, choose **Revoke** in Edits and confirm. Its effects and history are removed from the public map, while your private copy remains. Other contributors' changes and shared place IDs are preserved. To remove that private copy, choose **Delete** after revoking it. Deletion keeps minimal receipts and version markers and cannot erase copies already downloaded elsewhere. A legacy published contribution may be blocked from revocation or deletion when another release depends on it; the site reports that conflict instead of overwriting the later work.
 
 ## What stays private
 
-Through the map, your raw contribution and any previously saved images are accessible only to you in direct-publication mode, even after its text is published. The published text, sources, facts, change description and chosen username are public. A map account stores its email and a scrypt password hash, never the password itself. An unfinished account keeps its address so its setup proof can be used until password creation. See [Private images](private-images.md) for the earlier image workflow and its limits.
+Through the map, your raw contribution is accessible only to you, even after its text is published. A saved image becomes public only when you select it for publication and it names its rights; every other saved image stays visible to you alone. Revoking the contribution, or an Undo of its publication, closes public access to its images. The published text, sources, facts, selected images with their metadata, change description and chosen username are public. A map account stores its email and a scrypt password hash, never the password itself. An unfinished account keeps its address so its setup proof can be used until password creation. See [Private images](private-images.md) for image limits and who can see a saved image.
 
 ## When something goes wrong
 
@@ -65,6 +67,7 @@ Through the map, your raw contribution and any previously saved images are acces
 | Account service is temporarily unavailable. Please try again. | Wait and try again, and tell the event contact if it continues. |
 | Sign in to continue. | Your session ended; sign in again. Your draft remains on this device within its retention period. |
 | Save outcome unknown. Check My edits before retrying. | Check **Account** → **Edits** and use the offered confirmation action to resolve the pending save before starting another. |
+| Image 1: add the license or permission that allows public display. | Fill in **Rights** for that image or remove it, then choose **Publish** again. |
 | This place changed in an overlapping field. | Reload **History**, compare the changes and decide whether an edit is still needed. |
 | Another release depends on this contribution. | Revocation is blocked to protect that work; contact a maintainer rather than assuming it was removed. |
 
@@ -76,7 +79,7 @@ Before a release, record the serving Worker version, a D1 Time Travel bookmark a
 
 Build with `npm run build`, prepare with `node scripts/prepare-account-release.mjs`, and run `node --test tests/*.test.mjs`. Preparation configures account eligibility and the restricted mail binding, preserves the public route and disables preview URLs. Keep `MAP_AUTH_SECRET` in Worker secret storage and release Admission's restricted mail service before activating the map binding.
 
-GitHub Actions validates changes; As of October 29, 2026, [PR 39](https://github.com/CUNY-AI-Lab/hauntologies-nyc/pull/39) proposes a guarded CI deployment workflow and remains a draft. An approved release path must deploy the prepared configuration and verify the serving version, account readiness, signed-out protection, delivered assets and table counts. An authorized human must separately perform verification and reset with an authorized mailbox and record rollout acceptance; CI must not receive mailbox credentials. Local deployment is not an approved production release method.
+GitHub Actions validates every pull request and every push to `main`. [PR 39](https://github.com/CUNY-AI-Lab/hauntologies-nyc/pull/39) merged the guarded `Release Hauntologies` workflow, which runs only on a manual dispatch of the exact current `main` commit and stops before checkout when the `CLOUDFLARE_API_TOKEN` repository secret is absent. An approved release path must deploy the prepared configuration and verify the serving version, account readiness, signed-out protection, delivered assets and table counts. An authorized human must separately perform verification and reset with an authorized mailbox and record rollout acceptance; CI must not receive mailbox credentials. Local deployment is not an approved production release method.
 
 Any production verification, reset, contribution or image acceptance test needs its own authorization and a disposable test identity. Local synthetic checks do not authorize participant reads or production writes. Rollback uses the prior Worker version after checking that bindings are retained; leave additive tables in place to preserve account data and audit history.
 

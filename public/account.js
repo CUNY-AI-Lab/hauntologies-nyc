@@ -15,7 +15,9 @@
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
-      const value = await response.json();
+      // A proxy or platform error page is not JSON; report the service as unavailable, not a parser message.
+      let value;
+      try { value = await response.json(); } catch { throw Object.assign(new Error(messages.account_unavailable), { status: response.status, code: 'account_unavailable' }); }
       if (!response.ok) throw Object.assign(new Error(messages[value.error] || 'Please try again.'), { status: response.status, code: value.error });
       return value;
     } finally { clearTimeout(timer); }
@@ -100,6 +102,8 @@
   let sessionCheck=null;
   function pausedSession() { const state=window.HauntologiesAccount?.snapshot();return state?.status==='unknown'&&Boolean(state.actor); }
   function reconcilePaused() { if(document.visibilityState==='visible'&&!busy&&pausedSession())reconcile(); }
+  let retryTimer = 0;
+  function retryPaused() { clearTimeout(retryTimer); retryTimer = setTimeout(reconcilePaused, 5000); }
   function reconcile() {
     if(sessionCheck)return sessionCheck;
     const pending=checkSession();sessionCheck=pending;pending.finally(()=>{if(sessionCheck===pending)sessionCheck=null;});return pending;
@@ -118,15 +122,21 @@
     } catch (error) {
       if (check !== checks) return;
       // A temporary service failure does not prove the retained account signed out.
-      // Keep its private controls unavailable and retry on focus or the next interval.
-      if (pausedSession() && error.status !== 401 && error.status !== 403) return;
+      // Keep its private controls unavailable and retry every few seconds while visible.
+      // A signed-in account with no modal open pauses instead of signing out, so a dropped request
+      // on shared Wi-Fi does not end the session or clear the Edit form. A paused account hides its
+      // modals, which would leave an open one blocking the page, so those keep the sign-out path.
+      const transient = error.status !== 401 && error.status !== 403;
+      const modalOpen = ['accountDialog', 'ownEditsDialog', 'recordEditorDialog', 'candidateDialog', 'contributorsDialog'].some(id => byId(id)?.open);
+      if (transient && !modalOpen && window.HauntologiesAccount?.snapshot().status === 'signed_in') { window.HauntologiesAccount.pause(); retryPaused(); return; }
+      if (pausedSession() && transient) { retryPaused(); return; }
       const currentDialog = version === generation; identity(null);
       if (!currentDialog) return;
       if (error.status === 401) window.dispatchEvent(new CustomEvent('contributions-session-ended'));
       if (dialog.open && !challenge) renderForm('sign-in', error.status === 401 ? '' : error.message);
     }
   }
-  function open() { opener = document.activeElement; if (typeof closeTools === 'function') closeTools(); if (!dialog.open) dialog.showModal(); if (!challenge) reconcile(); }
+  function open() { if(pausedSession()){reconcile();return;} opener = document.activeElement; if (typeof closeTools === 'function') closeTools(); if (!dialog.open) dialog.showModal(); if (!challenge) reconcile(); }
   function readChallenge() {
     const match = location.hash.match(/^#account-(verify|reset)=([A-Za-z0-9_-]{24,128})$/);
     if (match) { challenge = match[2]; history.replaceState(null, '', location.pathname + location.search); open(); renderForm(match[1]); return true; }

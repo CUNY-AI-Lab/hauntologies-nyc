@@ -640,6 +640,10 @@
     if(isOpenForm()){
       if(path==='summary'||path==='payload.explanation')return byId('contributionSummary');
       if(path==='payload.sources_text')return byId('freeformSources');
+      if(path==='title')return byId('contributionObjectTitle');
+      if(path==='public_credit.label')return byId('publicCreditLabel');
+      if(path==='change_summary')return byId('contributionChangeSummary');
+      if(/^image-\d+-rights$/.test(path))return byId(path);
       if(path==='payload.geometry'||path.startsWith('payload.geometry.')||path==='targets'||path.startsWith('targets.'))return byId('contributionPlace');
       const attribute=path.match(/^payload\.attributes\.(\d+)(?:\.(name|value))?$/);if(attribute)return byId('contributionAttributes').children[Number(attribute[1])]?.querySelector('[data-attribute="'+(attribute[2]||'name')+'"]');
       return null;

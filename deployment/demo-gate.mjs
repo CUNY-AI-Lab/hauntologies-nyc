@@ -68,7 +68,7 @@ export function createDemoWorker(handler, registration, authenticate = authentic
       if(rawPath==='/api/place-history'&&['GET','HEAD'].includes(request.method)){
         const query=new URL(request.url).searchParams;
         if([...query.keys()].some(k=>k!=='id')||query.getAll('id').length!==1)return privateJson({error:'invalid_record_id'},400);
-        try{return privateJson(await directHistory(env.DB,query.get('id')));}catch{return privateJson({error:'history_unavailable'},503);}
+        try{return privateJson(await directHistory(env.DB,query.get('id')));}catch(error){return error?.code==='invalid_record_id'?privateJson({error:'invalid_record_id'},400):privateJson({error:'history_unavailable'},503);}
       }
       if (path === '/api/auth' || path.startsWith('/api/auth/')) {
         if (rawPath !== path) return privateJson({error:'invalid_path'},400);

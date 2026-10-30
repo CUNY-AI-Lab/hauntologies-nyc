@@ -79,6 +79,7 @@ export function createDirectPublisher({store,resolveTarget,preview,audit,receipt
    return commit(actor,b,'publish',head,raw,p,{submission_id:id,record_id:recordId,kind,summary,moniker:moniker.trim(),changes,...(note?{note}:{})},state,at);
   },
   async undo(actor,b,at){
+   if(!idValid(b.event_id))fail('invalid_event_id');
    const event=await store.directEvent(b.event_id);if(!event||event.review_state!=='published')fail('history_not_found',404);
    const prior=eventData(event),state=await stateFor(prior.record_id);if(!state.target||state.target.expected_version!==b.expected_version||state.target.expected_hash!==b.expected_hash)fail('stale_target',409);
    const projection=directProjection(prior.record_id,state.base,state.rows),current=projection.state;
