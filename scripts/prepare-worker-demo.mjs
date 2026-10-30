@@ -19,6 +19,7 @@ await fs.copyFile(new URL('../deployment/demo-gate.mjs',import.meta.url),new URL
 const gateFile=new URL('../dist/server/demo-gate.mjs',import.meta.url);
 await fs.writeFile(gateFile,(await fs.readFile(gateFile,'utf8')).replace('../server/direct-publication.mjs','./direct-publication.mjs').replace('../server/published-edits.mjs','./published-edits.mjs').replace('../server/pending-places.mjs','./pending-places.mjs').replace('../server/registration-eligibility.mjs','./registration-eligibility.mjs'));
 await fs.copyFile(new URL('../server/record-credits.mjs',import.meta.url),new URL('../dist/server/record-credits.mjs',import.meta.url));
+await fs.copyFile(new URL('../server/public-attribution.mjs',import.meta.url),new URL('../dist/server/public-attribution.mjs',import.meta.url));
 await fs.copyFile(new URL('../server/published-edits.mjs',import.meta.url),new URL('../dist/server/published-edits.mjs',import.meta.url));
 await fs.copyFile(new URL('../server/pending-places.mjs',import.meta.url),new URL('../dist/server/pending-places.mjs',import.meta.url));
 // Vinext emits no_bundle:true. Bundle this adapter's dependency explicitly so

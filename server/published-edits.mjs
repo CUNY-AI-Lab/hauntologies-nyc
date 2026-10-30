@@ -1,4 +1,5 @@
 import { publicCredit, recordCredits } from './record-credits.mjs';
+import {releaseCreditSQL} from './public-attribution.mjs';
 // A public credit label names its contributor only while they are on the roster. Every public
 // projection of release history reads this column, so leaving the roster hides the name everywhere
 // at once (records, published edits, the Contributors counts) and rejoining restores it.
@@ -7,12 +8,12 @@ const releaseCredit=row=>publicCredit(row.raw_json,row.roster_hidden);
 // Public projection of immutable, independently approved and verified releases.
 // Never return a submission DTO, current draft, source text, media or identity.
 export async function publishedEdits(db) {
-  const {results = []} = await db.prepare(`SELECT j.id,j.updated_at,j.manifest_json,r.raw_json,${ROSTER_HIDDEN}
+  const {results = []} = await db.prepare(`SELECT j.id,j.updated_at,j.manifest_json,${releaseCreditSQL()} AS raw_json,${ROSTER_HIDDEN}
     FROM workflow_jobs j JOIN workflow_approvals a ON a.id=j.approval_id
       AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
     JOIN workflow_submissions s ON s.id=j.submission_id
-    WHERE j.status='verified' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)
+    WHERE j.status='verified' AND s.review_state<>'revoked' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)
     ORDER BY j.updated_at DESC,j.id ASC LIMIT 20`).all();
   const legacy=results.flatMap(row => {
     try {
@@ -33,36 +34,36 @@ export async function publishedEdits(db) {
 // Public credit for the Contributors list: one count per live release whose contributor opted in.
 // Only the consented label leaves the server; uncredited and roster-hidden releases are only counted in the total.
 export async function contributorCredits(db) {
-  const {results = []} = await db.prepare(`SELECT r.raw_json,${ROSTER_HIDDEN} FROM workflow_jobs j
+  const {results = []} = await db.prepare(`SELECT s.owner_id,${releaseCreditSQL()} AS raw_json,${ROSTER_HIDDEN} FROM workflow_jobs j
     JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
     JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
     JOIN workflow_submissions s ON s.id=j.submission_id
-    WHERE j.status='verified' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)`).all();
+    WHERE j.status='verified' AND s.review_state<>'revoked' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)`).all();
   const counts=new Map();let total=0;
   for (const row of results) {
     try{JSON.parse(row.raw_json);}catch{continue;}
     total++;
     const label=releaseCredit(row);
     if(!label)continue;
-    const key=label.toLocaleLowerCase('en-US'),entry=counts.get(key)||{name:label,count:0};entry.count++;counts.set(key,entry);
+    const key=JSON.stringify([row.owner_id,label.toLocaleLowerCase('en-US')]),entry=counts.get(key)||{name:label,count:0};entry.count++;counts.set(key,entry);
   }
-  const {results:direct=[]}=await db.prepare("SELECT e.event_json FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id WHERE e.kind='direct_publish' AND s.review_state='published'").all();
-  for(const row of direct){const name=JSON.parse(row.event_json).moniker;if(!name)continue;total++;const key=name.toLocaleLowerCase('en-US'),entry=counts.get(key)||{name,count:0};entry.count++;counts.set(key,entry);}
+  const {results:direct=[]}=await db.prepare("SELECT s.owner_id,e.event_json FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id WHERE e.kind='direct_publish' AND s.review_state='published'").all();
+  for(const row of direct){const name=JSON.parse(row.event_json).moniker;if(!name)continue;total++;const key=JSON.stringify([row.owner_id,name.toLocaleLowerCase('en-US')]),entry=counts.get(key)||{name,count:0};entry.count++;counts.set(key,entry);}
   const contributors=[...counts.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'en-US'));
   return {contributors,total};
 }
 
-// The roster uses only contributor-chosen, consented monikers. Account/registration
-// names and emails are never attribution sources, even for the viewer's own defaults.
+// The roster reads public attribution only. The offline legacy transition can
+// supply an authorized prefix; this GET never reads account names or emails.
 export async function contributorRoster(db, actorId = '') {
-  const {results=[]}=await db.prepare(`SELECT s.id,s.review_state,r.raw_json FROM workflow_submissions s
+  const {results=[]}=await db.prepare(`SELECT s.id,s.owner_id,s.review_state,${releaseCreditSQL()} AS raw_json FROM workflow_submissions s
     JOIN workflow_revisions r ON r.submission_id=s.id AND r.revision=s.current_revision
     WHERE s.review_state IN ('published','merged')
       AND (json_extract(r.raw_json,'$.public_credit.identity')='moniker' OR NOT EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id))`).all();
   const people=new Map();
   for(const row of results){
     const name=publicCredit(row.raw_json);if(!name)continue;
-    const key=name.toLocaleLowerCase('en-US'),entry=people.get(key)||{name,contributions:0,published:0,account:true};
+    const key=JSON.stringify([row.owner_id,name.toLocaleLowerCase('en-US')]),entry=people.get(key)||{name,contributions:0,published:0,account:true};
     entry.contributions++;if(['published','merged'].includes(row.review_state))entry.published++;people.set(key,entry);
   }
   const registrants=[...people.values()].sort((a,b)=>b.contributions-a.contributions||a.name.localeCompare(b.name,'en-US'));

@@ -1,0 +1,11 @@
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import path from 'node:path';
+import {planLegacyTransition,decodeLegacySnapshot} from './lib/legacy-transition.mjs';
+const [input,output]=process.argv.slice(2);
+if(!input||!output)throw Error('Usage: node scripts/plan-legacy-transition.mjs private-snapshot.json new-private-output-directory');
+const directory=path.resolve(output),local=path.resolve('.local')+path.sep;
+if(!directory.startsWith(local))throw Error('Store private recovery files under .local/');
+const snapshot=decodeLegacySnapshot(JSON.parse(readFileSync(input,'utf8'))),plan=await planLegacyTransition(snapshot);
+mkdirSync(directory,{mode:0o700});
+for(const [name,value] of Object.entries({'plan.json':JSON.stringify(plan,null,2),'forward.sql':plan.forward_sql,'rollback.sql':plan.rollback_sql}))writeFileSync(path.join(directory,name),value,{mode:0o600,flag:'wx'});
+console.log(JSON.stringify({report:{...plan.report,skipped:plan.report.skipped.map(item=>item.reason)},snapshot_hash:plan.source_snapshot_hash,production_changes:0}));

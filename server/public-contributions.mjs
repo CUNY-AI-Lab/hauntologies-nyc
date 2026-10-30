@@ -2,6 +2,7 @@ import { publicRecord } from './published-edits.mjs';
 import { publicCredit } from './record-credits.mjs';
 import { publicCatalogRecord } from './catalog-projection.mjs';
 import { RecordEditModel } from './record-update.mjs';
+import {releaseCreditSQL} from './public-attribution.mjs';
 
 const RECORD_LIMIT = 5000, EVENT_LIMIT = 10000, LEGACY_LIMIT = 5000;
 const idValid = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(value);
@@ -20,12 +21,12 @@ export const PUBLIC_CONTRIBUTIONS_SQL = `WITH public_records AS (
  LEFT JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
  LEFT JOIN workflow_submissions s ON s.id=j.submission_id
  WHERE json_extract(r.derived_json,'$.publication_mode')='direct'
- OR (s.review_state IN ('published','merged') AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1))
+ OR (s.review_state<>'revoked' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1))
  ORDER BY r.id LIMIT ${RECORD_LIMIT + 1}
 ), direct_events AS (
  SELECT e.id,e.actor_id,e.created_at,
  json_object('record_id',json_extract(e.event_json,'$.record_id'),'kind',json_extract(e.event_json,'$.kind'),'moniker',json_extract(e.event_json,'$.moniker')) AS event_json,
- json_object('public_credit',json_extract(r.raw_json,'$.public_credit')) AS credit_json,
+ ${releaseCreditSQL()} AS credit_json,
  EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id) AS roster_hidden
  FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id
  JOIN workflow_revisions r ON r.submission_id=e.submission_id AND r.revision=e.revision
@@ -33,16 +34,16 @@ export const PUBLIC_CONTRIBUTIONS_SQL = `WITH public_records AS (
  WHERE e.kind='direct_publish' AND s.review_state='published'
  ORDER BY e.created_at,e.id LIMIT ${EVENT_LIMIT + 1}
 ), legacy_releases AS (
- SELECT j.id,r.actor_id,j.created_at,
+ SELECT j.id,s.owner_id AS actor_id,j.created_at,
  (SELECT json_object('targets',json_group_array(json_object('record_id',json_extract(t.value,'$.record_id'),'after',1)))
   FROM json_each(j.manifest_json,'$.targets') t JOIN public_records p ON p.id=json_extract(t.value,'$.record_id')
   WHERE json_type(t.value,'$.after')='object') AS manifest_json,
- json_object('public_credit',json_extract(r.raw_json,'$.public_credit')) AS credit_json,
+ ${releaseCreditSQL()} AS credit_json,
  EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id) AS roster_hidden
  FROM workflow_jobs j JOIN workflow_submissions s ON s.id=j.submission_id
  JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
  JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
- WHERE j.status='verified' AND s.review_state IN ('published','merged')
+ WHERE j.status='verified' AND s.review_state<>'revoked'
  AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)
  AND COALESCE(json_extract(r.raw_json,'$.type'),'') NOT IN ('import','bulk_import')
  AND NOT EXISTS (SELECT 1 FROM workflow_events e WHERE e.submission_id=s.id AND e.kind='direct_publish')
