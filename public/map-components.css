@@ -5,22 +5,6 @@
   --map-control-hover: #29271f;
 }
 
-#contributorsPageLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
-  color: #dfb780;
-  text-decoration: none;
-}
-#contributorsPageLink svg { width: 27px; height: 27px; }
-#contributorsPageLink .lantern-shell { fill: #483016; }
-#contributorsPageLink .lantern-eyes { fill: #ffdf77; stroke: #ffdf77; }
-#contributorsPageLink .lantern-mouth { fill: #eeb353; stroke: #eeb353; }
-#contributorsPageLink:hover { color: #ffdfaa; background: #27231c; }
-
 #toolsMenu { padding: 4px; }
 #toolsMenu > :is(button, a) {
   display: flex;
@@ -137,7 +121,7 @@
 #accountDialog .account-edits-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 #accountDialog #accountContributions { min-width: 0; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 
-#contributorsPageLink:focus-visible,
+#contributorsToggle:focus-visible,
 #toolsMenu > :is(button, a):focus-visible,
 #researchSidecar .place-card a:focus-visible,
 #accountDialog :is(a, button, summary):focus-visible { outline: 2px solid #ffd39e; outline-offset: 3px; }
