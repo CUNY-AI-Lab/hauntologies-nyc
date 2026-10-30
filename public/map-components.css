@@ -35,7 +35,7 @@
   padding: 14px 0 10px;
 }
 #researchSidecar .recordlist .place-card .place-heading :is(.place-edit, .textbutton),
-#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute) {
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-map) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -52,13 +52,13 @@
   text-decoration: none;
 }
 #researchSidecar .recordlist .place-card .place-heading :is(.place-edit, .textbutton):hover,
-#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute):hover {
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-map):hover {
   border-color: #b69a76;
   background: var(--map-control-hover);
   color: var(--ink);
 }
-#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute)::before,
-#researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute)::after { content: none; }
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-map)::before,
+#researchSidecar .recordlist .place-card .place-actions :is(a, .place-map)::after { content: none; }
 #casePanel .place-card .place-facts { padding: 0 14px 12px; }
 #casePanel .place-card .place-actions {
   display: flex;
@@ -128,5 +128,30 @@
 
 @media (max-width: 760px), (pointer: coarse) {
   #researchSidecar .recordlist .place-card .place-heading :is(.place-edit, .textbutton),
-  #researchSidecar .recordlist .place-card .place-actions :is(a, .place-contribute) { min-height: 44px; }
+  #researchSidecar .recordlist .place-card .place-actions :is(a, .place-map) { min-height: 44px; }
 }
+
+#researchSidecar .recordlist .place-heading .place-select,
+#researchSidecar .recordlist .place-heading .place-title { -webkit-user-select:text; user-select:text; }
+#casePanel .place-card .place-heading .place-actions { grid-column:1/-1; padding:0; }
+
+/* Task titles use the full card width; every open card has the same reading inset. */
+#taskView .task-intro { margin: 0 0 16px; font-size: 14px; line-height: 1.6; }
+#taskView .task-ledger { gap: 24px; }
+#taskView .task-group { display: grid; gap: 10px; min-width: 0; }
+#taskView .task-group > h4 { margin: 0 0 2px; color: var(--sun); font: 400 21px/1.3 var(--serif); }
+#taskView .task-card > summary {
+  display: block;
+  min-height: 56px;
+  padding: 16px 38px 16px 20px;
+  font: 400 14px/1.6 Arial, Helvetica, sans-serif;
+  overflow-wrap: normal;
+}
+#taskView .task-body { padding: 16px 20px 20px; }
+#taskView .task-body :is(p, ol, ul) { margin: 0 0 14px; font-size: 14px; line-height: 1.65; }
+#taskView .task-body ol { padding-left: 22px; }
+#taskView .task-body li { margin: 0 0 10px; }
+#taskView .task-body h4 { margin: 18px 0 6px; font-size: 13px; }
+#taskView .task-body > :last-child { margin-bottom: 0; }
+#taskView .task-body .workflow-refs { padding-left: 18px; font-size: 13px !important; }
+#taskView .task-create { margin-top: 24px; }

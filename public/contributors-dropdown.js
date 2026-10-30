@@ -29,7 +29,6 @@
         const item = node('li', ''), name = node('span', person.name, 'contributor-name');
         if (names.get(person.name.toLocaleLowerCase()) > 1) name.append(node('small', 'Shared username, separate contributor'));
         const total = node('span', count(person.published, 'contribution'), 'contributor-count');
-        if (person.legacy) total.append(node('small', 'Includes ' + count(person.legacy, 'earlier release')));
         item.append(name, total); list.append(item);
       }
       status.textContent = data.contributors.length ? '' : 'No publicly credited contributions yet';

@@ -8,21 +8,40 @@
   let sharedTasks = null;
   const taskClient = window.SharedTasks.createClient({request:api, storage:window.sessionStorage, identity:()=>({actor:privateActor,generation:identityGeneration})});
   function localTasks(){try{const saved=JSON.parse(localStorage.getItem('hauntologies-created-tasks')||'[]');return Array.isArray(saved)?saved:[];}catch{return [];}}
-  function taskCard(t){const card=el('details',undefined,'task-card');card.append(el('summary',t.bounded_task),intakeText(t.description||t.evidence_deliverable||''),metadata([['Status',statusLabel(t.status)],['Section',t.section],['Skill level',statusLabel(t.skill_level)]]));return card;}
+  function taskCard(t){
+    const card=el('details',undefined,'task-card'),body=el('div',undefined,'task-body');
+    if(t.description)body.append(intakeText(t.description));
+    if(Array.isArray(t.steps)&&t.steps.length){
+      const steps=el('ol');t.steps.forEach(step=>steps.append(el('li',step)));body.append(steps);
+    }
+    if(t.evidence_deliverable)body.append(el('h4','What to add'),intakeText(t.evidence_deliverable));
+    if(t.source_references?.length)body.append(refList(t.source_references));
+    if(!t.starter)body.append(metadata([['Status',statusLabel(t.status)],['Skill level',statusLabel(t.skill_level)]]));
+    card.append(el('summary',t.bounded_task),body);return card;
+  }
   function renderTaskList(){
     const root=byId('taskLedger');root.replaceChildren();
     const tasks=(sharedTasks||[]).filter(t=>!removedTaskIds.has(t.task_id));
-    tasks.forEach(t=>root.append(taskCard(t)));
-    byId('sharedTaskCount').textContent=sharedTasks===null?'':`${tasks.length} shared ${tasks.length===1?'task':'tasks'}`;
+    const groups=new Map();
+    tasks.forEach(t=>{const name=t.section||'More tasks';if(!groups.has(name))groups.set(name,[]);groups.get(name).push(t);});
+    for(const [name,items]of groups){const group=el('section',undefined,'task-group');group.append(el('h4',name));items.forEach(t=>group.append(taskCard(t)));root.append(group);}
+    byId('sharedTaskCount').textContent=sharedTasks===null?'':`${tasks.length} ways to contribute`;
     const drafts=localTasks(),local=byId('earlierLocalTasks');local.replaceChildren();local.hidden=!drafts.length;
-    if(drafts.length){local.append(el('h3','Earlier browser drafts'),el('p','Copy a draft into the form above to add it to the shared list.','small'));drafts.forEach(t=>local.append(taskCard(t)));}
+    if(drafts.length){local.append(el('h3','Earlier browser drafts'),el('p','Copy a draft into Suggest another task below to share it.','small'));drafts.forEach(t=>local.append(taskCard(t)));}
   }
   async function loadSharedTasks(){
     const status=byId('sharedTaskStatus'),version=identityGeneration;
     try{const tasks=await taskClient.list();if(version!==identityGeneration)return false;sharedTasks=tasks;status.replaceChildren();renderTaskList();return true;}
     catch(error){if(version!==identityGeneration)return false;status.replaceChildren(el('span','Shared tasks unavailable'));if(error.status===401)await accessActions(status);return false;}
   }
-  function restorePendingTask(){const task=taskClient.pendingTask();if(!task){if(taskClient.hasUnownedPendingTask())byId('createTaskResult').textContent='An older pending task has no confirmed owner. Check the shared list before creating another task; the saved copy has been retained.';return;}for(const [id,key]of [['newTaskTitle','bounded_task'],['newTaskDescription','description'],['newTaskSection','section'],['newTaskSkill','skill_level'],['newTaskStatus','status']])byId(id).value=task[key];byId('createTaskResult').textContent='A shared save is pending. Retry this task to confirm it.';}
+  function restorePendingTask(){
+    const task=taskClient.pendingTask(),form=byId('createTaskForm');
+    if(!task){if(taskClient.hasUnownedPendingTask()){form.closest('details').open=true;byId('createTaskResult').textContent='An older pending task has no confirmed owner. Check the shared list before creating another task; the saved copy has been retained.';}return;}
+    for(const [id,key]of [['newTaskTitle','bounded_task'],['newTaskDescription','description'],['newTaskSection','section'],['newTaskSkill','skill_level'],['newTaskStatus','status']]){
+      const field=byId(id);if(id==='newTaskSection'&&![...field.options].some(option=>option.value===task[key]))field.add(new Option(task[key],task[key]));field.value=task[key];
+    }
+    form.closest('details').open=true;byId('createTaskResult').textContent='A shared save is pending. Retry this task to confirm it.';
+  }
   async function createTask(event){
     event.preventDefault();if(!window.HauntologiesAccount?.canContribute())return;const generation=identityGeneration,owner=privateActor;const current=()=>generation===identityGeneration&&owner===privateActor;const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),out=byId('createTaskResult');
     const task={bounded_task:byId('newTaskTitle').value.trim(),description:byId('newTaskDescription').value.trim(),section:byId('newTaskSection').value,skill_level:byId('newTaskSkill').value,status:byId('newTaskStatus').value};
