@@ -10,7 +10,7 @@ The registration page at https://hauntologies-nyc.ailab-452.workers.dev/register
 
 ## Who can sign up
 
-Both event registration and account creation accept an address at `cuny.edu` or a subdomain such as `gc.cuny.edu`. Other addresses need the shared guest access code from the organizers. The registration and initial account-creation forms reveal their code field after a non-CUNY address is entered. A valid admission is remembered by the service for the unfinished account, but the code itself is not stored with the account. Password-creation and password-reset forms contain only password fields. Signing up never grants a reviewer, publisher or admin role.
+Both event registration and account creation accept an address at `cuny.edu` or a subdomain such as `gc.cuny.edu`. The registration and initial account-creation forms show an optional access-code field from the start. Other addresses need the shared guest access code from the organizers unless admission has already been remembered. A valid admission is remembered by the service for the unfinished account, but the code itself is not stored with the account. Password-creation and password-reset forms contain only password fields. Signing up never grants a reviewer, publisher or admin role.
 
 ## Create a map account
 
