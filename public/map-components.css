@@ -60,6 +60,8 @@
 #researchSidecar .recordlist .place-card .place-actions :is(a, .place-map)::before,
 #researchSidecar .recordlist .place-card .place-actions :is(a, .place-map)::after { content: none; }
 #casePanel .place-card .place-facts { padding: 0 14px 12px; }
+#casePanel .place-card .place-description { display: block; overflow: visible; -webkit-line-clamp: unset; }
+#casePanel .place-card > .place-images { padding: 0 14px 12px; }
 #casePanel .place-card .place-actions {
   display: flex;
   align-items: center;

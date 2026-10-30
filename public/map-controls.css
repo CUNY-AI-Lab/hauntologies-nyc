@@ -3,7 +3,7 @@
 .header-tools .outline,.contribution-navigation .outline,.recenter-map,.contributors-footer button{min-height:48px;font-size:13px}
 .header-tools button{min-height:48px}
 #mapToolsButton,#mapControlsButton,#toolsButton,#accountButton,#recenterMap{font-size:14px}
-/* Two 48px buttons side by side (zoom, plot and search) set the column's width for every row. */
+/* Two 48px buttons side by side (search and plot) set the column's width for every row. */
 .header-tools{min-width:98px}
 @media(min-width:761px){
   #mapControlsButton{display:none}
@@ -21,6 +21,7 @@
 .map-find-row{display:flex;gap:2px;align-items:stretch}
 .map-find-row>.plot-place-toggle,.map-find-row>.place-search{flex:1 1 0;min-width:0}
 .header-tools .map-find-row button{min-width:0;width:100%;padding:6px 4px}
+.header-tools .map-find-row>.plot-place-toggle{padding:0}
 .plot-place-toggle svg{width:18px;height:18px;flex:none}
 .masthead .header-tools .plot-place-toggle[aria-pressed=true]::before{border-color:#e9caa1;background:#2a251d}
 .map-tool-tray .map-find-row{min-width:96px}
@@ -86,13 +87,9 @@ body.map-plotting #map,body.map-plotting #map .leaflet-interactive{cursor:crossh
 /* Taps on map controls act at once: Safari would otherwise read two quick taps on +/- as a page zoom. */
 .leaflet-control a,.leaflet-control button,.map-tool-tray a,.map-tool-tray button{touch-action:manipulation}
 
-/* Map controls grouped in reading and keyboard order: NYC, pin, zoom in, zoom out. */
+/* Map controls grouped in reading and keyboard order: NYC, zoom in, zoom out. */
 #mapFooter{left:max(20px,env(safe-area-inset-left));display:flex;align-items:center;gap:4px}
 #mapFooter .recenter-map{position:relative;left:auto;bottom:auto}
-#mapFooter .plot-place-toggle{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;width:48px;min-width:48px;height:48px;padding:6px;border:0;background:transparent;touch-action:manipulation}
-#mapFooter .plot-place-toggle::before{content:'';position:absolute;z-index:-1;inset:6px 0;border:1px solid #827563;background:#11110f;pointer-events:none}
-#mapFooter .plot-place-toggle::after{top:6px;right:0}
-#mapFooter .plot-place-toggle:hover::before,#mapFooter .plot-place-toggle[aria-pressed=true]::before{border-color:var(--sun);background:#2a251d}
 .brand-drop>.review-hourglass{width:44px;min-height:44px;padding:6px;justify-content:center;color:var(--sun)}
 .brand-drop>.review-hourglass svg{width:28px;height:28px;flex:none}
 .brand-drop>.review-hourglass::before,.brand-drop>.review-hourglass::after,.review-hourglass>.disclosure-mark{display:none}

@@ -486,7 +486,7 @@ function renderRecords(){
   const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;
   const heading=document.createElement('div');heading.className='place-heading';const actions=document.createElement('div');actions.className='place-actions';heading.append(b,actions);addPlaceEditAction(actions,r);card.append(heading);card.insertAdjacentHTML('beforeend',placeFacts(r));
   const pendingSlot=document.createElement('div');pendingSlot.className='place-pending';pendingSlot.dataset.recordId=r.id;pendingSlot.hidden=true;card.append(pendingSlot);
-  const links=card.querySelector('.place-links');if(links?.children.length)actions.append(links);else links?.remove();window.PlaceHistory?.append(card,r);appendPlaceRecord(card,r);
+  const links=card.querySelector('.place-links');if(links?.children.length)actions.append(links);else links?.remove();appendPlaceRecord(card,r);window.PlaceHistory?.append(card,r);
   const mapButton=card.querySelector('.place-map');if(mapButton){mapButton.disabled=!map;mapButton.addEventListener('click',()=>viewRecordOnMap(r));}
   b.addEventListener('click',event=>{const selection=window.getSelection();if(event.detail>0&&selection&&!selection.isCollapsed&&selection.containsNode(b,true))return;if(selectingContributionPlace){selectRecord(r);return;}if(map&&hasPoint(r))viewRecordOnMap(r,false);else selectRecord(r);});(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
@@ -539,10 +539,12 @@ function addPlaceEditAction(heading,r){
 }
 function placeFacts(r){
  const p=PlaceSummary.view(r),v=vicinityOf(r),near=v?[v.near,v.area].filter(Boolean).join(', '):'';
+ const sameText=(a,b)=>String(a||'').trim().replace(/\s+/g,' ').toLowerCase()===String(b||'').trim().replace(/\s+/g,' ').toLowerCase();
+ const location=p.location&&!sameText(p.location,p.title)&&!sameText(p.location,p.description)?`<p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>`:'';
  const coordinates=p.latitude===null||p.longitude===null
   ? '<p class="place-coordinate-note">Location unresolved</p>'
   : `<dl class="place-coordinates"><dt>Coordinates</dt><dd><span class="sr-only">Latitude </span>${esc(p.latitude)}<span aria-hidden="true">, </span><span class="sr-only">Longitude </span>${esc(p.longitude)}</dd></dl>`;
- return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p><p class="place-location">${p.current?'Current location: ':''}${esc(p.location)}</p>${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${hasPoint(r)?'<button type="button" class="place-map">View on map</button>':''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
+ return `<div class="place-facts"><p class="place-description">${esc(p.description)}</p>${location}${near?`<p class="place-near">Near ${esc(near)}</p>`:''}${coordinates}${Array.isArray(r.contributors)&&r.contributors.length?`<p class="place-contributors">Contributors: ${r.contributors.map(esc).join(', ')}</p>`:''}<div class="place-links">${hasPoint(r)?'<button type="button" class="place-map">View on map</button>':''}${p.sourceUrl?link(p.sourceUrl,'View source'):''}</div></div>`;
 }
 
 function appendPlaceRecord(card,r){
@@ -591,7 +593,7 @@ function setupPlaceLayout(){
  const dockNodes=()=>[...document.querySelectorAll('.contribution-navigation,.contributors-footer,.recenter-map')];
  let anchor=null,frame=0,lastWidth=innerWidth,lastHeight=innerHeight;
  const active=()=>document.body.classList.contains('places-open')&&!sidecar.hidden;
- const visible=node=>node.getBoundingClientRect().height&&(!node.closest('.place-record-content')||node.closest('.place-record').open);
+ const visible=node=>node.getBoundingClientRect().height&&(!node.closest('.place-record')||node.closest('.place-record').open);
  const readingNodes=card=>[...card.querySelectorAll('.place-select,.place-description,.place-location,.place-coordinates,.place-links,.place-record > summary,.place-record-content > *,.place-contribute,.place-edit')];
  const remember=()=>{
   if(!active())return;

@@ -12,14 +12,15 @@
     };
     const link=(url,label)=>{const node=text('a',label);node.href=url;node.target='_blank';node.rel='noopener noreferrer';return node;};
     const details=document.createElement('details'),toggle=text('summary','Record'),body=document.createElement('div');
-    details.className='place-record';body.className='place-record-content';details.append(toggle,body);
+    details.className='place-record';details.open=true;body.className='place-record-content';details.append(toggle,body);
+    const gallery=document.createElement('div');gallery.className='place-record-content place-images';
     const facts=metadata([
       ['Borough',record.borough&&!(summary.location+' '+near).toLowerCase().includes(String(record.borough).toLowerCase())?record.borough:null],
       ['Dates',record.time_original||record.event_date_start],['Date basis',record.time_basis],
       ['Location basis',record.geo_basis||record.location_precision],['Uncertainty',record.uncertainty_note],
       ['Uncertainty (m)',record.uncertainty_m],['Uncertainty basis',record.uncertainty_basis],
       ...(Array.isArray(record.attributes)?record.attributes.map(a=>[a.name,a.value]):[]),
-      ['Rights',record.rights_or_license],['Record license',record.record_license],['Rights notes',record.rights_notes]
+      ['Rights',record.rights_or_license],['Record license',record.record_license!==record.rights_or_license?record.record_license:null],['Rights notes',record.rights_notes]
     ]);
     if(facts.children.length)body.append(facts);
     const primary=record.image||record.image_url?{...(record.image||{}),url:record.image?.url||record.image_url,alt:record.image?.alt??record.image_alt,caption:record.image?.caption||record.image_caption,credit:record.image?.creator||record.image?.credit||record.image_credit,license:record.image?.license||record.image_license,sourceUrl:record.image?.sourceUrl||record.image_source_url,licenseUrl:record.image?.licenseUrl||record.image_license_url}:null;
@@ -36,7 +37,7 @@
       const sourceUrl=safeUrl(photo.sourceUrl),licenseUrl=safeUrl(photo.licenseUrl);
       if(sourceUrl)figure.append(link(sourceUrl,'Image source'));
       if(licenseUrl)figure.append(link(licenseUrl,'Image license'));
-      body.append(figure);
+      gallery.append(figure);
     }
     }
     const sources=Array.isArray(record.sources)&&record.sources.length?record.sources:record.source_url?[{url:record.source_url,title:record.source_title}]:[];
@@ -58,6 +59,7 @@
       }
       body.append(list);
     }
+    if(gallery.children.length)card.append(gallery);
     if(body.children.length)card.append(details);
     return details;
   }
