@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
-test('main Contribute menu uses Edit, Tasks, Activity, Guide, Contributors',()=>{
+test('main Contribute menu uses Edit, Tasks, Activity, Contributors, Guide',()=>{
  const opener=html.match(/<button[^>]*id="toolsButton"[^>]*>[^<]*<\/button>/)?.[0];
  assert.match(opener,/aria-label="Contribute">Contribute<\/button>/);
  const menu=html.slice(html.indexOf('<nav id="toolsMenu"'),html.indexOf('</nav>',html.indexOf('<nav id="toolsMenu"')));
  const visible=[...menu.matchAll(/<(button|a)\b([^>]+)>([^<]*)<\/(?:button|a)>/g)].filter(match=>!/(?:^|\s)hidden(?:\s|$)/.test(match[2])).map(match=>match[3]);
- assert.deepEqual(visible,['Edit','Tasks','Activity','Guide','Contributors']);
+ assert.deepEqual(visible,['Edit','Tasks','Activity','Contributors','Guide']);
  assert.match(menu,/<a id="guideButton"[^>]+href="\/guide">Guide<\/a>/,'the guide is in the Contribute menu');
  assert.match(html,/<a id="guidePageLink" href="\/guide">Guide<\/a>/,'signed-out visitors reach the guide from the title card');
  assert.match(menu,/<button id="contributorsButton"[^>]+aria-controls="contributorsDropdown">/);

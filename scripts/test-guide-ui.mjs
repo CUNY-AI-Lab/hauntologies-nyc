@@ -21,8 +21,8 @@ try{
  await page.emulateMedia({media:'print'});assert.equal(await page.locator('#printGuide').isVisible(),false);assert.equal(await page.locator('.directory-header').isVisible(),false);await page.emulateMedia({media:'screen'});checks.push('print layout hides navigation and Print control');
  assert.ok((await context.request.post(base+'/api/auth/sign-in',{data:{email:'contributor@local.test',password:'haunted-local-only'},headers:{origin:base}})).ok());
  await page.goto(base);await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());await page.locator('#toolsButton').click();
- assert.deepEqual(await page.locator('#toolsMenu > :is(button,a):visible').allTextContents(),['Edit','Tasks','Activity','Guide','Contributors']);
- await page.locator('#activityButton').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'guideButton');await page.keyboard.press('Enter');await page.getByRole('heading',{name:'Guide to the map',exact:true}).waitFor();checks.push('Contribute places Guide directly after Activity and before Contributors, with keyboard navigation');
+ assert.deepEqual(await page.locator('#toolsMenu > :is(button,a):visible').allTextContents(),['Edit','Tasks','Activity','Contributors','Guide']);
+ await page.locator('#contributorsButton').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'guideButton');await page.keyboard.press('Enter');await page.getByRole('heading',{name:'Guide to the map',exact:true}).waitFor();checks.push('Contribute places Guide directly below Contributors, with keyboard navigation');
  await page.goto(base);await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
  for(const [width,height]of [[1440,1000],[390,844]]){
   await page.setViewportSize({width,height});if(width<761)await page.locator('#mapControlsButton').click();
