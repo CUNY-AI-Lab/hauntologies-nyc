@@ -37,3 +37,5 @@
 #contributorsPanel .contributors-collaborators > summary { display:flex; align-items:center; min-height:44px; padding:10px 0; color:var(--ink); font:400 13px/1.5 Arial,Helvetica,sans-serif; cursor:pointer; }
 #contributorsPanel .contributors-collaborators ul { list-style:none; margin:8px 0 0; padding:0; display:grid; gap:6px; color:var(--ink); font-size:13px; }
 #contributorsPanel .contributors-builder { margin:16px 0 0; padding-top:12px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+#guidePageLink { pointer-events:auto; display:inline-flex; align-items:center; min-height:44px; margin-right:6px; color:#e9caa1; font:400 12px/1.4 Arial,Helvetica,sans-serif; text-decoration:none; }
+#guidePageLink:hover,#guidePageLink:focus-visible { text-decoration:underline; }

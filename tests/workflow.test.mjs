@@ -703,8 +703,8 @@ test('seed ledger reads preserve all proposed/unassigned tasks, and transitions 
   t.after(() => h.db.close());
   const initial = await call(h, '/api/contributions/dashboard');
   assertStatus(initial, 200);
-  assert.equal(initial.body.tasks.length, 23);
-  assert.deepEqual(initial.body.tasks.map(task => task.task_id), Array.from({ length: 26 }, (_, index) => 'HNY-' + String(index + 1).padStart(3, '0')).filter(id => !['HNY-012','HNY-014','HNY-015'].includes(id)));
+  assert.equal(initial.body.tasks.length, 8);
+  assert.deepEqual(initial.body.tasks.map(task => task.task_id), ['HNY-PR-01','HNY-PR-02','HNY-EXISTING-01','HNY-EXISTING-02','HNY-NEW-01','HNY-NEW-02','HNY-DATA-01','HNY-DATA-02']);
   assert(initial.body.tasks.every(task => task.status === 'proposed' && task.assignee === null && task.version === 0));
   assert.equal(rowCount(h, 'workflow_task_events'), 0);
   const task = taskSeeds.tasks[0];

@@ -1,0 +1,46 @@
+/* The guide uses the map's palette, with a single column on phones and a print layout. */
+.guide-page main.guide { max-width:1100px; }
+.guide-meta { margin:8px 0; color:var(--muted); font-size:13px; }
+.guide-lead { margin:10px 0 28px; max-width:62ch; font:400 18px/1.5 var(--serif); color:var(--ink); }
+.guide-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:28px 40px; }
+.guide-step { min-width:0; padding-top:16px; border-top:1px solid var(--line); }
+.guide-step h2 { display:flex; align-items:baseline; gap:12px; margin:0 0 10px; font:400 22px/1.25 var(--serif); color:var(--ink); }
+.guide-number { flex:none; min-width:26px; height:26px; padding:0 6px; background:var(--sun); color:#17130e; font:700 13px/26px Arial,Helvetica,sans-serif; text-align:center; letter-spacing:.02em; }
+.guide-step ol,.guide-step ul { margin:0; padding-left:22px; font-size:14px; line-height:1.55; }
+.guide-step li { margin:0 0 8px; }
+.guide-step li::marker { color:var(--sun); }
+.guide-step p { margin:0 0 8px; font-size:14px; line-height:1.55; }
+.guide-step strong { color:var(--sun); font-weight:600; }
+.guide-step code { font:13px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace; color:var(--ink); }
+.guide-aside { margin-top:10px !important; color:var(--muted); font-size:13px !important; }
+.guide-page a { color:var(--sun); }
+.guide-page .directory-header nav { display:flex; align-items:center; gap:20px; }
+.guide-page .directory-header nav a { min-height:44px; display:inline-flex; align-items:center; }
+.guide-page .directory-back { padding-left:0; }
+@media (max-width:760px) {
+  .guide-columns { grid-template-columns:1fr; gap:22px; }
+  .guide-lead { font-size:16px; }
+}
+@media (max-width:480px) {
+  .guide-page .directory-header { align-items:flex-start; }
+  .guide-page .directory-brand { font-size:19px; }
+  .guide-page .directory-header nav { gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+}
+@media print {
+  @page { margin:16mm 14mm; }
+  html.guide-page, .guide-page body { background:#fff; color:#111; }
+  .guide-page .directory-header, #printGuide, .skip-link { display:none; }
+  .guide-page main.guide { max-width:none; padding:0; }
+  .guide-page h1 { font-size:24pt; margin:0 0 6pt; color:#111; }
+  .guide-lead { font-size:12.5pt; color:#111; margin-bottom:12pt; }
+  .guide-columns { gap:10pt 22pt; }
+  .guide-step { border-top-color:#bbb; padding-top:8pt; break-inside:avoid; }
+  .guide-step h2 { color:#111; font-size:14pt; }
+  .guide-step ol,.guide-step ul,.guide-step p { font-size:10.5pt; line-height:1.4; }
+  .guide-step strong,.guide-step li::marker { color:#5a3d0d; }
+  .guide-number { background:#5a3d0d; color:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .guide-aside,.guide-meta { color:#444; }
+  .guide-step code { color:#111; }
+  .guide-page a { color:#111; text-decoration:none; }
+  .guide-page a[href^="mailto"]::after { content:""; }
+}

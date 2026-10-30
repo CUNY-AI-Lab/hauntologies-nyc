@@ -60,7 +60,7 @@
   group.addEventListener('focusin', sync);
   group.addEventListener('focusout', () => setTimeout(sync));
   group.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || event.defaultPrevented || !isOpen() || panelOpen()) return;
+    if (event.key !== 'Escape' || event.defaultPrevented || !isOpen() || panelOpen() || byId('plotPlaceButton')?.getAttribute('aria-pressed') === 'true') return;
     event.preventDefault(); fold(true);
   });
   document.addEventListener('pointerdown', event => {

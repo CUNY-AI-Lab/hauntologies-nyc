@@ -75,7 +75,7 @@
   }
 
   window.addEventListener('hauntologies-auth-changed', () => { if(armed) arm(false); else clearSpot(); });
-  button.addEventListener('click', () => arm(!armed));
+  button.addEventListener('click', () => { if(!armed)window.PlaceSearch?.close();arm(!armed); });
   map.on('click', event => {
     if (!armed) return;
     if (typeof emptyMapTarget === 'function' && !emptyMapTarget(event.originalEvent?.target)) return;

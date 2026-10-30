@@ -1,631 +1,189 @@
 {
   "schema_version": "1.0",
-  "status_note": "All 23 current seed opportunities remain proposed and unassigned. Private source-document and local reconciliation metadata are omitted from this source export; no task approval or completion is implied.",
-  "implementation_choices": {
-    "section": "Display groupings added for navigation; not canonical machine enums.",
-    "type": "Display labels for contribution categories; not backend submission enums, authority, or permission grants."
-  },
+  "status_note": "Eight starting points for contributors. No task is assigned or marked complete.",
   "tasks": [
     {
-      "task_id": "HNY-001",
-      "bounded_task": "Reconcile NYC layer inventory",
-      "role": "Layer researcher",
+      "task_id": "HNY-PR-01",
+      "section": "Pull requests",
+      "bounded_task": "Fix a website problem",
+      "description": "Found a broken button, a layout problem or a bug? Make one small fix and send it for review.",
+      "steps": [
+        "Open the GitHub repository and make a copy using Fork. Create a branch for your fix.",
+        "Follow the README to run the site on your computer. Make your change and try the affected buttons or pages.",
+        "Open a pull request. Explain what was wrong, what you changed and how you checked it. Add screenshots for a layout change."
+      ],
+      "evidence_deliverable": "A pull request with the fix and a short explanation of your checks.",
       "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 30,
-        "max": 45,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Catalog reconciliation with missing/stale fields and explicit already-verified references",
-      "reviewer_role": "mapping reviewer",
+      "source_references": [
+        {
+          "label": "Open the GitHub repository",
+          "url": "https://github.com/CUNY-AI-Lab/hauntologies-nyc"
+        }
+      ],
+      "starter": true,
+      "status": "proposed",
+      "assignee": null,
       "dependencies": [],
-      "acceptance_criteria": [
-        "Separate aerial capture from publication/georeferencing dates",
-        "Record missing fields as unknown",
-        "No activation"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
+      "acceptance_criteria": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Maps and layers",
-      "type": "Layer research"
+      "linked_submissions": []
     },
     {
-      "task_id": "HNY-002",
-      "bounded_task": "Resolve one layer rights chain",
-      "role": "Rights researcher",
-      "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 25,
-        "max": 40,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Rights worksheet with terms URLs, permitted use and unresolved conflicts",
-      "reviewer_role": "rights reviewer",
-      "dependencies": [
-        "HNY-001"
+      "task_id": "HNY-PR-02",
+      "section": "Pull requests",
+      "bounded_task": "Improve the guide or documentation",
+      "description": "Help the next person understand how to use the map or work on the website.",
+      "steps": [
+        "Choose an instruction in the Guide or README that is missing, confusing or out of date.",
+        "Try the steps yourself, then edit the text in the GitHub repository. Use the button names people see on the site.",
+        "Open a pull request explaining which instruction you improved and why."
       ],
-      "acceptance_criteria": [
-        "Do not equate public access with permission",
-        "Unresolved rights leave layer disabled"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Maps and layers",
-      "type": "Rights research"
-    },
-    {
-      "task_id": "HNY-003",
-      "bounded_task": "Verify one layer coverage",
-      "role": "Map QA contributor",
-      "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 30,
-        "max": 50,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Coverage and sample-verification log",
-      "reviewer_role": "mapping reviewer",
-      "dependencies": [
-        "HNY-001"
-      ],
-      "acceptance_criteria": [
-        "Image decode plus geographic-content inspection",
-        "Do not bulk download",
-        "Record untested browser CORS honestly"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Maps and layers",
-      "type": "QA report"
-    },
-    {
-      "task_id": "HNY-004",
-      "bounded_task": "Find one non-aerial map",
-      "role": "Archive researcher",
+      "evidence_deliverable": "A pull request with clearer instructions that you have tried yourself.",
       "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 30,
-        "max": 45,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "One candidate item citation and metadata record",
-      "reviewer_role": "mapping reviewer",
+      "source_references": [
+        {
+          "label": "Browse the files on GitHub",
+          "url": "https://github.com/CUNY-AI-Lab/hauntologies-nyc"
+        }
+      ],
+      "starter": true,
+      "status": "proposed",
+      "assignee": null,
       "dependencies": [],
-      "acceptance_criteria": [
-        "Do not treat archived NYPL Map Warper embeds as live",
-        "Raw image or IIIF is not automatically georeferenced",
-        "No fabricated tile endpoint"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
+      "acceptance_criteria": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Maps and layers",
-      "type": "Layer research"
+      "linked_submissions": []
     },
     {
-      "task_id": "HNY-005",
-      "bounded_task": "Test unavailable layer fallback",
-      "role": "Map QA contributor",
-      "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 25,
-        "max": 40,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Repro steps and expected/observed behavior",
-      "reviewer_role": "mapping reviewer",
-      "dependencies": [
-        "HNY-001"
+      "task_id": "HNY-EXISTING-01",
+      "section": "Existing entries",
+      "bounded_task": "Fill in a missing field",
+      "description": "Choose a place that is missing a date, an address, a description or a source.",
+      "steps": [
+        "Open Places and choose an entry with a missing detail.",
+        "Look for that detail in a reliable source, such as a library collection, a city directory or a newspaper archive. Keep the link or full citation.",
+        "Choose Edit on the place card. Add only what you could verify, include the source, describe your change and publish it under your public username."
       ],
-      "acceptance_criteria": [
-        "List remains usable",
-        "No silent substitution of historical period",
-        "Disabled explanation and attribution remain legible"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Maps and layers",
-      "type": "QA report"
-    },
-    {
-      "task_id": "HNY-006",
-      "bounded_task": "Specify period uncertainty filters",
-      "role": "Interaction contributor",
+      "evidence_deliverable": "An updated place with the missing detail and the source that supports it.",
       "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 20,
-        "max": 35,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Filter truth table with six synthetic records",
-      "reviewer_role": "data reviewer",
+      "starter": true,
+      "status": "proposed",
+      "assignee": null,
       "dependencies": [],
-      "acceptance_criteria": [
-        "Closed period overlap start<=filterEnd and end>=filterStart",
-        "Unknown explicit option",
-        "No fabricated date bounds",
-        "One state shared by map/list"
-      ],
-      "status": "proposed",
-      "assignee": null,
+      "acceptance_criteria": [],
       "source_references": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Filters and uncertainty",
-      "type": "Filter proposal"
+      "linked_submissions": []
     },
     {
-      "task_id": "HNY-007",
-      "bounded_task": "Check layer and claim independence",
-      "role": "Map QA contributor",
+      "task_id": "HNY-EXISTING-02",
+      "section": "Existing entries",
+      "bounded_task": "Correct or expand an entry",
+      "description": "Improve a place with an unclear description, a broken source link or a detail that needs checking.",
+      "steps": [
+        "Open a place and identify one thing to fix or explain more clearly.",
+        "Find a source that supports the correction. Keep a reported story separate from what the source establishes.",
+        "Choose Edit, revise the relevant fields or sources, explain the correction and publish it under your public username."
+      ],
+      "evidence_deliverable": "A clearer or more accurate entry, with a source and a description of the change.",
       "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 15,
-        "max": 25,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Three scenarios and label proposal",
-      "reviewer_role": "mapping reviewer",
-      "dependencies": [
-        "HNY-006"
-      ],
-      "acceptance_criteria": [
-        "Layer date separate from claim historical period",
-        "Filters do not imply source endorsement"
-      ],
+      "starter": true,
       "status": "proposed",
       "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Filters and uncertainty",
-      "type": "QA report"
-    },
-    {
-      "task_id": "HNY-008",
-      "bounded_task": "Document one reported haunting",
-      "role": "Source researcher",
-      "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 30,
-        "max": 45,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "One Entries row plus report Source use",
-      "reviewer_role": "evidence reviewer",
       "dependencies": [],
-      "acceptance_criteria": [
-        "Story explicitly attributed",
-        "Report date distinct from alleged event",
-        "Index is lead not supernatural evidence"
-      ],
-      "status": "proposed",
-      "assignee": null,
+      "acceptance_criteria": [],
       "source_references": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Historical research",
-      "type": "Historical evidence"
+      "linked_submissions": []
     },
     {
-      "task_id": "HNY-009",
-      "bounded_task": "Trace one vanished business",
-      "role": "Source researcher",
-      "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 40,
-        "max": 60,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Entry and existence/change sources, or bounded archival-gap question",
-      "reviewer_role": "evidence reviewer",
-      "dependencies": [],
-      "acceptance_criteria": [
-        "Missing modern listing does not prove disappearance",
-        "If change unsupported, do not assert it"
+      "task_id": "HNY-NEW-01",
+      "section": "New entries",
+      "bounded_task": "Add a place to the map",
+      "description": "Add a New York City location connected to a reported haunting or another story from the city’s past.",
+      "steps": [
+        "Find a source that names the place and describes what was reported there. Note its address or coordinates.",
+        "Search Places to make sure the location is not already on the map.",
+        "Choose Contribute, then Edit. Find or pin the location, add a title, description and source, then enter your public username and describe the change. Check your entries and choose Publish."
       ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Historical research",
-      "type": "Historical evidence"
-    },
-    {
-      "task_id": "HNY-010",
-      "bounded_task": "Bound one census gap",
-      "role": "Archive researcher",
-      "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 30,
-        "max": 45,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Archival-gap Entry, SearchLog and source locator",
-      "reviewer_role": "evidence reviewer",
-      "dependencies": [],
-      "acceptance_criteria": [
-        "Distinguish documented missing volumes from no search match",
-        "State historical jurisdiction/coverage limits",
-        "No unsupported intentional-erasure claim"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Historical research",
-      "type": "Archival-gap evidence"
-    },
-    {
-      "task_id": "HNY-011",
-      "bounded_task": "Verify three source locators",
-      "role": "Citation checker",
+      "evidence_deliverable": "A new place inside the five boroughs, with a description and a source.",
       "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 20,
-        "max": 30,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Three citation checks with proposed diffs",
-      "reviewer_role": "evidence reviewer",
+      "starter": true,
+      "status": "proposed",
+      "assignee": null,
       "dependencies": [],
-      "acceptance_criteria": [
-        "Preserve original source refs",
-        "Actual consulted date",
-        "Unknown metadata explicit"
-      ],
-      "status": "proposed",
-      "assignee": null,
+      "acceptance_criteria": [],
       "source_references": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Corrections and rights",
-      "type": "Citation correction"
+      "linked_submissions": []
     },
     {
-      "task_id": "HNY-013",
-      "bounded_task": "Clarify one ambiguous date",
-      "role": "Date researcher",
+      "task_id": "HNY-NEW-02",
+      "section": "New entries",
+      "bounded_task": "Add a lost building or closed business",
+      "description": "Put a place from an old photograph, directory or newspaper back on the map.",
+      "steps": [
+        "Choose a named building or business in a historical source. Find its street address and the date of the source.",
+        "Check what you can establish about its history: for example, when it operated, moved, closed or was demolished. A missing web listing alone does not show that a business closed.",
+        "Search Places first. If it is new, use Contribute → Edit to add it with sources and the dates you could verify. Say when a date or part of the story remains unknown."
+      ],
+      "evidence_deliverable": "A sourced entry showing where the place was and what you could establish about its history.",
       "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 15,
-        "max": 25,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Entry field diff and dated source locator",
-      "reviewer_role": "evidence reviewer",
+      "starter": true,
+      "status": "proposed",
+      "assignee": null,
       "dependencies": [],
-      "acceptance_criteria": [
-        "Unknown stays null",
-        "Circa bounds explained",
-        "No invalid one-sided v1.0 interval"
-      ],
-      "status": "proposed",
-      "assignee": null,
+      "acceptance_criteria": [],
       "source_references": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Corrections and rights",
-      "type": "Date correction"
+      "linked_submissions": []
     },
     {
-      "task_id": "HNY-016",
-      "bounded_task": "Test keyboard contribution path",
-      "role": "Accessibility tester",
+      "task_id": "HNY-DATA-01",
+      "section": "Datasets and maps",
+      "bounded_task": "Find a dataset we could map",
+      "description": "Look for a public collection of New York City places that could add something to this project.",
+      "steps": [
+        "Search an open-data portal, library or archive for buildings, businesses, historical sites or reported hauntings.",
+        "Check whether the records include addresses or coordinates, where the information came from and what the sharing terms allow. Look at a few sample records.",
+        "Share the dataset link in a GitHub issue. Describe what could be mapped, include three example places and note any missing locations or unclear sharing terms."
+      ],
+      "evidence_deliverable": "A dataset suggestion with a source link, three example places and a note about the sharing terms.",
       "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 25,
-        "max": 40,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Steps, focus observations, failures and version",
-      "reviewer_role": "accessibility reviewer",
+      "source_references": [
+        {
+          "label": "Suggest a dataset on GitHub",
+          "url": "https://github.com/CUNY-AI-Lab/hauntologies-nyc/issues/new"
+        }
+      ],
+      "starter": true,
+      "status": "proposed",
+      "assignee": null,
       "dependencies": [],
-      "acceptance_criteria": [
-        "Visible focus",
-        "No trap",
-        "Labeled errors",
-        "Result reachable without map dragging"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
+      "acceptance_criteria": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Accessibility and documentation",
-      "type": "QA report"
+      "linked_submissions": []
     },
     {
-      "task_id": "HNY-017",
-      "bounded_task": "Check unlocated list parity",
-      "role": "Accessibility tester",
+      "task_id": "HNY-DATA-02",
+      "section": "Datasets and maps",
+      "bounded_task": "Plot a few places from a dataset",
+      "description": "Try a small sample before proposing a larger collection.",
+      "steps": [
+        "Choose three records from a dataset whose information can be shared. Keep the original record links or citations.",
+        "Check each address or coordinate and look for the place in Places so you do not create a duplicate.",
+        "Add each new place through Contribute → Edit, including its source. Use Edit on an existing place if the dataset fills a gap or corrects a detail."
+      ],
+      "evidence_deliverable": "Up to three new or improved map entries, each linked to its source record.",
       "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 20,
-        "max": 30,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Expected counts versus observed map/list counts",
-      "reviewer_role": "accessibility reviewer",
-      "dependencies": [
-        "HNY-006"
-      ],
-      "acceptance_criteria": [
-        "Null geometry remains in list",
-        "Marker count may differ and is labeled",
-        "Uncertainty conveyed beyond color"
-      ],
+      "starter": true,
       "status": "proposed",
       "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Accessibility and documentation",
-      "type": "QA report"
-    },
-    {
-      "task_id": "HNY-018",
-      "bounded_task": "Check one mobile viewport",
-      "role": "Device tester",
-      "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 20,
-        "max": 30,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Device/browser/version report and screenshots if rights permit",
-      "reviewer_role": "QA reviewer",
       "dependencies": [],
-      "acceptance_criteria": [
-        "No inaccessible offscreen control",
-        "Text readable",
-        "Zoom does not hide submit/errors",
-        "Do not claim physical-device testing for emulation"
-      ],
-      "status": "proposed",
-      "assignee": null,
+      "acceptance_criteria": [],
       "source_references": [],
       "next_action": null,
-      "linked_submissions": [],
-      "section": "Accessibility and documentation",
-      "type": "QA report"
-    },
-    {
-      "task_id": "HNY-019",
-      "bounded_task": "Write one contribution walkthrough",
-      "role": "Documentation contributor",
-      "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 25,
-        "max": 40,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Plain-text walkthrough linked to current fields",
-      "reviewer_role": "documentation reviewer",
-      "dependencies": [],
-      "acceptance_criteria": [
-        "Distinguish local export from shared receipt",
-        "No real identities",
-        "Include unknown location/date example"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Accessibility and documentation",
-      "type": "Documentation"
-    },
-    {
-      "task_id": "HNY-020",
-      "bounded_task": "Document reviewer decision rubric",
-      "role": "Documentation contributor",
-      "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 25,
-        "max": 40,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Checklist aligned to v1.0 enums",
-      "reviewer_role": "editorial reviewer",
-      "dependencies": [],
-      "acceptance_criteria": [
-        "Review is not automatic validation",
-        "No self-approval",
-        "Decision names precise revision and rationale"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Accessibility and documentation",
-      "type": "Documentation"
-    },
-    {
-      "task_id": "HNY-021",
-      "bounded_task": "Triage five submissions",
-      "role": "Queue steward",
-      "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 20,
-        "max": 30,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Queue handoff with submission IDs and next action",
-      "reviewer_role": "triage reviewer",
-      "dependencies": [],
-      "acceptance_criteria": [
-        "Do not edit originals",
-        "No factual approval or permissions changes",
-        "Private identities omitted from shared summary"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Queue and release stewardship",
-      "type": "Stewardship report"
-    },
-    {
-      "task_id": "HNY-022",
-      "bounded_task": "Prepare one shift handoff",
-      "role": "Queue steward",
-      "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 10,
-        "max": 20,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Timestamped shift report and next-shift checklist",
-      "reviewer_role": "release steward",
-      "dependencies": [
-        "HNY-021"
-      ],
-      "acceptance_criteria": [
-        "No arbitrary external outreach",
-        "No private identity disclosure",
-        "Distinguish pending, failed and uncertain job outcomes"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Queue and release stewardship",
-      "type": "Stewardship report"
-    },
-    {
-      "task_id": "HNY-023",
-      "bounded_task": "Audit three review histories",
-      "role": "Review coordinator",
-      "skill_level": "intermediate",
-      "estimated_minutes": {
-        "min": 25,
-        "max": 40,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Audit findings and correction proposals",
-      "reviewer_role": "editorial reviewer",
-      "dependencies": [
-        "HNY-020"
-      ],
-      "acceptance_criteria": [
-        "Role label not authentication",
-        "Stale approval flagged",
-        "No retroactive manufactured approvals"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Queue and release stewardship",
-      "type": "Review audit"
-    },
-    {
-      "task_id": "HNY-024",
-      "bounded_task": "Rehearse safe apply failures",
-      "role": "Release QA contributor",
-      "skill_level": "advanced",
-      "estimated_minutes": {
-        "min": 45,
-        "max": 60,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Test matrix with actual pass/fail/not-run evidence",
-      "reviewer_role": "release reviewer",
-      "dependencies": [
-        "HNY-020"
-      ],
-      "acceptance_criteria": [
-        "No live mutations",
-        "One approved operation applies once",
-        "Reconcile uncertain outcome before retry",
-        "No submitted code execution"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Queue and release stewardship",
-      "type": "Release QA"
-    },
-    {
-      "task_id": "HNY-025",
-      "bounded_task": "Rehearse verification and rollback",
-      "role": "Release QA contributor",
-      "skill_level": "advanced",
-      "estimated_minutes": {
-        "min": 40,
-        "max": 60,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "Release manifest, before/after comparison and rollback receipt",
-      "reviewer_role": "release reviewer",
-      "dependencies": [
-        "HNY-024",
-        "HNY-017"
-      ],
-      "acceptance_criteria": [
-        "Only affected release restored",
-        "Original evidence retained",
-        "Unrelated later changes not lost",
-        "Do not mark merged before checks pass"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Queue and release stewardship",
-      "type": "Release QA"
-    },
-    {
-      "task_id": "HNY-026",
-      "bounded_task": "Inventory new contribution opportunities",
-      "role": "Documentation contributor",
-      "skill_level": "beginner",
-      "estimated_minutes": {
-        "min": 15,
-        "max": 25,
-        "kind": "planning_estimate"
-      },
-      "evidence_deliverable": "New TaskLedger proposals with stable IDs",
-      "reviewer_role": "triage reviewer",
-      "dependencies": [
-        "HNY-021"
-      ],
-      "acceptance_criteria": [
-        "No duplicate tasks",
-        "No invented assignments",
-        "Separate opportunity from accepted deliverable"
-      ],
-      "status": "proposed",
-      "assignee": null,
-      "source_references": [],
-      "next_action": null,
-      "linked_submissions": [],
-      "section": "Queue and release stewardship",
-      "type": "Task proposal"
+      "linked_submissions": []
     }
   ]
 }

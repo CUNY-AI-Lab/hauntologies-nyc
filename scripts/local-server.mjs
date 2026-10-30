@@ -99,7 +99,7 @@ async function contributions(req, url) {
 }
 
 const publicRoot = path.join(repo, 'public') + path.sep;
-const pages = { '/': 'web/index.html', '/activity': 'web/activity.html', '/register': 'web/registration.html' };
+const pages = { '/': 'web/index.html', '/activity': 'web/activity.html', '/guide': 'web/guide.html', '/register': 'web/registration.html' };
 function file404(pathname) {
   if (pathname === '/contributors') return new Response(null, {status:302,headers:{location:'/#contributors'}});
   // Only the pages and files under public/ are served; encoded "../" cannot reach .local/ or other data.
