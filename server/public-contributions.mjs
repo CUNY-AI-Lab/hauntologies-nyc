@@ -33,9 +33,11 @@ export const PUBLIC_CONTRIBUTIONS_SQL = `WITH public_records AS (
  JOIN public_records p ON p.id=json_extract(e.event_json,'$.record_id')
  WHERE e.kind='direct_publish' AND s.review_state='published'
  ORDER BY e.created_at,e.id LIMIT ${EVENT_LIMIT + 1}
+), verified_times AS (
+ SELECT job_id,min(created_at) AS published_at FROM workflow_events WHERE kind='verified' GROUP BY job_id
 ), legacy_releases AS (
- SELECT j.id,s.owner_id AS actor_id,j.created_at,
- (SELECT json_object('targets',json_group_array(json_object('record_id',json_extract(t.value,'$.record_id'),'after',1)))
+ SELECT j.id,s.owner_id AS actor_id,COALESCE(v.published_at,CASE WHEN json_extract(j.verification_json,'$.outcome')='verified' THEN json_extract(j.verification_json,'$.checked_at') END) AS created_at,
+ (SELECT json_object('submission_type',json_extract(r.raw_json,'$.type'),'targets',json_group_array(json_object('record_id',json_extract(t.value,'$.record_id'),'after',1,'operation',json_extract(t.value,'$.operation'),'before_type',json_type(t.value,'$.before'),'origin',json_extract(t.value,'$.origin'))))
   FROM json_each(j.manifest_json,'$.targets') t JOIN public_records p ON p.id=json_extract(t.value,'$.record_id')
   WHERE json_type(t.value,'$.after')='object') AS manifest_json,
  ${releaseCreditSQL()} AS credit_json,
@@ -43,6 +45,7 @@ export const PUBLIC_CONTRIBUTIONS_SQL = `WITH public_records AS (
  FROM workflow_jobs j JOIN workflow_submissions s ON s.id=j.submission_id
  JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
  JOIN workflow_revisions r ON r.submission_id=j.submission_id AND r.revision=j.revision
+ LEFT JOIN verified_times v ON v.job_id=j.id
  WHERE j.status='verified' AND s.review_state<>'revoked'
  AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1)
  AND COALESCE(json_extract(r.raw_json,'$.type'),'') NOT IN ('import','bulk_import')
@@ -57,6 +60,18 @@ const core = new Set(['title', 'category', 'place_type', 'address', 'geo_basis']
 const unknownWhenBlank = new Set(['borough', 'geo_status']);
 const imageNeeded = new Set(['image_credit', 'image_license', 'image_alt']);
 const labels = { present: 'Present', missing: 'Missing', invalid: 'Invalid', unknown: 'Unknown', optional: 'Optional', not_applicable: 'Not applicable' };
+
+// Classify from the immutable operation and released revision, never the final
+// place shape or a staging timestamp. Missing evidence stays unclassified.
+function legacyKind(manifest, targets) {
+  const type=manifest.submission_type;
+  if (['open_proposal','entry_bundle'].includes(type) && targets.every(t=>t.operation==='create_entry' && t.before_type==='null')) return 'create';
+  const updates=targets.every(t=>t.operation==='update_record' && (t.before_type==='object' || t.origin==='static_inventory'));
+  if (updates && type==='record_update') return 'edit';
+  if (['citation_correction','date_correction','location_correction'].includes(type) && targets.every(t=>t.operation===type && t.before_type==='object')) return 'edit';
+  if (updates && ['open_proposal','record_annotation'].includes(type)) return 'note';
+  return 'publication';
+}
 
 export function placeCompleteness(record) {
   const snapshot = RecordEditModel.snapshot(record);
@@ -116,42 +131,43 @@ export function projectPublicContributions({ staticRecords = [], rows = [], now 
     if (!people.has(key)) people.set(key, { id: crypto.randomUUID(), name, identity_basis: 'actor_and_moniker', identity_scope: 'response', ...counts(), place_ids: new Set(), addedIds: new Set(), latest: null });
     return people.get(key);
   }
+  function publication(row,kind,ids,name,legacy=false) {
+    const person=personFor(row,name),at=typeof row.created_at==='string' && Number.isFinite(Date.parse(row.created_at)) ? new Date(row.created_at).toISOString() : null;
+    totals.published++;
+    if(legacy)totals.legacy++;
+    if(at && (!coverageStart || at<coverageStart))coverageStart=at;
+    if(person){person.published++;if(legacy)person.legacy++;for(const id of ids)person.place_ids.add(id);if(at && (!person.latest || at>person.latest))person.latest=at;}
+    else{unattributed++;if(legacy)unattributedLegacy++;}
+    const metric=({edit:'edits',note:'notes',undo:'undo'})[kind] || 'unclassified';
+    if(kind!=='create'){totals[metric]++;if(person)person[metric]++;}
+    for(const id of ids){
+      const activity=placeActivity.get(id);activity.published++;if(legacy)activity.legacy++;
+      if(kind==='create'){added.add(id);person?.addedIds.add(id);activity.added=1;}
+      else{activity[metric]++;if(kind==='edit')edited.add(id);}
+    }
+    const id=ids[0],title=records.get(id).title;
+    activityEvents.push({sort_id:(legacy?'legacy:':'direct:')+row.id,kind,at,contributor:name,
+      place:{id,title:typeof title==='string' && title.trim()?title:'Untitled place'},...(ids.length>1?{place_count:ids.length}:{})});
+  }
   for (const row of grouped.event) {
     if (seen.has(row.id)) continue;
     const event = json(row.event_json);
     if (!event || !records.has(event.record_id)) continue;
-    seen.add(row.id); totals.published++;
-    const activity = placeActivity.get(event.record_id); activity.published++;
-    if (row.created_at && (!coverageStart || row.created_at < coverageStart)) coverageStart = row.created_at;
+    seen.add(row.id);
     const consent = json(row.credit_json)?.public_credit;
     const credit = publicCredit(row.credit_json);
     const name = !row.roster_hidden && consent?.identity === 'moniker' && credit && typeof event.moniker === 'string' && normalized(credit) === normalized(event.moniker) ? credit : null;
-    const person = personFor(row, name);
-    const title = records.get(event.record_id).title;
-    activityEvents.push({ sort_id: row.id, kind: ['create','edit','note','undo'].includes(event.kind) ? event.kind : 'publication',
-      at: typeof row.created_at === 'string' && Number.isFinite(Date.parse(row.created_at)) ? new Date(row.created_at).toISOString() : null,
-      contributor: name, place: { id: event.record_id, title: typeof title === 'string' && title.trim() ? title : 'Untitled place' } });
-    if (person) { person.published++; person.place_ids.add(event.record_id); if (!person.latest || row.created_at > person.latest) person.latest = row.created_at; }
-    else unattributed++;
-    if (event.kind === 'create') { added.add(event.record_id); person?.addedIds.add(event.record_id); activity.added = 1; }
-    else {
-      const metric = ({ edit: 'edits', note: 'notes', undo: 'undo' })[event.kind] || 'unclassified';
-      totals[metric]++; if (person) person[metric]++;
-      activity[metric]++;
-      if (event.kind === 'edit') edited.add(event.record_id);
-    }
+    publication(row,['create','edit','note','undo'].includes(event.kind)?event.kind:'publication',[event.record_id],name);
   }
   for (const row of grouped.legacy) {
     if (seen.has('legacy:' + row.id)) continue;
-    const targets = (json(row.manifest_json)?.targets || []).filter(target => target.after && records.has(target.record_id));
+    const manifest=json(row.manifest_json);
+    if(['import','bulk_import'].includes(manifest?.submission_type))continue;
+    const targets = (manifest?.targets || []).filter(target => target.after && records.has(target.record_id));
     if (!targets.length) continue;
-    seen.add('legacy:' + row.id); totals.legacy++;
-    if (row.created_at && (!coverageStart || row.created_at < coverageStart)) coverageStart = row.created_at;
-    for (const id of new Set(targets.map(target => target.record_id))) placeActivity.get(id).legacy++;
+    seen.add('legacy:' + row.id);
     const name = row.roster_hidden ? null : publicCredit(row.credit_json);
-    const person = personFor(row, name);
-    if (person) { person.legacy++; for (const target of targets) person.place_ids.add(target.record_id); }
-    else unattributedLegacy++;
+    publication(row,legacyKind(manifest,targets),[...new Set(targets.map(target=>target.record_id))],name,true);
   }
   totals.added = added.size;
   const contributors = [...people.values()].map(({ addedIds, place_ids, ...person }) => ({ ...person, added: addedIds.size, place_ids: [...place_ids].sort(), metrics: metricsFor({published:person.published,added:addedIds.size,edits:person.edits,notes:person.notes,undo:person.undo,unclassified:person.unclassified,legacy:person.legacy,places_touched:place_ids.size}) }))
@@ -183,7 +199,7 @@ export async function handlePublicContributions(request, { db, staticRecords }) 
   if (summary || activity ? url.searchParams.size : [...url.searchParams.keys()].some(key => !['place','snapshot'].includes(key)) || url.searchParams.getAll('place').length !== 1 || !idValid(url.searchParams.get('place')) || url.searchParams.getAll('snapshot').length > 1 || url.searchParams.has('snapshot') && !/^[a-f0-9]{64}$/.test(url.searchParams.get('snapshot'))) return respond({ error: 'invalid_query' }, 400);
   try {
     const projection = await readPublicContributions(db, staticRecords);
-    if (activity) return respond({ schema_version: '1.0', as_of: projection.as_of, scope: 'Direct publications currently public', total: projection.totals.published, limit: 100, events: projection.activity });
+    if (activity) return respond({ schema_version: '1.0', as_of: projection.as_of, scope: 'All recorded publications currently public', total: projection.totals.published, limit: 100, events: projection.activity });
     if (summary) { const { activity: omitted, ...directory } = projection; return respond({ ...directory, places: projection.places.map(({ fields, ...place }) => place) }); }
     if (url.searchParams.has('snapshot') && url.searchParams.get('snapshot') !== projection.snapshot_token) return respond({error:'public_snapshot_changed'},409);
     const place = projection.places.find(place => place.id === url.searchParams.get('place'));
