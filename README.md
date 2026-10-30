@@ -14,17 +14,17 @@ Registration asks for your name and email address and shows a receipt on the scr
 
 ## The map
 
-The public map is live at https://hauntologies-nyc.ailab-452.workers.dev. Anyone can search places and addresses, filter by borough, place type, period and location certainty, and view aerial imagery from 1924 forward. Signing in lets you propose a place with sources and photographs, add a note to an existing place or propose a correction. Every proposal goes through review; an approved proposal reaches the public map only after the separate publication and verification steps.
+The public map is live at https://hauntologies-nyc.ailab-452.workers.dev. Anyone can search places and addresses, filter by borough, place type, period and location certainty, and view aerial imagery from 1924 forward. Event registration is separate at `/register`; map accounts use verified email and a password chosen after verification.
 
-The public map is already approved and live, with standalone event registration at `/register`. Map accounts use verified email and a password chosen after verification. Signed-in contributors can save and read their own proposals and private images. Open review lets verified map accounts review and publish others' submitted work, subject to the configured roles and independent-review rules. Contributors choose whether their name appears with each contribution, under review and once published. Attendee-dashboard access remains blocked.
+The guides here describe the direct-publication release in the merged source. Until that release is deployed, the live map uses the earlier review and verification workflow. In the direct-publication release, signed-in contributors can publish a point place, a note on a place, or an edit to a place's fields and sources. Each publication has a chosen public username and a short description of the change. Place cards show History, and contributors can revoke their own published work before deleting its private copy. Saved images remain private; the direct form does not offer a new public image upload. Attendee-dashboard access remains blocked.
 
 ## Where to go from here
 
 This repository holds the source for the map, the registration page and the guides that explain how they work. Read down this path until you reach the guide for your part:
 
-1. [Contribution access](docs/contribution-access.md) explains event registration, map accounts, the contribution form, review and publication.
-2. [Private images](docs/private-images.md) describes image limits, upload behavior and access after submission.
-3. [Area proposals and record annotations](server/EMBEDDED-CONTRIBUTIONS.md) lists the fields for the two contribution types the visible form does not offer.
+1. [Contribution access](docs/contribution-access.md) explains event registration, map accounts, direct publication and the contributor controls.
+2. [Private images](docs/private-images.md) describes saved private images and the earlier upload workflow.
+3. [Area proposals and record annotations](server/EMBEDDED-CONTRIBUTIONS.md) documents legacy service envelopes for area proposals and record annotations.
 4. [Running the site](docs/running-the-site.md) is for maintainers and covers local setup, settings, sign-in, email, releases and rollback.
 5. [Model-assisted ingestion](server/README.md) describes the disabled backend; its [tool contract](public/ingestion/TOOL-CONTRACT.md) and [extraction skill](public/ingestion/SKILL.md) set out its boundaries if it is ever enabled.
 
@@ -37,10 +37,9 @@ npm run install:ci
 npm run dev
 ```
 
-To try contributing and reviewing on your own machine, run `npm run local` and open http://127.0.0.1:8790. The two synthetic accounts use the password `haunted-local-only`:
+To try direct publication on your own machine, run `npm run local` and open http://127.0.0.1:8790. The two synthetic accounts use the password `haunted-local-only`:
 
-- `contributor@local.test` submits places and reviews the other account's work.
-- `reviewer@local.test` can also review and publish.
+- `contributor@local.test` and `reviewer@local.test` are separate synthetic contributors. Both can publish supported changes directly; their names do not grant review roles in this mode.
 
 The local server runs the real contribution service on SQLite in `.local/` (gitignored). `npm run local -- --fresh` starts over. Registration, password resets and image uploads need production services and are off locally.
 

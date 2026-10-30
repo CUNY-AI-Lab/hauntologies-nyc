@@ -154,6 +154,33 @@ test('blank, mismatched, non-text and oversized explanations are not valid', asy
   await invalid(envelope({ command: 'execute this' }));
 });
 
+test('existing-place facts or references need no description, but empty or identical revisions are rejected', async t => {
+  const h = harness(); t.after(() => h.db.close());
+  const selected = await context(h);
+  const value = envelope({ explanation: '', attributes: [{ name: 'Opening date', value: '1901' }] }, { summary: '', targets: [selected] });
+  const created = await submit(h, value);
+  assert.equal(created.submission.status, 'submitted');
+  const changed = created.submission.application.operations[0].record;
+  assert.ok(changed.description.startsWith(staticRecord.description));
+  assert.match(changed.description, /Opening date: 1901/);
+  const same = await call(h, 'revise', { idempotency_key: key(h, 'same'), submission_id: created.submission.id, expected_revision: 1, submission_json: JSON.stringify(value) });
+  status(same, 409); assert.equal(same.body.error, 'no_effective_change');
+  const sameWithNulls = { ...value, summary: null, payload: { ...value.payload, explanation: null, sources_text: ' ', geometry: null } };
+  const equivalent = await call(h, 'revise', { idempotency_key: key(h, 'same_nulls'), submission_id: created.submission.id, expected_revision: 1, submission_json: JSON.stringify(sameWithNulls) });
+  status(equivalent, 409); assert.equal(equivalent.body.error, 'no_effective_change');
+  const empty = envelope({ explanation: '', sources_text: '  ', attributes: [] }, { summary: '', targets: [selected] });
+  const emptySubmission = await call(h, 'submit', { idempotency_key: key(h, 'empty_submit'), submission_json: JSON.stringify(empty) });
+  status(emptySubmission, 400); assert.equal(emptySubmission.body.error, 'contribution_content_required');
+  const rejected = await call(h, 'revise', { idempotency_key: key(h, 'empty'), submission_id: created.submission.id, expected_revision: 1, submission_json: JSON.stringify(empty) });
+  status(rejected, 400); assert.equal(rejected.body.error, 'contribution_content_required');
+  assert.equal((await h.store.getSubmission(created.submission.id)).current_revision, 1);
+  const reference = envelope({ explanation: '' }, { summary: '', targets: [selected], sources: [{ citation: 'Synthetic archive', url: 'https://example.org/archive' }] });
+  const sourced = await submit(h, reference);
+  assert.equal(sourced.submission.application.operations[0].record.description, staticRecord.description);
+  assert.equal(sourced.submission.application.operations[0].record.sources.at(-1).citation, 'Synthetic archive');
+  await invalid(envelope({ explanation: '', attributes: [{ name: 'Opening date', value: '1901' }] }, { summary: '' }));
+});
+
 test('submission byte limits apply without truncating stored content', async t => {
   const h = harness(); t.after(() => h.db.close());
   const huge = JSON.stringify(envelope()) + ' '.repeat(LIMITS.submission_bytes);

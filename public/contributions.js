@@ -404,6 +404,12 @@
     byId('freeformRecordLabel').textContent=openTargetLabel||openRequestedRecordId||openTargets[0]?.record_id||'';
     byId('freeformRecordContext').setAttribute('aria-busy',String(openTargetPending));
     if(visible)byId('contributionPlaceMode').value='existing';
+    const optionalDescription=isOpenForm()&&byId('contributionPlaceMode').value==='existing';
+    byId('contributionSummary').required=!optionalDescription;
+    byId('freeformDescription').dataset.hint=optionalDescription?'':'required';
+    byId('contributionDescriptionOptional').hidden=!optionalDescription;
+    const descriptionLabel=byId('contributionSummary').closest('label')?.querySelector('.sr-only');
+    if(descriptionLabel&&isOpenForm())descriptionLabel.textContent=optionalDescription?'Description (optional)':'Description';
     byId('freeformPlacePicker').hidden=byId('contributionPlaceMode').value!=='existing';
     byId('freeformLocation').hidden=!pointForm();byId('newPlaceLocation').hidden=!pointForm();byId('contributionPlacePlate').hidden=!pointForm();byId('freeformTitle').hidden=byId('contributionPlaceMode').value==='existing';populatePlaceChoices();showPoint();
   }
@@ -726,14 +732,19 @@
     event.preventDefault();if(!window.HauntologiesAccount?.canContribute()||previewInFlight||busy||imageProcessing||imageBusy)return;
     const account=window.HauntologiesAccount.snapshot();previewInFlight=true;
     try{if(pendingWrite){renderErrors(['Save outcome unknown. Check My edits before retrying.']);showReconciliation();return;}
-    renderErrors([]);const errors=[],explanation=byId('contributionSummary').value;
+    renderErrors([]);const errors=[],explanation=byId('contributionSummary').value,attributes=attributeValues();
     if(isOpenForm()&&!byId('contributionChangeSummary').value.trim())errors.push({field:'change_summary',message:'Briefly describe your change'});
-    if(!explanation.trim())errors.push({field:'summary',message:'Describe what you would like to contribute'});
+    if(!explanation.trim()){
+      const existing=isOpenForm()&&byId('contributionPlaceMode').value==='existing';
+      const hasSource=existing&&(sourceText().trim()||revisionOriginal?.sources?.some(source=>typeof source?.citation==='string'&&source.citation.trim()||typeof source?.url==='string'&&source.url.trim()));
+      const hasFact=existing&&attributes.some(row=>row.name.trim()&&row.value.trim());
+      if(!existing||!hasSource&&!hasFact)errors.push({field:'summary',message:existing?'Add a description, a source or a fact':'Describe what you would like to contribute'});
+    }
     if(isOpenForm()&&explanation.length>15000)errors.push({field:'summary',message:'Use 15,000 characters or fewer'});
     if(imageBatch){imageStatus('Contribution saved. Images not saved',true);return;}
     if(isOpenForm()&&byId('contributionPlaceMode').value==='existing'&&!openRequestedRecordId&&!openTargets.length)errors.push({field:'targets',message:'Choose an existing place'});
     const locationError=pointError();if(locationError)errors.push(locationError);
-    for(const [i,row] of attributeValues().entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
+    for(const [i,row] of attributes.entries()){if(!row.name.trim())errors.push({field:'payload.attributes.'+i+'.name',message:'Add a name'});if(!row.value.trim())errors.push({field:'payload.attributes.'+i+'.value',message:'Add a value'});}
     if(errors.length){renderErrors(errors);return;}
     if(pointForm()&&readPoint())await window.ContributionPlace?.named();
     if(!window.HauntologiesAccount.isCurrent(account))return;
@@ -817,7 +828,7 @@
     if(value.type==='record_update'){window.dispatchEvent(new CustomEvent('record-edit-revision-requested',{detail:{submission:structuredClone(submission),opener:document.activeElement}}));return;}
     clearRevision();resetContributionForm();resetOpenContext();revisionOriginal=structuredClone(value);revisionOf={id:submission.id,revision:submission.revision};
     byId('previewContribution').textContent=value.type==='open_proposal'?'Publish':'Save privately';byId('contributionChangeSummaryLabel').hidden=value.type!=='open_proposal';byId('contributionChangeSummary').required=value.type==='open_proposal';
-    openExplanationInitial=value.type==='open_proposal'?value.payload.explanation:value.summary||'';byId('contributionSummary').value=openExplanationInitial;openExplanationDisplayInitial=byId('contributionSummary').value;
+    openExplanationInitial=value.type==='open_proposal'?(value.payload.explanation??''):value.summary||'';byId('contributionSummary').value=openExplanationInitial;openExplanationDisplayInitial=byId('contributionSummary').value;
     openTargets=structuredClone(value.targets||[]);openRequestedRecordId=openTargets[0]?.record_id||'';openTargetLabel=openRequestedRecordId;openTaskIds=[...(value.task_ids||[])];
     byId('contributionObjectTitle').value=value.title||'';byId('extraSources').replaceChildren();
     // Only open proposals edit credit; typed revisions change their summary alone.

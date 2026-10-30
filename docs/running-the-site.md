@@ -2,6 +2,8 @@
 
 This guide is for the people who build, configure and release the site, and it assumes you have read the [README](../README.md) and [Contribution access](contribution-access.md), which describe what participants see. It covers how to run the site on your own machine, which settings turn features on, how sign-in and email work underneath, and how to release and roll back.
 
+The contribution behavior below describes the direct-publication release in the merged source. Until that release is deployed, the live map uses the earlier review and verification workflow.
+
 ## What runs where
 
 The site is a Vinext app, which is Vite with a Next.js-compatible app router, deployed to Cloudflare Workers with a D1 database bound as `DB`, and its pages and the map are plain HTML and JavaScript with Leaflet and MarkerCluster bundled. The Worker is named `hauntologies-nyc` and lives in the Cloudflare account `452c33847cf5cb1e46f391fca32fd1b5`, its database is also named `hauntologies-nyc` with the ID `df7f1e92-e339-4e25-ac30-989dd68d8dfc`, and its public address is https://hauntologies-nyc.ailab-452.workers.dev with preview URLs switched off.
@@ -28,30 +30,31 @@ The preparation script checks the Worker, account and database identifiers, proj
 | `ACCOUNT_MAIL` | service binding | Reaches the account mail entrypoint in the Admission worker, described under Email delivery. Account routes answer "accounts unavailable" until this binding, the secret, the variable and the database are all present. |
 | `REGISTRATION_ELIGIBILITY_ENABLED` | variable | Limits event registration and account creation to CUNY addresses and guests with the access code when set to `true`, which the account release script does. Without it, anyone can register. |
 | `REGISTRATION_GUEST_CODE` | secret | The shared guest access code, at most 256 characters, compared by SHA-256 hash. Store it as a Worker secret. |
-| `CONTRIBUTIONS_REVIEWER_IDS` | secret or variable | A JSON array of up to twenty account IDs that may review. No release script sets any of the three role lists, so set them on the Worker yourself. |
-| `CONTRIBUTIONS_PUBLISHER_IDS` | secret or variable | A JSON array of up to twenty account IDs that may apply, verify and roll back approved changes, which has no effect unless the reviewer list is valid and not empty. |
-| `CONTRIBUTIONS_ADMIN_IDS` | secret or variable | A JSON array of up to twenty account IDs that hold the reviewer and publisher roles. Admins remain subject to the same independent-review and independent-verification rules as every contributor. |
+| `CONTRIBUTIONS_REVIEWER_IDS` | secret or variable | Legacy-mode reviewer list: a JSON array of up to twenty account IDs. It does not enable review in direct mode. |
+| `CONTRIBUTIONS_PUBLISHER_IDS` | secret or variable | Legacy-mode publisher list, effective only with a valid nonempty reviewer list. It does not enable review or release mutations in direct mode. |
+| `CONTRIBUTIONS_ADMIN_IDS` | secret or variable | Legacy-mode admin list, granting reviewer and publisher roles with the same independence rules. It does not enable those mutations in direct mode. |
+| `CONTRIBUTIONS_OPEN_REVIEW` | variable | The preparation script sets this for the legacy review service. Direct mode disables review, triage, apply, verify and rollback mutations regardless of this setting. |
 | `CAIL_*` | variables and one secret | Settings for the model-assisted ingestion backend, which stays off, with `CAIL_API_KEY` as the secret. See [Model-assisted ingestion](../server/README.md). |
 
-Each entry in the three role lists must be a map account ID, which is `map_` followed by a lowercase version 4 UUID. The validator also accepts an older Access ID, which is `access_` followed by 64 lowercase hex characters, but no signed-in map account can match one.
+In legacy mode, each entry in the three role lists must be a map account ID, which is `map_` followed by a lowercase version 4 UUID. The validator also accepts an older Access ID, which is `access_` followed by 64 lowercase hex characters, but no signed-in map account can match one.
 
 The site ignores a whole list when it holds more than twenty entries, a duplicate or any malformed entry. A typo therefore cannot grant a role by accident. Each list must be a string containing the JSON array. A native array in the configuration is ignored and grants no roles. The flags `MAP_ACCOUNTS_ENABLED` and `REGISTRATION_ELIGIBILITY_ENABLED` must be the exact string `true`.
 
 Reviewers come from `CONTRIBUTIONS_REVIEWER_IDS`. Publishers come from `CONTRIBUTIONS_PUBLISHER_IDS`. A publisher list counts only when the reviewer list is valid and nonempty. An invalid publisher list grants no publishers and leaves reviewers unchanged. Admins from `CONTRIBUTIONS_ADMIN_IDS` hold both roles, but cannot review or verify their own work.
 
-A deploy that replaces the configuration removes variables that exist only in the Cloudflare dashboard unless `keep_vars` is set. Store each list as a Worker secret, or add it to the prepared configuration, and check after each approved CI release that the lists are still in place. Before adding an ID, confirm that the account is verified, has a password and shows that ID at `/api/auth/session` while signed in.
+A deploy that replaces the configuration removes variables that exist only in the Cloudflare dashboard unless `keep_vars` is set. Preserve existing Worker secrets and settings through an approved release and verify the bindings afterward. Before adding an ID for a separately authorized legacy use, confirm that the account is verified, has a password and shows that ID at `/api/auth/session` while signed in.
 
 ## How a contribution reaches the map
 
-Review and publishing are separate steps. A reviewer approves one exact version. A publisher applies it, which stages the change. A publisher then verifies it. Verification writes the record to `approved_records`, so the map and Published edits list can show it. A rollback restores the earlier state.
+The Worker runtime selects `publicationMode: 'direct'`. A verified contributor publishes a point place, note on an existing place, or supported field/source edit with a chosen public username and change description. The private revision, submission state, publication event, public projection, target version/hash and idempotent receipt are written in one guarded D1 batch. Stale targets or mismatched account assertions fail; a repeated request with the same actor-bound receipt is safe to confirm.
 
-Only an `entry_bundle` creates a new map record. A valid `record_update` to a built-in or published place applies as the whole edited record. The edited place therefore replaces the original by ID. Citation, date and location corrections apply to hosted records in the same way.
+The place's History shows active public changes with their usernames and field differences. Undo publishes an inverse against the current version, preserving unrelated later changes and rejecting overlapping changes. Inverses refer to active predecessors so revocation cannot restore withdrawn values through Undo.
 
-A freeform `open_proposal` stays review-only until a publisher uses **Promote to entry**. That action submits a new `entry_bundle` in the publisher's name. The new bundle needs review by someone other than its author. After independent review, a publisher may apply it; verification must be performed by a publisher other than the bundle's author. An admin is not an exception.
+An owner can revoke a published contribution, removing its effects and public history while retaining a private copy. Shared place IDs and other contributors' changes survive. The owner can then delete that private copy, leaving minimal idempotency receipts and target-version tombstones. Copies downloaded elsewhere cannot be erased. Legacy snapshot releases keep their dependency guard: a conflicting later release or edit blocks revocation rather than overwriting it.
 
-Edits to unpublished hosted records, area proposals, record annotations, layer candidates, filter proposals, duplicate proposals and QA and stewardship reports stay review-only.
+Existing submitted, changes-requested, approved and staged work remains private until its owner explicitly publishes a supported item in Edits. Publishing a staged item cancels its old staged job atomically. Previously verified public releases stay public. Unsupported older formats, including areas and multi-entry bundles, stay private; saved images remain owner-only and the direct form does not offer new public image upload.
 
-Every step is one D1 batch guarded by the submission revision and the target version and hash. Only one of two edits prepared against the same version can land. An old submission gets `stale_target`; an edit that goes stale after submission gets `validation_failed`; a race inside the batch gets `version_conflict`; and a staged edit is discarded at verification if its guards no longer hold. The author must reload and propose again.
+The legacy service and independent-review tests remain for historical receipts, but the direct runtime does not expose review, triage, apply, verify or rollback mutations or create review provenance. See [Direct publication and revision history](direct-publication.md) for the complete ownership and persistence rules.
 
 ## How sign-in works
 
@@ -113,7 +116,7 @@ To roll back, switch to the previous Worker version after confirming that its bi
 
 The account tests sign in with email proof, check the seven-day cookie and its daily renewal, confirm that setup proofs survive age cleanup while reset links are purpose-bound and single-use, check that concurrent verification links create one credential and confirm that uncertain email or unavailable session storage keeps private access closed.
 
-Registration tests cover admission by CUNY address or code without storing codes, durable limits on code guesses, replayed receipts and rate budgets. Role tests cover list validation and the combination of reviewer, publisher and admin lists. They also confirm that a contributor cannot review or verify their own work. Live-edit tests cover approving, applying, verifying and rolling back an edit and refusing a stale one. Gate tests confirm that encoded or repeated path separators cannot reach contribution routes, client identity headers are removed and private image downloads keep their cache protection.
+Registration tests cover admission by CUNY address or code without storing codes, durable limits on code guesses, replayed receipts and rate budgets. Direct-publication tests cover publication, guarded concurrent edits, History and Undo, owner revocation and deletion, and explicit publication of supported saved work. Legacy-mode role and live-edit tests retain coverage of independent review, approval, verification and rollback. Gate tests confirm that encoded or repeated path separators cannot reach contribution routes, client identity headers are removed and private image downloads keep their cache protection.
 
 ## What this repository leaves out
 
