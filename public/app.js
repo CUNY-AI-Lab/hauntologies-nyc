@@ -35,9 +35,14 @@ let hostedRecords=[],publishedPlaces=[];
 const allRecords=()=>[...new Map([...drafts,pilot,...sourceInventory.records,...publishedPlaces].map(record=>[record.id,record])).values()];
 let publishedRequest=0,publishedSignature='';
 async function loadPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const page=await publicReads.json('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''));if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){if(typingInPlaceCard())return true;publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop,cards=placeCardState();populateFacets();renderRecords();restorePlaceCardState(cards);panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
-// Background refreshes rebuild every card. Someone typing an Undo waits for the next refresh,
-// and open History, Notes and Record sections reopen with focus where it was.
-function typingInPlaceCard(){const active=document.activeElement;return Boolean(active?.matches?.('input,textarea,select')&&active.closest('.place-card form')&&$('casePanel').contains(active));}
+// Background refreshes rebuild every card. A refresh waits while someone types an Undo and runs
+// once focus leaves the form; a submitting form never holds it back. Open History, Notes and Record
+// sections reopen with focus where it was.
+function typingInPlaceCard(){
+ const active=document.activeElement,form=active?.closest?.('.place-card form');
+ if(!form||!active.matches('input,textarea,select')||!$('casePanel').contains(form)||form.querySelector('button[type=submit]:disabled'))return false;
+ form.addEventListener('focusout',()=>setTimeout(refreshPublishedPlaces,0),{once:true});return true;
+}
 const cardFor=id=>[...$('casePanel').querySelectorAll('.place-card')].find(card=>card.dataset.placeId===id);
 function placeCardState(){
  const open=[...$('casePanel').querySelectorAll('.place-card > details[open]')].map(d=>({id:d.parentElement.dataset.placeId,cls:d.className}));

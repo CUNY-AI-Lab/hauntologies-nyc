@@ -154,3 +154,9 @@ test('a signed-in poll that fails on a dropped connection pauses and retries ins
  h.window.dispatchEvent({type:'focus'});h.answer(h.requests[4],{error:'sign_in_required'},401);await h.settle();
  assert.equal(h.api.snapshot().status,'signed_out');assert.equal(h.api.snapshot().actor,null);assert.ok(ended()>=1);
 });
+test('a failed poll behind an open modal keeps the sign-out path so a hidden modal cannot block the page',async()=>{
+ const h=accountFixture(),timers=[];h.context.setTimeout=(fn,delay)=>{if(delay===5000)timers.push(fn);return 1;};
+ h.answer(h.requests[0],{actor_id:'actor-a',password_required:false,email:'synthetic@example.test'});await h.settle();
+ h.node('ownEditsDialog').open=true;h.intervals[0]();h.answer(h.requests[1],{error:'unavailable'},503);await h.settle();
+ assert.equal(h.api.snapshot().status,'signed_out');assert.equal(h.document.documentElement.dataset.accountPaused,'false');assert.equal(timers.length,0);
+});

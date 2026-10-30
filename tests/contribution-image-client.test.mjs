@@ -11,9 +11,9 @@ function sofSize(bytes){
  for(let i=2;i<bytes.length-8;){const marker=bytes[i+1],length=bytes.readUInt16BE(i+2);if(marker>=192&&marker<=207&&![196,200,204].includes(marker))return{height:bytes.readUInt16BE(i+5),width:bytes.readUInt16BE(i+7)};i+=2+length;}
  throw new Error('fixture has no frame header');
 }
-function load(){
+function load(output=jpeg){
  const size=sofSize(jpeg);
- const canvas={width:0,height:0,getContext:()=>({drawImage(){}}),toBlob:(resolve,type)=>resolve(new Blob([jpeg],{type}))};
+ const canvas={width:0,height:0,getContext:()=>({drawImage(){}}),toBlob:(resolve,type)=>resolve(new Blob([output],{type}))};
  const root={Blob,File,createImageBitmap:async()=>({...size,close(){}}),document:{createElement:()=>canvas}};
  const context=vm.createContext({window:root,Uint8Array,DataView,String,Number,Set,Object,Promise,Math,Error});
  vm.runInContext(source,context);
@@ -21,12 +21,15 @@ function load(){
 }
 const file=bytes=>new File([bytes],'synthetic.jpg',{type:'image/jpeg'});
 
-test('a phone JPEG with data after its end-of-image marker is accepted and re-encoded without it',async()=>{
+test('a phone JPEG with data after its end-of-image marker is accepted for re-encoding',async()=>{
  const image=load(),trailer=Buffer.concat([jpeg,Buffer.from('MotionPhoto_Data'),Buffer.alloc(64,7)]);
  const prepared=await image.prepare(file(trailer));
- assert.equal(prepared.outputType,'image/jpeg');
- const output=Buffer.from(await prepared.file.arrayBuffer());
- assert.equal(output.at(-2),255);assert.equal(output.at(-1),217);
+ assert.equal(prepared.outputType,'image/jpeg');assert.equal(prepared.metadataRemoved,true);
+});
+
+test('a re-encoded derivative must still end exactly at its end-of-image marker',async()=>{
+ const image=load(Buffer.concat([jpeg,Buffer.from('trailer')]));
+ await assert.rejects(image.prepare(file(jpeg)),{code:'invalid_image'});
 });
 
 test('a truncated JPEG without an end-of-image marker is still rejected',async()=>{
