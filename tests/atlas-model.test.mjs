@@ -38,6 +38,17 @@ test('normalization is presentation-only and never mutates descriptions, citatio
   assert.equal(JSON.stringify(record), before);
 });
 
+test('category aliases and custom spelling variants share a facet without rewriting records', () => {
+  const rows = freeze([{id:'a',category:'haunting'},{id:'b',category:'Reported_Haunting'},{id:'c',category:' Ghost story '},{id:'d',category:'Oral History'},{id:'e',category:' oral  history '},{id:'f',category:'Other stories'}]);
+  const before=JSON.stringify(rows),facets=plain(model.facets(rows).categories);
+  assert.equal(facets.find(f=>f.value==='reported_haunting').count,3);
+  assert.deepEqual(facets.find(f=>f.value==='custom:oral history'),{value:'custom:oral history',label:'Oral History',count:2});
+  assert.deepEqual(ids(model.filter(rows,{category:'custom:oral history'})),['d','e']);
+  assert.equal(model.normalize(rows[5]).categoryLabel,'Other stories');
+  assert.equal(model.categoryFor({private:'invalid'}).value,'unknown');
+  assert.equal(JSON.stringify(rows),before);
+});
+
 test('place types use every actual source-list category, including multiple types at one place', () => {
   for (const source of sourceCategories) {
     const record = inventory.find(r => r.id === source.id);

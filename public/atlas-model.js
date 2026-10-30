@@ -242,6 +242,14 @@
     reported_haunting: 'Reported haunting', vanished_place: 'Vanished place / recorded change',
     archival_gap: 'Archival gap', unknown: 'Claim category unknown'
   });
+  function categoryFor(value) {
+    const label = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').normalize('NFC') : '';
+    if (!label) return {value:'unknown',label:CATEGORY_LABELS.unknown};
+    const key = label.toLocaleLowerCase('en-US').replace(/[ _-]+/g, ' ');
+    const aliases = {haunting:'reported_haunting','ghost story':'reported_haunting','reported haunting':'reported_haunting',demolished:'vanished_place',pilot:'vanished_place','vanished place':'vanished_place','archival gap':'archival_gap',unknown:'unknown'};
+    const canonical = Object.hasOwn(aliases,key) ? aliases[key] : null;
+    return canonical ? {value:canonical,label:CATEGORY_LABELS[canonical]} : {value:'custom:'+key,label};
+  }
   const EVIDENCE_LABELS = Object.freeze({
     reported_story: 'Attributed story · not supernatural proof',
     source_list: 'Source-list entry · conflicts may remain',
@@ -314,8 +322,7 @@
     if (!original || typeof original !== 'object') throw new TypeError('Atlas record must be an object');
     const record = original.type === 'Feature' && original.properties ? original.properties : original;
     const id = String(original.id ?? record.id ?? record.entry_id ?? '');
-    const category = ({ haunting: 'reported_haunting', demolished: 'vanished_place', pilot: 'vanished_place' })[record.category]
-      || (own(CATEGORY_LABELS, record.category) ? record.category : 'unknown');
+    const categoryInfo = categoryFor(record.category), category = categoryInfo.value;
     const evidence = record.category === 'demolished' ? 'source_list'
       : record.category === 'pilot' || id === 'second-avenue-deli' ? 'source_grounded'
       : category === 'reported_haunting' ? 'reported_story'
@@ -344,7 +351,7 @@
       ...(record.aliases || []), ...boroughs, ...placeTypes,
       ...(Array.isArray(record.sources) ? record.sources.filter(s => s && typeof s === 'object' && !Array.isArray(s)).flatMap(s => [s.title, s.citation, s.note, s.evidence_note]) : [])
     ].filter(v => v !== undefined && v !== null).join(' ').toLocaleLowerCase();
-    return { original, id, title, boroughs, placeTypes, category, categoryLabel: CATEGORY_LABELS[category],
+    return { original, id, title, boroughs, placeTypes, category, categoryLabel: categoryInfo.label,
       evidence, evidenceLabel: EVIDENCE_LABELS[evidence], review, reviewLabel: REVIEW_LABELS[review],
       geoStatus, geoLabel: GEO_LABELS[geoStatus], geometry, uncertaintyM, period, searchText };
   }
@@ -390,12 +397,12 @@
     return {
       boroughs: count(r => r.boroughs, value => value === 'unknown' ? 'Unknown borough' : value),
       placeTypes: count(r => r.placeTypes),
-      categories: count(r => [r.category], value => CATEGORY_LABELS[value]),
+      categories: count(r => [r.category], value => rows.find(row=>row.category===value).categoryLabel),
       evidence: count(r => [r.evidence], value => EVIDENCE_LABELS[value]),
       reviews: count(r => [r.review], value => REVIEW_LABELS[value]),
       geoStatuses: count(r => [r.geoStatus], value => GEO_LABELS[value]),
       periods: count(r => [r.period.unknown ? 'unknown' : 'known'], value => value === 'unknown' ? 'Unknown or unresolved period' : 'Known year bounds')
     };
   }
-  root.AtlasModel = Object.freeze({ normalize, filter, facets });
+  root.AtlasModel = Object.freeze({ normalize, filter, facets, categoryFor });
 })(typeof window !== 'undefined' ? window : globalThis);
