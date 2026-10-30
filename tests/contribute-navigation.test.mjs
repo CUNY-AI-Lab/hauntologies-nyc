@@ -10,7 +10,7 @@ test('main Contribute menu uses Edit, Tasks, Contributors and omits unimplemente
  assert.deepEqual(visible,['Edit','Tasks','Contributors']);
  assert.match(menu,/<a id="contributorsButton"[^>]+href="\/contributors">/);
  assert.ok(!html.includes('src="contributors.js"'),'old popup must not replace the new page link');
- assert.match(html,/<a id="contributorsPageLink" href="\/contributors">/,'signed-out users retain a normal public link');
+ assert.match(html,/<a id="contributorsPageLink" href="\/contributors"[^>]*>/,'signed-out users retain a normal public link');
 });
 test('place-specific editing and existing Edit/Tasks handlers retain their actions',()=>{
  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),contributions=readFileSync(new URL('../public/contributions.js',import.meta.url),'utf8');

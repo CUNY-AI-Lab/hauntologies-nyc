@@ -453,7 +453,7 @@ function renderRecords(){
   const card=document.createElement('article');card.className='place-card';card.dataset.placeId=r.id;
   const heading=document.createElement('div');heading.className='place-heading';heading.append(b);addPlaceEditAction(heading,r);card.append(heading);card.insertAdjacentHTML('beforeend',placeFacts(r));
   const pendingSlot=document.createElement('div');pendingSlot.className='place-pending';pendingSlot.dataset.recordId=r.id;pendingSlot.hidden=true;card.append(pendingSlot);
-  const actions=document.createElement('div');actions.className='place-actions';addContributionAction(actions,r);card.append(actions);window.PlaceHistory?.append(card,r);appendPlaceRecord(card,r);
+  const actions=document.createElement('div');actions.className='place-actions';const links=card.querySelector('.place-links');if(links?.children.length)actions.append(links);else links?.remove();addContributionAction(actions,r);card.append(actions);window.PlaceHistory?.append(card,r);appendPlaceRecord(card,r);
   b.addEventListener('click',()=>selectRecord(r));(hasPoint(r)?$('recordList'):$('unlocatedList')).append(card);
   if(map&&hasPoint(r)){
    const marker=L.marker([n.geometry.coordinates[1],n.geometry.coordinates[0]],{pane:'researchPoints',icon:L.divIcon({html:markerSvg(r),className:'point-icon '+(r.status==='draft'?'local':r.category||'')+(selected===r.id?' selected':''),iconSize:[44,44],iconAnchor:[22,22]}),title:r.title,alt:r.title+', '+whereLabel(r,n),keyboard:true,riseOnHover:true});
