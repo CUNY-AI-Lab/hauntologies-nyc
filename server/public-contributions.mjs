@@ -2,7 +2,7 @@ import { publicRecord } from './published-edits.mjs';
 import { publicCredit } from './record-credits.mjs';
 import { publicCatalogRecord } from './catalog-projection.mjs';
 import { RecordEditModel } from './record-update.mjs';
-import {releaseCreditSQL} from './public-attribution.mjs';
+import {releaseCreditSQL,publicMonikerSQL,publicDisplayName} from './public-attribution.mjs';
 
 const RECORD_LIMIT = 5000, EVENT_LIMIT = 10000, LEGACY_LIMIT = 5000;
 const idValid = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(value);
@@ -25,7 +25,7 @@ export const PUBLIC_CONTRIBUTIONS_SQL = `WITH public_records AS (
  ORDER BY r.id LIMIT ${RECORD_LIMIT + 1}
 ), direct_events AS (
  SELECT e.id,e.actor_id,e.created_at,
- json_object('record_id',json_extract(e.event_json,'$.record_id'),'kind',json_extract(e.event_json,'$.kind'),'moniker',json_extract(e.event_json,'$.moniker')) AS event_json,
+ json_object('record_id',json_extract(e.event_json,'$.record_id'),'kind',json_extract(e.event_json,'$.kind'),'moniker',json_extract(e.event_json,'$.moniker'),'display_moniker',${publicMonikerSQL()}) AS event_json,
  ${releaseCreditSQL()} AS credit_json,
  EXISTS (SELECT 1 FROM contributor_roster_hidden h WHERE 'map_'||h.user_id=s.owner_id) AS roster_hidden
  FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id
@@ -156,7 +156,7 @@ export function projectPublicContributions({ staticRecords = [], rows = [], now 
     seen.add(row.id);
     const consent = json(row.credit_json)?.public_credit;
     const credit = publicCredit(row.credit_json);
-    const name = !row.roster_hidden && consent?.identity === 'moniker' && credit && typeof event.moniker === 'string' && normalized(credit) === normalized(event.moniker) ? credit : null;
+    const name = !row.roster_hidden && consent?.identity === 'moniker' && credit && typeof event.moniker === 'string' && normalized(credit) === normalized(event.moniker) ? publicDisplayName(event.display_moniker,credit) : null;
     publication(row,['create','edit','note','undo'].includes(event.kind)?event.kind:'publication',[event.record_id],name);
   }
   for (const row of grouped.legacy) {

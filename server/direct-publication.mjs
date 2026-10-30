@@ -1,3 +1,4 @@
+import {publicMonikerSQL,publicDisplayName} from './public-attribution.mjs';
 import {fail,hash,stable,idValid,snapshotHash} from './workflow-core.mjs';
 import {RecordEditModel} from './record-update.mjs';
 import {selectedPublicImages} from './public-images.mjs';
@@ -32,8 +33,9 @@ export async function directHistory(db,id){
  if(!idValid(id))fail('invalid_record_id');
  const row=await db.prepare('SELECT derived_json FROM approved_records WHERE id=?').bind(id).first();
  const base=row?JSON.parse(row.derived_json).direct_base:undefined;if(base===undefined)return{items:[]};
- const {results=[]}=await db.prepare("SELECT e.*,s.review_state FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id WHERE e.kind='direct_publish' AND json_extract(e.event_json,'$.record_id')=? ORDER BY CAST(json_extract(e.event_json,'$.version') AS INTEGER),e.id").bind(id).all();
- return{items:directProjection(id,base,results).history.reverse()};
+ const {results=[]}=await db.prepare(`SELECT e.*,s.review_state,${publicMonikerSQL()} AS public_moniker FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id WHERE e.kind='direct_publish' AND json_extract(e.event_json,'$.record_id')=? ORDER BY CAST(json_extract(e.event_json,'$.version') AS INTEGER),e.id`).bind(id).all();
+ const names=new Map(results.map(row=>[row.id,row.public_moniker]));
+ return{items:directProjection(id,base,results).history.reverse().map(item=>({...item,moniker:publicDisplayName(names.get(item.id),item.moniker)}))};
 }
 export function createDirectPublisher({store,resolveTarget,preview,audit,receipt,revisionRow,response,readableHead}){
  const rowsFor=id=>store.directEvents(id);

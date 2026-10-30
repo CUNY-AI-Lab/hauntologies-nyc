@@ -13,3 +13,21 @@ export function releaseCreditSQL(revision = 'r', submission = 's') {
       ORDER BY attribution.created_at DESC,attribution.id DESC LIMIT 1)
     END))`;
 }
+
+// Explicit, reversible attribution merges are private audit entries. Match the
+// verified actor and one approved alias; never merge people by display label.
+export const PUBLIC_MERGE_POLICY = 'public-attribution-merge-v1';
+export function publicMonikerSQL(actor = 'e.actor_id', moniker = "json_extract(e.event_json,'$.moniker')") {
+  if (actor !== 'e.actor_id' || moniker !== "json_extract(e.event_json,'$.moniker')") throw new Error('invalid_attribution_expression');
+  return `COALESCE((SELECT CASE WHEN json_extract(m.event_json,'$.active')=1 THEN json_extract(m.event_json,'$.name') ELSE ${moniker} END
+    FROM workflow_events m WHERE m.kind='public_attribution_merge' AND m.actor_id=${actor}
+    AND m.submission_id IS NULL AND json_extract(m.event_json,'$.policy')='${PUBLIC_MERGE_POLICY}'
+    AND json_type(m.event_json,'$.active') IN ('true','false')
+    AND json_type(m.event_json,'$.name')='text' AND length(trim(json_extract(m.event_json,'$.name'))) BETWEEN 1 AND 120
+    AND instr(json_extract(m.event_json,'$.name'),'@')=0
+    AND EXISTS(SELECT 1 FROM json_each(m.event_json,'$.aliases') alias WHERE alias.type='text' AND lower(trim(alias.value))=lower(trim(${moniker})))
+    ORDER BY m.created_at DESC,m.id DESC LIMIT 1),${moniker})`;
+}
+export function publicDisplayName(candidate, fallback) {
+  return typeof candidate==='string' && candidate.trim() && candidate.length<=120 && !/[@\u0000-\u001f\u007f]/.test(candidate) ? candidate.trim() : fallback;
+}

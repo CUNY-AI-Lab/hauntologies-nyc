@@ -1,4 +1,4 @@
-import {releaseCreditSQL} from './public-attribution.mjs';
+import {releaseCreditSQL,publicMonikerSQL,publicDisplayName} from './public-attribution.mjs';
 // Names come from released attribution or an explicitly authorized attribution
 // audit event. Public reads never query account or registration identities.
 export function publicCredit(raw, hidden = false) {
@@ -38,4 +38,19 @@ export async function recordCredits(db, recordIds) {
     credits.set(id, names);
   }
   return credits;
+}
+
+export async function directRecordAttribution(db, recordIds) {
+  const result=new Map(recordIds.map(id=>[id,{names:[],notes:new Map()}]));
+  for(let offset=0;offset<recordIds.length;offset+=80){
+    const ids=recordIds.slice(offset,offset+80);
+    const {results=[]}=await db.prepare(`SELECT e.submission_id,json_extract(e.event_json,'$.record_id') AS record_id,json_extract(e.event_json,'$.moniker') AS moniker,${publicMonikerSQL()} AS public_moniker
+      FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id
+      WHERE e.kind='direct_publish' AND s.review_state='published' AND json_extract(e.event_json,'$.record_id') IN (${ids.map(()=>'?').join(',')})
+      ORDER BY e.created_at,e.id`).bind(...ids).all();
+    for(const row of results){const entry=result.get(row.record_id),name=publicDisplayName(row.public_moniker,row.moniker);if(!entry||!name)continue;
+      if(!entry.names.includes(name))entry.names.push(name);entry.notes.set(row.submission_id,name);
+    }
+  }
+  return result;
 }
