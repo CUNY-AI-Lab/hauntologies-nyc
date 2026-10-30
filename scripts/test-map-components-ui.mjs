@@ -59,6 +59,17 @@ try {
   await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'contributorsButton');
   await page.keyboard.press('Escape');assert.equal(await page.locator('#toolsMenu').isVisible(),false);
   checks.push('menu rows match, include the Contributors link and support keyboard navigation');
+  await page.locator('#toolsButton').click();await page.locator('#submitTool').click();
+  await page.waitForFunction(()=>document.getElementById('sidecarTitle').textContent==='Edit');
+  assert.equal(await page.locator('#sidecarTitle').innerText(),'Edit');
+  assert.equal(await page.locator('#toolsButton').innerText(),'Contribute');
+  assert.equal(await page.locator('#contributionPlaceHint').innerText(),'Click an existing location to edit, or pin a new place.');
+  await page.locator('#contributionPlace').focus();
+  await page.getByRole('option',{name:/Click an existing location to edit/}).waitFor();
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:out+'/edit-panel-390.png',fullPage:true});
+  await page.locator('#closeResearch').click();
+  checks.push('inlaid panel and its accessible headings say Edit; existing-location guidance is visible; menu label remains Contribute');
   await page.locator('#accountButton').click();await page.locator('#accountDialog[open]').waitFor();
   await page.waitForFunction(()=>!document.getElementById('accountContributions').textContent.includes('Loading'));
   await page.locator('#accountRegistrationSection > details > summary').click();

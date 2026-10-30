@@ -15,7 +15,7 @@ test('main Contribute menu uses Edit, Tasks, Contributors and omits unimplemente
 test('place-specific editing and existing Edit/Tasks handlers retain their actions',()=>{
  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),contributions=readFileSync(new URL('../public/contributions.js',import.meta.url),'utf8');
  assert.match(app,/edit\.textContent='Edit'/);
- assert.match(app,/\['submitTool','submissionView','Contribute'\]/);
+ assert.match(app,/\['submitTool','submissionView','Edit'\]/);
  assert.match(contributions,/byId\('tasksTool'\)\.addEventListener\('click'/);
  assert.ok(!html.includes('href="/activity"'));
 });

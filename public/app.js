@@ -256,7 +256,7 @@ function switchPanel(id){
  if(id==='draftPanel'&&!window.HauntologiesAccount?.canContribute())return;
  openSidecar();document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));
  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));
- $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Contribute';
+ $('sidecarTitle').textContent=id==='casePanel'?'Places':id==='sourcesPanel'?'Sources':'Edit';
  document.body.classList.toggle('places-open',id==='casePanel');
  if(id==='casePanel'){$('publishedEditsFeed').open=false;placeLayout?.layout();}
  if(id==='casePanel'){toolOpener='mapToolsButton';$('mapToolsButton').setAttribute('aria-expanded','true');}
@@ -301,7 +301,7 @@ $('mapToolsButton').addEventListener('click',()=>{
  switchPanel('casePanel');revealPlaceCard([...$('casePanel').querySelectorAll('.place-card')].find(card=>card.dataset.placeId===selected));$('sidecarTitle').focus({preventScroll:true});
 });
 $('layersButton').addEventListener('click',()=>{const open=$('layersPanel').hidden;closeTools();toolOpener='layersButton';$('layersPanel').hidden=!open;$('layersButton').setAttribute('aria-expanded',String(open));if(open)$('layersTitle').focus()});
-for(const [button,view,title] of [['submitTool','submissionView','Contribute'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>requireEditAccount($(button),()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()}));
+for(const [button,view,title] of [['submitTool','submissionView','Edit'],['reviewTool','reviewView','Review']])$(button).addEventListener('click',()=>requireEditAccount($(button),()=>{switchPanel('draftPanel');document.querySelector(`[data-workflow-view="${view}"]`).click();$('sidecarTitle').textContent=title;$('sidecarTitle').focus()}));
 $('openResearch').addEventListener('click',()=>switchPanel('casePanel'));
 for(const id of ['closeResearch','closeLayers','closeFilters'])$(id).addEventListener('click',()=>closeTools(true));
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
@@ -494,7 +494,7 @@ $('fitFiltered').addEventListener('click',()=>fitRecords(filtered()));$('resetFi
 function addContributionAction(card,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
  const button=document.createElement('button');button.type='button';button.className='outline place-contribute';button.dataset.requiresAccount='';button.hidden=!window.HauntologiesAccount?.canContribute();button.dataset.contributionRecordId=r.id;button.textContent='Contribute';button.setAttribute('aria-label',`Contribute to ${r.title}`);
- button.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;switchPanel('draftPanel');$('sidecarTitle').textContent='Contribute';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
+ button.addEventListener('click',()=>{if(!window.HauntologiesAccount?.canContribute())return;switchPanel('draftPanel');$('sidecarTitle').textContent='Edit';window.dispatchEvent(new CustomEvent('contributions-clarify-requested',{detail:{recordId:r.id,title:r.title}}))});card.append(button);
 }
 function addPlaceEditAction(heading,r){
  if(r.status==='draft'||(!sourceInventory.records.some(x=>x.id===r.id)&&r.id!==pilot.id&&!publishedPlaces.some(x=>x.id===r.id)))return;
