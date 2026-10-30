@@ -17,12 +17,13 @@ Object.assign(config,{
 await fs.copyFile(new URL('../deployment/demo-gate.mjs',import.meta.url),new URL('../dist/server/demo-gate.mjs',import.meta.url));
 // Keep the public projection import local to the prepared Worker bundle.
 const gateFile=new URL('../dist/server/demo-gate.mjs',import.meta.url);
-await fs.writeFile(gateFile,(await fs.readFile(gateFile,'utf8')).replace('../server/published-edits.mjs','./published-edits.mjs').replace('../server/pending-places.mjs','./pending-places.mjs').replace('../server/registration-eligibility.mjs','./registration-eligibility.mjs'));
+await fs.writeFile(gateFile,(await fs.readFile(gateFile,'utf8')).replace('../server/direct-publication.mjs','./direct-publication.mjs').replace('../server/published-edits.mjs','./published-edits.mjs').replace('../server/pending-places.mjs','./pending-places.mjs').replace('../server/registration-eligibility.mjs','./registration-eligibility.mjs'));
 await fs.copyFile(new URL('../server/record-credits.mjs',import.meta.url),new URL('../dist/server/record-credits.mjs',import.meta.url));
 await fs.copyFile(new URL('../server/published-edits.mjs',import.meta.url),new URL('../dist/server/published-edits.mjs',import.meta.url));
 await fs.copyFile(new URL('../server/pending-places.mjs',import.meta.url),new URL('../dist/server/pending-places.mjs',import.meta.url));
 // Vinext emits no_bundle:true. Bundle this adapter's dependency explicitly so
 // the generated Worker never tries to resolve a bare npm import at runtime.
+await build({entryPoints:[fileURLToPath(new URL('../server/direct-publication.mjs',import.meta.url))],outfile:fileURLToPath(new URL('../dist/server/direct-publication.mjs',import.meta.url)),bundle:true,format:'esm',platform:'node',target:'es2022',conditions:['workerd','node']});
 await build({entryPoints:[fileURLToPath(new URL('../deployment/access-identity.mjs',import.meta.url))],outfile:fileURLToPath(new URL('../dist/server/access-identity.mjs',import.meta.url)),bundle:true,format:'esm',platform:'browser',target:'es2022'});
 await build({entryPoints:[fileURLToPath(new URL('../deployment/map-accounts.mjs',import.meta.url))],outfile:fileURLToPath(new URL('../dist/server/map-accounts.mjs',import.meta.url)),bundle:true,format:'esm',platform:'node',target:'es2022',external:['cloudflare:workers'],conditions:['workerd','node'],minify:true});
 await fs.copyFile(new URL('../server/registration.mjs',import.meta.url),new URL('../dist/server/registration.mjs',import.meta.url));
