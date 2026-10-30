@@ -2,7 +2,7 @@
 
 This guide is for the people who build, configure and release the site, and it assumes you have read the [README](../README.md) and [Contribution access](contribution-access.md), which describe what participants see. It covers how to run the site on your own machine, which settings turn features on, how sign-in and email work underneath, and how to release and roll back.
 
-The contribution behavior below describes the direct-publication release in the merged source. Until that release is deployed, the live map uses the earlier review and verification workflow.
+The contribution behavior below follows the source on `main`. The live map can trail `main` until the release owner deploys the latest revision, so check the serving Worker version before you rely on a feature.
 
 ## What runs where
 
@@ -10,13 +10,18 @@ The site is a Vinext app, which is Vite with a Next.js-compatible app router, de
 
 ## Run it locally
 
-Use Node.js 22.13 or newer, install the dependencies with `npm run install:ci`, start the development server with `npm run dev`, and build, prepare the release configuration and run the tests with the commands below, in that order.
+Use Node.js 22.13 or newer and install the dependencies with `npm run install:ci`. To try the map with accounts, run `npm run local`, which serves the pages and the real contribution service on SQLite at http://127.0.0.1:8790 with two synthetic accounts. `npm run dev` starts the framework development server without the account gate, so sign-in, History and the public read routes answer only through `npm run local` or a prepared Worker. Build, prepare the release configuration, lint and run the tests with the commands below, in that order.
 
 ```sh
 npm run build
 node scripts/prepare-account-release.mjs
-node --test tests/*.test.mjs
+npm run lint
+npm test
 ```
+
+`npm test` runs `node --test "tests/*.test.mjs"`, the same suite CI runs. Rebuild before you test after a change to `public/` or `web/`, since the prepared-runtime tests read `dist/`. Lint reports warnings without failing; CI fails on lint errors.
+
+Migrations under `drizzle/` from `0004` onward are written by hand, and `drizzle/meta` stops at `0002`. `npm run db:generate` therefore refuses to run instead of generating a duplicate `CREATE TABLE`; write and review a SQL migration by hand.
 
 The preparation script checks the Worker, account and database identifiers, projects the public catalog and writes `dist/server/wrangler.live.json`, performing no deployment and no database migration. The tests use synthetic local SQLite fixtures, and the repository holds no attendee or submission data, so please keep real names, email addresses and submissions out of issues, tests and fixtures.
 
@@ -52,7 +57,7 @@ The place's History shows active public changes with their usernames and field d
 
 An owner can revoke a published contribution, removing its effects and public history while retaining a private copy. Shared place IDs and other contributors' changes survive. The owner can then delete that private copy, leaving minimal idempotency receipts and target-version tombstones. Copies downloaded elsewhere cannot be erased. Legacy snapshot releases keep their dependency guard: a conflicting later release or edit blocks revocation rather than overwriting it.
 
-Existing submitted, changes-requested, approved and staged work remains private until its owner explicitly publishes a supported item in Edits. Publishing a staged item cancels its old staged job atomically. Previously verified public releases stay public. Unsupported older formats, including areas and multi-entry bundles, stay private; saved images remain owner-only and the direct form does not offer new public image upload.
+Existing submitted, changes-requested, approved and staged work remains private until its owner explicitly publishes a supported item in Edits. Publishing a staged item cancels its old staged job atomically. Previously verified public releases stay public. Unsupported older formats, including areas and multi-entry bundles, stay private. A publication can carry up to three images, each with known rights, which `/api/public-image` serves while the contribution stays published; unselected saved images remain owner-only. [Direct publication](direct-publication.md#images) has the rules.
 
 The legacy service and independent-review tests remain for historical receipts, but the direct runtime does not expose review, triage, apply, verify or rollback mutations or create review provenance. See [Direct publication and revision history](direct-publication.md) for the complete ownership and persistence rules.
 
@@ -98,7 +103,7 @@ Admission documents its side in `apps/admission/docs/HAUNTOLOGIES-ACCOUNT-MAIL.m
 
 ## Release
 
-For a reviewed release that changes code but no migrations, use the separate [code-only release procedure](code-only-release.md). The database procedure below is separate and requires its own authorization.
+For a reviewed release that changes code but no migrations, use the separate [code-only release procedure](code-only-release.md). The database procedure below is separate and requires its own authorization, as does the one-time [legacy publication transition](legacy-publication-transition.md) for older saved work.
 
 Work through these steps in order, and stop at any step that does not check out.
 
@@ -116,7 +121,9 @@ To roll back, switch to the previous Worker version after confirming that its bi
 
 The account tests sign in with email proof, check the seven-day cookie and its daily renewal, confirm that setup proofs survive age cleanup while reset links are purpose-bound and single-use, check that concurrent verification links create one credential and confirm that uncertain email or unavailable session storage keeps private access closed.
 
-Registration tests cover admission by CUNY address or code without storing codes, durable limits on code guesses, replayed receipts and rate budgets. Direct-publication tests cover publication, guarded concurrent edits, History and Undo, owner revocation and deletion, and explicit publication of supported saved work. Legacy-mode role and live-edit tests retain coverage of independent review, approval, verification and rollback. Gate tests confirm that encoded or repeated path separators cannot reach contribution routes, client identity headers are removed and private image downloads keep their cache protection.
+Registration tests cover admission by CUNY address or code without storing codes, durable limits on code guesses, replayed receipts and rate budgets. Direct-publication tests cover publication, guarded concurrent edits, History and Undo, owner revocation and deletion, explicit publication of supported saved work, selected public images and the revision each owner mutation names. Public projection tests cover Activity, Contributors and place details without private identifiers. Legacy-mode role and live-edit tests retain coverage of independent review, approval, verification and rollback. Gate tests confirm that encoded or repeated path separators cannot reach contribution routes, client identity headers are removed and private image downloads keep their cache protection.
+
+Seven browser acceptance scripts, `scripts/test-*.mjs`, drive Chromium through Playwright against the local server; CI does not run them. Start `npm run local -- --port 8791 --fresh` for `test-direct-ui.mjs`, `test-direct-recovery.mjs` and `test-undo-recovery.mjs`, or `npm run local -- --port 8798 --fresh` for `test-direct-controls.mjs`, `test-public-images-ui.mjs`, `test-contributors-ui.mjs` and `test-map-components-ui.mjs`, then run the script with `node`. Set `LOCAL_MAP_URL=http://127.0.0.1:<port>` to point a script at another local port. Each script refuses any address other than `127.0.0.1`, signs in only with the synthetic accounts and writes screenshots under `output/`, which Git ignores. Set `PLAYWRIGHT_MODULE` and `BROWSER_EXECUTABLE` to reuse an existing Playwright installation and browser.
 
 ## What this repository leaves out
 

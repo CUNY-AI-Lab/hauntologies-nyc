@@ -21,6 +21,6 @@ Automatic image description generation is **not enabled**. The repository has no
 - Synthetic regression tests cover public event types/counts, retries, revocation, private/rejected/draft states, attribution, limits, route isolation and image-description publication.
 - Prepared Worker tests exercise both Activity routes and shipped browser assets with local synthetic D1 and external services blocked.
 - The existing `scripts/test-contributors-ui.mjs` covers Activity at desktop and 390px/320px mobile widths, keyboard navigation, literal text, pagination focus, offline recovery, malformed data and revocation.
-- `npm run lint` cannot run until the repository has an ESLint configuration; none is supplied in main. Build, syntax checks and tests remain required.
+- `npm run lint` uses the repository's ESLint flat configuration, and CI fails on lint errors. Build, syntax checks and tests remain required.
 
 This is a code-only change with no database migration. The existing release owner coordinates deployment. Production acceptance must confirm Activity navigation, public feed behavior, image descriptions and mobile/keyboard behavior after deployment. Synthetic local checks do not establish production acceptance.

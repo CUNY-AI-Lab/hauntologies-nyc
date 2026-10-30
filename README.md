@@ -16,32 +16,34 @@ Registration asks for your name and email address and shows a receipt on the scr
 
 The public map is live at https://hauntologies-nyc.ailab-452.workers.dev. Anyone can search places and addresses, filter by borough, place type, period and location certainty, and view aerial imagery from 1924 forward. Event registration is separate at `/register`; map accounts use verified email and a password chosen after verification.
 
-The guides here describe the direct-publication release in the merged source. Until that release is deployed, the live map uses the earlier review and verification workflow. In the direct-publication release, signed-in contributors can publish a point place, a note on a place, or an edit to a place's fields and sources. Each publication has a chosen public username and a short description of the change. Place cards show History, and contributors can revoke their own published work before deleting its private copy. Saved images remain private; the direct form does not offer a new public image upload. Attendee-dashboard access remains blocked.
+The guides here follow the source on `main`, and the live map can trail `main` until the release owner deploys the latest revision. Signed-in contributors publish a point place, a note on a place, or an edit to a place's fields and sources directly, without a review queue. Each publication has a chosen public username and a short description of the change. A contribution can carry up to three images, and an image goes public only when its owner names its rights. Place cards show History, and contributors can revoke their own published work before deleting its private copy. The public `/activity` page lists recent publications, and `/contributors` totals public usernames and flags places with missing details. Attendee-dashboard access remains blocked.
 
 ## Where to go from here
 
 This repository holds the source for the map, the registration page and the guides that explain how they work. Read down this path until you reach the guide for your part:
 
 1. [Contribution access](docs/contribution-access.md) explains event registration, map accounts, direct publication and the contributor controls.
-2. [Private images](docs/private-images.md) describes saved private images and the earlier upload workflow.
-3. [Area proposals and record annotations](server/EMBEDDED-CONTRIBUTIONS.md) documents legacy service envelopes for area proposals and record annotations.
-4. [Running the site](docs/running-the-site.md) is for maintainers and covers local setup, settings, sign-in, email, releases and rollback.
-5. [Model-assisted ingestion](server/README.md) describes the disabled backend; its [tool contract](public/ingestion/TOOL-CONTRACT.md) and [extraction skill](public/ingestion/SKILL.md) set out its boundaries if it is ever enabled.
+2. [Direct publication and revision history](docs/direct-publication.md) sets out the publication, History, Undo, revocation and image rules.
+3. [Private images](docs/private-images.md) describes image limits, uploads and who can see a saved image.
+4. [Contributors and place details](docs/contributors-page.md) and [Activity and image descriptions](docs/activity-and-image-descriptions.md) document the two public read-only pages and their data limits.
+5. [Area proposals and record annotations](server/EMBEDDED-CONTRIBUTIONS.md) documents legacy service envelopes for area proposals and record annotations.
+6. [Running the site](docs/running-the-site.md) is for maintainers and covers local setup, settings, sign-in, email, releases and rollback. The [code-only release procedure](docs/code-only-release.md) and the [legacy publication transition](docs/legacy-publication-transition.md) branch from it.
+7. [Model-assisted ingestion](server/README.md) describes the disabled backend; its [tool contract](public/ingestion/TOOL-CONTRACT.md) and [extraction skill](public/ingestion/SKILL.md) set out its boundaries if it is ever enabled.
 
 ## Run it locally
 
-You need Node.js 22.13 or newer. Install dependencies and start the development server with:
+You need Node.js 22.13 or newer. Install dependencies and start the local map with:
 
 ```sh
 npm run install:ci
-npm run dev
+npm run local
 ```
 
-To try direct publication on your own machine, run `npm run local` and open http://127.0.0.1:8790. The two synthetic accounts use the password `haunted-local-only`:
+Open http://127.0.0.1:8790 to try direct publication on your own machine. `npm run dev` starts the framework development server without the account gate, so sign-in and History answer only through `npm run local`. The two synthetic accounts use the password `haunted-local-only`:
 
 - `contributor@local.test` and `reviewer@local.test` are separate synthetic contributors. Both can publish supported changes directly; their names do not grant review roles in this mode.
 
-The local server runs the real contribution service on SQLite in `.local/` (gitignored). `npm run local -- --fresh` starts over. Registration, password resets and image uploads need production services and are off locally.
+The local server runs the real contribution service on SQLite in `.local/` (gitignored), image uploads included. `npm run local -- --fresh` starts over. Registration and password resets need production mail and are off locally. Run `npm run lint` and `npm test` before you open a pull request.
 
 Build and prepare the existing Worker release with:
 
@@ -49,7 +51,7 @@ Build and prepare the existing Worker release with:
 npm run build && node scripts/prepare-account-release.mjs
 ```
 
-Preparation checks the existing Worker, account and D1 identifiers, projects the public catalog and writes `dist/server/wrangler.live.json`; it performs no deployment or database migration. Run the test suite after preparation.
+Preparation checks the existing Worker, account and D1 identifiers, projects the public catalog and writes `dist/server/wrangler.live.json`; it performs no deployment or database migration. Run `npm test` after preparation.
 
 Production release requires the necessary approvals and a configured CI deployment credential. Follow the [code-only release procedure](docs/code-only-release.md) when no migration is needed; database work follows the separately authorized procedure in [Running the site](docs/running-the-site.md#release). An authorized human must separately perform the verification/reset mailbox round trip and record rollout acceptance; CI must not receive mailbox credentials. Existing manual deployment notes are historical; do not run a local `wrangler deploy` from this repository.
 

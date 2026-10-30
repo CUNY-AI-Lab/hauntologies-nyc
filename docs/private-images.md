@@ -1,22 +1,22 @@
 # Private images
 
-This guide records the earlier Images control and the storage safeguards for saved images. In the direct-publication release in the merged source, the contribution form does not offer a new public image upload. Previously saved images remain private and owner-only, including after their contribution's text is published. Until that release is deployed, the live map uses the earlier review and verification workflow described below.
+This guide covers the Images control on the contribution form and the storage safeguards for saved images. Every upload starts private. An image becomes public only when its owner selects it for publication and it names its rights, as [Direct publication](direct-publication.md#images) describes. The live map can trail `main` until the release owner deploys the latest revision.
 
-## What the earlier form accepts
+## What the form accepts
 
 A contribution can carry up to three images in JPEG, PNG or WebP format. A chosen file can be no larger than 5 MiB and no larger than 8,192 pixels on a side or 16,777,216 pixels in total. SVG files and animated images are rejected. The browser checks the file signature and dimensions before decoding it, then redraws it into a derivative and lowers quality or dimensions until it fits the 1 MiB stored limit; PNG may become a lossy WebP. Camera and location metadata are removed, and the original file never leaves the device.
 
-Each image also carries contributor-authored Caption, Alt text, Credit, Source link and Rights metadata. Unknown rights do not become publication permission.
+Each image also carries contributor-authored Caption, Alt text, Credit, Source link and Rights metadata. Unknown rights do not become publication permission, so the form holds publication until each image names its rights or the contributor removes it.
 
-## Saving and retrying in the earlier workflow
+## Saving and retrying
 
 The form saves text first and uploads images afterward. An image remains **Not uploaded yet** until the server confirms it, then shows **Uploading** and **Uploaded with your contribution**. If an image fails while its file is still held in the tab, **Resume upload** retries it against the same contribution and account. A server rejection for type, size or quota requires a replacement. Closing the tab with files waiting shows the browser's standard warning, but a crash or reload can still lose them.
 
-A successful upload creates a new immutable revision and sets aside an earlier approval because the evidence changed. The contribution must be submitted for review again.
+A successful upload creates a new immutable revision. When the contributor chose **Publish**, the form publishes against that revision once every image has uploaded, and **Resume upload** confirms the same publication receipt after a lost response. In the earlier review workflow, an upload set aside an earlier approval because the evidence changed, and the contribution had to be submitted for review again.
 
 ## Who can see an image
 
-In direct-publication mode, only the contributor can open a saved image. In the earlier review workflow, authorized reviewers could also open it, with publishers included once a contribution was approved. Images are private downloads with a server-generated filename, `no-store`, `nosniff` and a sandbox policy. No public asset URL exists, and publishing the text does not publish images.
+In direct-publication mode, only the contributor can open a saved image through `/api/contributions/attachment`. A selected image with known rights also appears at `/api/public-image` while its contribution stays published; revocation or Undo closes that address. In the earlier review workflow, authorized reviewers could also open saved images, with publishers included once a contribution was approved. Private downloads carry a server-generated filename, `no-store`, `nosniff` and a sandbox policy, and public image responses carry the same cache, type and sandbox protections.
 
 ## What the server checks
 
@@ -28,7 +28,7 @@ Image bytes live in the same D1 database as the other contribution data, in `con
 
 `GET /api/contributions/attachment?id=<attachment ID>` checks access to the linked private contribution before it sends any bytes. The regular contribution gate verifies the server identity first; client identity headers grant no access. The migration `0005_contribution_media.sql` adds the table and index, prevents attachment updates and does not modify or delete original records.
 
-The earlier form stages sanitized files in memory. Files are not written to browser databases. In legacy mode with open review enabled, other verified map accounts can review currently submitted material and its referenced images, while unsubmitted drafts and removed references stay outside ordinary peer access. Explicitly configured privileged roles retain their broader legacy review scope; direct mode restricts the raw contribution and its saved images to the owner.
+The form stages sanitized files in memory. Files are not written to browser databases. In legacy mode with open review enabled, other verified map accounts can review currently submitted material and its referenced images, while unsubmitted drafts and removed references stay outside ordinary peer access. Explicitly configured privileged roles retain their broader legacy review scope; direct mode restricts the raw contribution and its saved images to the owner.
 
 ## Next
 
