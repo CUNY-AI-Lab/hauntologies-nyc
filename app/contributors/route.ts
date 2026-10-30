@@ -1,9 +1,7 @@
-import html from '../../web/contributors.html?raw';
-
+// Keep old bookmarks useful after retiring the standalone directory.
 export function GET() {
-  return new Response(html, { headers: {
-    'content-type': 'text/html; charset=utf-8',
+  return new Response(null, { status: 302, headers: {
+    location: '/#contributors',
     'cache-control': 'no-store',
-    'referrer-policy': 'same-origin',
   } });
 }

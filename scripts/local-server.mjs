@@ -99,7 +99,8 @@ async function contributions(req, url) {
 }
 
 function file404(pathname) {
-  const target = pathname === '/' ? path.join(repo, 'web/index.html') : pathname === '/activity' ? path.join(repo, 'web/activity.html') : pathname === '/guide' ? path.join(repo, 'web/guide.html') : pathname === '/contributors' ? path.join(repo, 'web/contributors.html') : pathname === '/register' ? path.join(repo, 'web/registration.html') : path.join(repo, 'public', decodeURIComponent(pathname));
+  if (pathname === '/contributors') return new Response(null, {status:302,headers:{location:'/#contributors'}});
+  const target = pathname === '/' ? path.join(repo, 'web/index.html') : pathname === '/activity' ? path.join(repo, 'web/activity.html') : pathname === '/guide' ? path.join(repo, 'web/guide.html') : pathname === '/register' ? path.join(repo, 'web/registration.html') : path.join(repo, 'public', decodeURIComponent(pathname));
   if (!target.startsWith(repo) || !existsSync(target) || statSync(target).isDirectory()) return new Response('Not found', { status: 404 });
   return new Response(readFileSync(target), { headers: { 'Content-Type': types[path.extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' } });
 }
