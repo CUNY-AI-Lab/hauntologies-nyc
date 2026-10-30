@@ -8,13 +8,13 @@ import { createDemoWorker } from '../deployment/demo-gate.mjs';
 test('public directory routes strip identity and cookies; aliases and writes stay closed',async()=>{
  const seen=[];
  const worker=createDemoWorker({fetch(request){seen.push(request);return new Response('public');}});
- for(const route of ['/api/contributors-summary','/api/place-completeness?place=synthetic']){
+ for(const route of ['/api/contributors-summary','/api/place-completeness?place=synthetic','/api/public-image?id=watt_00000000-0000-4000-8000-000000000001']){
   const result=await worker.fetch(new Request('https://map.test'+route,{headers:{cookie:'private-session','oai-authenticated-user-id':'private-actor'}}),{},{});
   assert.equal(result.status,200);assert.equal(seen.at(-1).headers.get('cookie'),null);assert.equal(seen.at(-1).headers.get('oai-authenticated-user-id'),null);
   assert.equal((await worker.fetch(new Request('https://map.test'+route,{method:'POST'}),{},{})).status,405);
  }
- for(const route of ['/api/Contributors-summary','/api//contributors-summary','/api/%63ontributors-summary'])assert.equal((await worker.fetch(new Request('https://map.test'+route),{},{})).status,401);
- assert.equal(seen.length,2);
+ for(const route of ['/api/Contributors-summary','/api//contributors-summary','/api/%63ontributors-summary','/api/Public-image','/api//public-image','/api/%70ublic-image'])assert.equal((await worker.fetch(new Request('https://map.test'+route),{},{})).status,401);
+ assert.equal(seen.length,3);
 });
 
 test('prepared no-bundle Worker serves page, shipped assets and both APIs on synthetic local D1',async t=>{
@@ -44,4 +44,7 @@ test('prepared no-bundle Worker serves page, shipped assets and both APIs on syn
  assert.equal((await detail.json()).place.id,data.places[0].id);
  assert.equal((await fetch('/api/place-completeness?place=private_missing')).status,404);
  assert.equal((await fetch('/api/contributor-roster')).status,401);
+ const privateImage=await fetch('/api/public-image?id=watt_00000000-0000-4000-8000-000000000001');
+ assert.equal(privateImage.status,404);assert.equal(privateImage.headers.get('cache-control'),'no-store');assert.deepEqual(await privateImage.json(),{error:'image_not_public'});
+ assert.equal((await fetch('/api/public-image?id=invalid')).status,400);
 });

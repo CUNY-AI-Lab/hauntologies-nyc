@@ -89,6 +89,10 @@ export function placeCompleteness(record) {
   rows.push({ key: 'coordinates', label: 'Coordinates', group: 'Location', requirement: 'recommended', state: coordinateState, state_label: labels[coordinateState], reason_code: pairedNull ? 'unresolved_location' : validPair ? 'coordinate_pair' : 'invalid_coordinate_pair', edit_key: 'latitude', value_origin: 'stored' });
   const reference = ['source_title', 'source_citation', 'source_url', 'source_locator', ...Object.keys(snapshot).filter(key => /^sources\.\d+\.(title|citation|url|locator|repository)$/.test(key))].some(key => present(snapshot[key]) && !unknown(snapshot[key]));
   rows.push({ key: 'source_reference', label: 'Source reference', group: 'Sources', requirement: 'recommended', state: reference ? 'present' : 'missing', state_label: reference ? 'Present' : 'Missing', reason_code: reference ? 'reference_present' : 'reference_empty', edit_key: 'source_citation', value_origin: 'stored' });
+  for(const [index,image] of (Array.isArray(record.images)?record.images:[]).entries())for(const [key,label] of [['credit','credit'],['license','rights'],['alt','description']]){
+    const state=unknown(image?.[key])?'unknown':present(image?.[key])?'present':'missing';
+    rows.push({key:'images.'+index+'.'+key,label:'Image '+(index+1)+' '+label,group:'Image',requirement:'conditional',state,state_label:labels[state],reason_code:state,edit_key:null,value_origin:'stored'});
+  }
   const states = Object.fromEntries(Object.keys(labels).map(state => [state, rows.filter(row => row.state === state).length]));
   return { id: record.id, title: typeof snapshot.title === 'string' && present(snapshot.title) ? snapshot.title : 'Untitled place', borough: typeof snapshot.borough === 'string' && present(snapshot.borough) && !unknown(snapshot.borough) ? snapshot.borough : 'Unknown',
     needs_details: states.missing + states.invalid > 0, missing_details: states.missing + states.invalid, unknown_details: states.unknown, optional_empty: states.optional, states, fields: rows };

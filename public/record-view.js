@@ -22,7 +22,10 @@
       ['Rights',record.rights_or_license],['Record license',record.record_license],['Rights notes',record.rights_notes]
     ]);
     if(facts.children.length)body.append(facts);
-    const photo=record.image||{},url=photo.localUrl&&/^assets\/[A-Za-z0-9_./-]+$/.test(photo.localUrl)?photo.localUrl:safeUrl(photo.url||record.image_url);
+    const photos=[...(record.image||record.image_url?[record.image||{}]:[]),...(Array.isArray(record.images)?record.images:[])];
+    for(const photo of photos){
+    const publishedUrl=typeof photo.url==='string'&&/^\/api\/public-image\?id=watt_[0-9a-f-]{36}$/.test(photo.url)?photo.url:null;
+    const url=publishedUrl||(photo.localUrl&&/^assets\/[A-Za-z0-9_./-]+$/.test(photo.localUrl)?photo.localUrl:safeUrl(photo.url||record.image_url));
     if(url){
       const figure=document.createElement('figure'),image=document.createElement('img');image.src=url;image.alt=photo.alt||record.image_alt||photo.caption||record.image_caption||record.title;image.loading='lazy';figure.append(image);
       if(photo.caption||record.image_caption)figure.append(text('figcaption',photo.caption||record.image_caption));
@@ -32,6 +35,7 @@
       if(sourceUrl)figure.append(link(sourceUrl,'Image source'));
       if(licenseUrl)figure.append(link(licenseUrl,'Image license'));
       body.append(figure);
+    }
     }
     const sources=Array.isArray(record.sources)&&record.sources.length?record.sources:record.source_url?[{url:record.source_url,title:record.source_title}]:[];
     if(sources.length){

@@ -518,7 +518,7 @@
   }
   async function beginImages(submission,request){
     if(!stagedImages.length||!['/submit','/revise','/publish'].includes(request.path))return;
-    if(!imageBatch)imageBatch={submission_id:submission.id,revision:submission.revision,actor_id:request.actor_id};
+    if(!imageBatch)imageBatch={submission_id:submission.id,revision:submission.revision,actor_id:request.actor_id,publication:request.publication||null};
     await uploadImages();
   }
   async function uploadImages(){
@@ -533,7 +533,14 @@
         const response=await attachmentRequest(entry);entry.receipt=response.receipt;entry.pending=null;batch.revision=response.submission.revision;
         showReceipt(response.submission,response);renderStagedImages();
       }
-      stagedImages=[];imageBatch=null;renderStagedImages();imageStatus('Images saved');
+      if(batch.publication){
+        batch.publishRequest||={actor_id:batch.actor_id,path:'/publish',body:{idempotency_key:crypto.randomUUID(),submission_id:batch.submission_id,expected_revision:batch.revision,...batch.publication,public_image_ids:images.map(entry=>entry.receipt.result.attachment_id)}};
+        const request=batch.publishRequest;retainWrite(request);imageStatus('Publishing');
+        const response=requireReceipt(await api(request.path,request.body),request);await requireOriginalActor(request);
+        if(imageBatch!==batch||generation!==identityGeneration||privateActor!==batch.actor_id)return;
+        retainWrite(null);showReceipt(response.submission,response);window.dispatchEvent(new CustomEvent('contributions-records-changed'));
+      }
+      stagedImages=[];imageBatch=null;renderStagedImages();imageStatus(batch.publication?'Published with images':'Images saved');await loadDashboard();
     }catch(error){
       if(imageBatch!==batch||generation!==identityGeneration)return;
       const entry=images.find(item=>!item.receipt),definite=!!error.status&&error.status<500;
@@ -733,6 +740,10 @@
     const account=window.HauntologiesAccount.snapshot();previewInFlight=true;
     try{if(pendingWrite){renderErrors(['Save outcome unknown. Check My edits before retrying.']);showReconciliation();return;}
     renderErrors([]);const errors=[],explanation=byId('contributionSummary').value,attributes=attributeValues();
+    for(const [index,entry] of stagedImages.entries())if(!entry.metadata.rights?.trim()||/^(unknown|unspecified|unresolved|not known|n\/a)$/i.test(entry.metadata.rights.trim())){
+      errors.push({field:'image-'+index+'-rights',message:'Image '+(index+1)+': add the license or permission that allows public display.'});
+      byId('image-'+index+'-rights')?.closest('details')?.setAttribute('open','');
+    }
     if(isOpenForm()&&!byId('contributionChangeSummary').value.trim())errors.push({field:'change_summary',message:'Briefly describe your change'});
     if(!explanation.trim()){
       const existing=isOpenForm()&&byId('contributionPlaceMode').value==='existing';
@@ -784,9 +795,12 @@
       const actor_id=await sessionActor();if(generation!==identityGeneration||actor_id!==owner||privateActor!==owner)return;
       if(pendingWrite)throw Object.assign(new Error('Previous save unresolved; check My edits'),{status:409});
       if(JSON.stringify(buildEnvelope(),null,2)!==exact.raw)throw Object.assign(new Error('Form changed. Publish again.'),{status:400});
-      request={actor_id,path:exact.envelope.type==='open_proposal'?'/publish':revisionOf?'/revise':'/submit',body:{idempotency_key:crypto.randomUUID(),submission_json:exact.raw,...(exact.envelope.type==='open_proposal'?{change_summary:byId('contributionChangeSummary').value}:{}),...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})}};
+      const withImages=exact.envelope.type==='open_proposal'&&stagedImages.length>0;
+      request={actor_id,path:exact.envelope.type==='open_proposal'&&!withImages?'/publish':revisionOf?'/revise':'/submit',...(withImages?{publication:{moniker:exact.envelope.public_credit.label,change_summary:byId('contributionChangeSummary').value}}:{}),body:{idempotency_key:crypto.randomUUID(),submission_json:exact.raw,...(exact.envelope.type==='open_proposal'&&!withImages?{change_summary:byId('contributionChangeSummary').value}:{}),...(revisionOf?{submission_id:revisionOf.id,expected_revision:revisionOf.revision}:{})}};
       retainWrite(request);const response=requireReceipt(await api(request.path,request.body),request);
-      await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();
+      await requireOriginalActor(request);if(privateActor!==request.actor_id)return;retainWrite(null);clearSavedDraft(request);showReceipt(response.submission,response);preview=null;byId('contributionPreview').hidden=true;
+      if(withImages)await beginImages(response.submission,request);
+      window.dispatchEvent(new CustomEvent('contributions-records-changed'));await loadDashboard();
     }catch(error){
       if(generation!==identityGeneration||privateActor!==owner)return;const uncertain=!!request&&(error.uncertain||!error.status||error.status>=500);
       if(uncertain)renderErrors([]);else if(error.status===400)renderErrors([error.message]);else serviceFailure(error);

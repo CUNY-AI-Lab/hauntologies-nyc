@@ -48,13 +48,24 @@
     for(const target of item.targets||[]){const open=button(target.title||'View place',()=>leave(()=>window.dispatchEvent(new CustomEvent('edits-place-requested',{detail:{recordId:target.record_id}})),open));open.setAttribute('aria-label','Show '+(target.title||'place')+' on map');targets.append(open);}
     row.append(targets);return row;
   }
-  function publishSaved(row,item){
+  async function publishSaved(row,item){
     if(row.querySelector('form'))return;
     const account=window.HauntologiesAccount.snapshot(),version=generation,current=()=>version===generation&&window.HauntologiesAccount.isCurrent(account);
     const form=node('form'),name=node('input'),summary=node('input'),send=button('Publish',()=>{}),notice=node('p');send.type='submit';name.maxLength=120;summary.maxLength=2000;name.required=summary.required=true;
     try{name.value=JSON.parse(localStorage.getItem('hauntologies-public-moniker:'+account.actor)||'null')?.label||'';}catch{}
     for(const [label,input] of [['Public username',name],['Describe your change',summary]]){const l=node('label',label);l.append(input);form.append(l);}form.append(send,button('Cancel',()=>form.remove()),notice);row.append(form);let pending=null;
-    form.addEventListener('submit',async event=>{event.preventDefault();if(!current())return;pending||={idempotency_key:crypto.randomUUID(),submission_id:item.id,expected_revision:item.revision,moniker:name.value,change_summary:summary.value};send.disabled=true;notice.textContent='Publishing…';try{await post('/api/contributions/publish',pending,account.actor);if(!current())return;window.dispatchEvent(new CustomEvent('contributions-records-changed'));await load(page);}catch(error){if(current()){notice.textContent=error.message;send.disabled=false;send.textContent='Retry / confirm';}}});
+    send.disabled=true;
+    try{
+      const {submission}=await get('/api/contributions/submission?id='+encodeURIComponent(item.id));if(!current()||!form.isConnected)return;
+      if(!name.value&&submission.public_credit?.identity==='moniker')name.value=submission.public_credit.label||'';
+      for(const [index,ref] of (submission.attachments||[]).entries()){
+        const label=node('label'),choice=node('input');choice.type='checkbox';choice.dataset.publicImageId=ref.attachment_id;
+        const rights=ref.metadata?.rights||'';choice.disabled=!rights.trim()||/^(unknown|unspecified|unresolved|not known|n\/a)$/i.test(rights.trim());
+        label.append(choice,document.createTextNode(' Publish image '+(index+1)+(choice.disabled?' — rights unknown':' · '+rights)));form.insertBefore(label,send);
+      }
+      send.disabled=false;
+    }catch{if(current())notice.textContent='Saved images could not be checked. Close this form and try again.';return;}
+    form.addEventListener('submit',async event=>{event.preventDefault();if(!current())return;pending||={idempotency_key:crypto.randomUUID(),submission_id:item.id,expected_revision:item.revision,moniker:name.value,change_summary:summary.value,public_image_ids:[...form.querySelectorAll('[data-public-image-id]:checked')].map(input=>input.dataset.publicImageId)};send.disabled=true;notice.textContent='Publishing…';try{await post('/api/contributions/publish',pending,account.actor);if(!current())return;window.dispatchEvent(new CustomEvent('contributions-records-changed'));await load(page);}catch(error){if(current()){notice.textContent=error.message;send.disabled=false;send.textContent='Retry / confirm';}}});
   }
   function controls(){byId('previousEdits').disabled=page<=1;byId('nextEdits').disabled=page>=totalPages;byId('editsPage').textContent='Page '+page+' of '+totalPages;}
   async function load(next){const version=++generation;status.textContent='Loading…';byId('previousEdits').disabled=true;byId('nextEdits').disabled=true;
