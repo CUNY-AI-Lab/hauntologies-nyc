@@ -20,7 +20,7 @@ const undoCount=async id=>{const r=await context.request.get(base+'/api/place-hi
 try{
  await signIn(context.request);const title='Synthetic refresh place '+Date.now(),first=await publish(context.request,title,-74,40.72,'night.owl'),id=first.receipt.result.record_id;
  await page.goto(base+'/?place='+encodeURIComponent(id));await page.waitForFunction(()=>window.HauntologiesAccount?.canContribute());
- const card=cardOf(id);await card.waitFor();await card.getByRole('button',{name:'History',exact:true}).click();
+ const card=cardOf(id);await card.waitFor();await card.locator('.place-history > summary').click();
  const entry=card.locator('.history-entry').first();await entry.waitFor();await entry.locator(':scope > summary').click();
  await entry.getByRole('button',{name:'Undo',exact:true}).click();const name=entry.locator('form input').first();await name.fill('typed.owl');
  const other=await request.newContext();await signIn(other,'reviewer@local.test');const second=await publish(other,'Synthetic second place '+Date.now(),-73.99,40.73,'other.owl');
@@ -48,7 +48,7 @@ try{
  const accepted=page.waitForResponse(r=>r.url().endsWith('/api/contributions/undo'));release();assert.equal((await accepted).status(),200);await form.waitFor({state:'detached'});releaseRead();await staleRead;
  await form.waitFor({state:'detached'});await cardOf(second.receipt.result.record_id).waitFor({state:'attached'});await historyFocused(id);await page.unroute('**/api/contributions/undo');await page.unroute('**/api/published-records');assert.equal(await undoCount(id),1);
  checks.push('pointer submission keeps the pending form; confirmed Undo fences a delayed pre-save response, refreshes and restores History focus');
- const secondCard=cardOf(second.receipt.result.record_id);await secondCard.getByRole('button',{name:'History',exact:true}).click();
+ const secondCard=cardOf(second.receipt.result.record_id);await secondCard.locator('.place-history > summary').click();
  const secondEntry=secondCard.locator('.history-entry').first();await secondEntry.waitFor();await secondEntry.locator(':scope > summary').click();await secondEntry.getByRole('button',{name:'Undo',exact:true}).click();
  const cancelForm=secondEntry.locator('form');await cancelForm.locator('input').first().fill('cancel.owl');
  const third=await publish(other,'Synthetic third place '+Date.now(),-73.98,40.73,'other.owl');await refresh();
@@ -66,7 +66,7 @@ try{
  await page.waitForFunction(([id,title])=>{const card=[...document.querySelectorAll('.place-card')].find(c=>c.dataset.placeId===id);return card&&card.querySelector('.place-title')?.textContent!==title;},[second.receipt.result.record_id,second.submission.title],{timeout:15000});
  await latest.locator('form').waitFor({state:'detached'});await historyFocused(second.receipt.result.record_id);assert.equal(await undoCount(second.receipt.result.record_id),1);
  checks.push('an Undo submitted with Enter still refreshes the place card and restores focus');
- const thirdCard=cardOf(third.receipt.result.record_id);await thirdCard.getByRole('button',{name:'History',exact:true}).click();
+ const thirdCard=cardOf(third.receipt.result.record_id);await thirdCard.locator('.place-history > summary').click();
  const thirdEntry=thirdCard.locator('.history-entry').first();await thirdEntry.waitFor();await thirdEntry.locator(':scope > summary').click();await thirdEntry.getByRole('button',{name:'Undo',exact:true}).click();
  const uncertain=thirdEntry.locator('form');await uncertain.locator('input').first().fill('retry.owl');await uncertain.locator('input').nth(1).fill('Retain this uncertain request');
  let lose=true,original;const bodies=[];

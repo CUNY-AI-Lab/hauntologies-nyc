@@ -25,7 +25,8 @@ test('Record disclosure preserves long citations, multiple sources, uncertainty 
     sources:[{title:'First synthetic source',citation,url:'https://example.test/one',repository:'Synthetic archive',locator:'Series 1 / Box 2',rights_statement:'No reproduction permission inferred.',evidence_note:'The source reports a claim.'},{citation:'Second distinct citation',url:'https://example.test/two',source_date_original:'1900',credit:'Public source credit'}]};
   const before=JSON.stringify(record),card=render(record),nodes=descendants(card),text=card.textContent;
   for(const value of [citation,'Second distinct citation','Synthetic archive','Series 1 / Box 2','Point is approximate.','Date is unresolved.','Public image creator','Public source credit','No reproduction permission inferred.'])assert.ok(text.includes(value),value);
-  assert.equal(card.children[0].tagName,'details');assert.equal(card.children[0].children[0].textContent,'Record');
+  const details=card.children.find(n=>n.tagName==='details');assert.equal(details.children[0].textContent,'Record');assert.equal(details.open,true);
+  assert.equal(card.children[0].className,'place-record-content place-images');assert.equal(descendants(details).filter(n=>n.tagName==='img').length,0);details.open=false;assert.equal(descendants(card.children[0]).filter(n=>n.tagName==='img').length,1);
   assert.deepEqual(nodes.filter(n=>n.tagName==='a').map(n=>n.href),['https://example.test/image-source','https://example.test/license','https://example.test/one','https://example.test/two']);
   assert.equal(JSON.stringify(record),before);
 });
@@ -59,8 +60,8 @@ test('missing alt text never borrows a place title, caption, or another image de
  assert.equal(descendants(render({title:'Unrelated title',image:{url:'https://example.test/only.png',caption:'Unrelated caption'}})).find(n=>n.tagName==='img').alt,'Image description unavailable.');
 });
 
- test('Record omits summary fields and starts collapsed while retaining dates and distinct metadata',()=>{
+ test('Record omits summary fields and starts expanded while retaining dates and distinct metadata',()=>{
  const card=render({title:'Pelham Bay Naval Training Station',location_text:'Image: Map',borough:'Bronx',event_date_start:'1917',contributors:['Public credit']},{description:'Former facility',location:'Bronx',latitude:40.86611,longitude:-73.81028});
  for(const repeated of ['Pelham Bay Naval Training Station','Former facility','Image: Map','Bronx','Coordinates','Public credit'])assert.ok(!card.textContent.includes(repeated),repeated);
- assert.ok(card.textContent.includes('1917'));assert.ok(!card.children[0].open);
+ assert.ok(card.textContent.includes('1917'));assert.equal(card.children[0].open,true);
  });
