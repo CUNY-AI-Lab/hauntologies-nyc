@@ -1,5 +1,5 @@
-import { publicCredit, recordCredits } from './record-credits.mjs';
-import {releaseCreditSQL} from './public-attribution.mjs';
+import { publicCredit, recordCredits, directRecordAttribution } from './record-credits.mjs';
+import {releaseCreditSQL,publicMonikerSQL,publicDisplayName} from './public-attribution.mjs';
 // A public credit label names its contributor only while they are on the roster. Every public
 // projection of release history reads this column, so leaving the roster hides the name everywhere
 // at once (records, published edits, the Contributors counts) and rejoining restores it.
@@ -27,8 +27,8 @@ export async function publishedEdits(db) {
       return [{id:row.id,published_at:row.updated_at,targets,...(label?{credit:label}:{})}];
     } catch { return []; }
   });
-  const {results:direct=[]}=await db.prepare("SELECT e.id,e.created_at,e.event_json,r.raw_json FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id JOIN approved_records r ON r.id=json_extract(e.event_json,'$.record_id') WHERE e.kind='direct_publish' AND s.review_state='published' ORDER BY e.created_at DESC,e.id DESC LIMIT 20").all();
-  return [...legacy,...direct.map(row=>{const e=JSON.parse(row.event_json);return{id:row.id,published_at:row.created_at,credit:e.moniker,summary:e.summary,targets:[{record_id:e.record_id,title:JSON.parse(row.raw_json).title||'Place'}]};})].sort((a,b)=>b.published_at.localeCompare(a.published_at)).slice(0,20);
+  const {results:direct=[]}=await db.prepare(`SELECT e.id,e.created_at,e.event_json,r.raw_json,${publicMonikerSQL()} AS public_moniker FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id JOIN approved_records r ON r.id=json_extract(e.event_json,'$.record_id') WHERE e.kind='direct_publish' AND s.review_state='published' ORDER BY e.created_at DESC,e.id DESC LIMIT 20`).all();
+  return [...legacy,...direct.map(row=>{const e=JSON.parse(row.event_json);return{id:row.id,published_at:row.created_at,credit:publicDisplayName(row.public_moniker,e.moniker),summary:e.summary,targets:[{record_id:e.record_id,title:JSON.parse(row.raw_json).title||'Place'}]};})].sort((a,b)=>b.published_at.localeCompare(a.published_at)).slice(0,20);
 }
 
 // Public credit for the Contributors list: one count per live release whose contributor opted in.
@@ -47,8 +47,8 @@ export async function contributorCredits(db) {
     if(!label)continue;
     const key=JSON.stringify([row.owner_id,label.toLocaleLowerCase('en-US')]),entry=counts.get(key)||{name:label,count:0};entry.count++;counts.set(key,entry);
   }
-  const {results:direct=[]}=await db.prepare("SELECT s.owner_id,e.event_json FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id WHERE e.kind='direct_publish' AND s.review_state='published'").all();
-  for(const row of direct){const name=JSON.parse(row.event_json).moniker;if(!name)continue;total++;const key=JSON.stringify([row.owner_id,name.toLocaleLowerCase('en-US')]),entry=counts.get(key)||{name,count:0};entry.count++;counts.set(key,entry);}
+  const {results:direct=[]}=await db.prepare(`SELECT s.owner_id,e.event_json,${publicMonikerSQL()} AS public_moniker FROM workflow_events e JOIN workflow_submissions s ON s.id=e.submission_id WHERE e.kind='direct_publish' AND s.review_state='published'`).all();
+  for(const row of direct){const name=publicDisplayName(row.public_moniker,JSON.parse(row.event_json).moniker);if(!name)continue;total++;const key=JSON.stringify([row.owner_id,name.toLocaleLowerCase('en-US')]),entry=counts.get(key)||{name,count:0};entry.count++;counts.set(key,entry);}
   const contributors=[...counts.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'en-US'));
   return {contributors,total};
 }
@@ -91,8 +91,8 @@ export async function publishedRecordPage(db,after=''){
     LEFT JOIN workflow_jobs j ON j.id=r.preview_hash AND j.status='verified'
     LEFT JOIN workflow_approvals a ON a.id=j.approval_id AND a.submission_id=j.submission_id AND a.revision=j.revision
     LEFT JOIN workflow_submissions s ON s.id=j.submission_id WHERE (json_extract(r.derived_json,'$.publication_mode')='direct' OR (s.review_state<>'revoked' AND (a.reviewer_id<>s.owner_id OR json_extract(a.binding_json,'$.admin_self_approval')=1))) AND r.id>? ORDER BY r.id LIMIT 501`).bind(after).all();
-  const records=results.slice(0,500).flatMap(publicRecord),credits=await recordCredits(db,records.map(record=>record.id));
-  return {records:records.map(record=>{if(record.direct_publication)return record;const names=credits.get(record.id);return names?.length||Object.hasOwn(record,'contributors')?{...record,contributors:names||[]}:record;}),next_cursor:results.length>500?results[499].id:null};
+  const records=results.slice(0,500).flatMap(publicRecord),credits=await recordCredits(db,records.map(record=>record.id)),directCredits=await directRecordAttribution(db,records.filter(record=>record.direct_publication).map(record=>record.id));
+  return {records:records.map(record=>{if(record.direct_publication){const attribution=directCredits.get(record.id);return attribution?{...record,contributors:attribution.names,notes:(record.notes||[]).map(note=>({...note,moniker:attribution.notes.get(note.id)||note.moniker}))}:record;}const names=credits.get(record.id);return names?.length||Object.hasOwn(record,'contributors')?{...record,contributors:names||[]}:record;}),next_cursor:results.length>500?results[499].id:null};
 }
 export async function publishedRecords(db){return (await publishedRecordPage(db)).records;}
 export function publicRecord(row){
