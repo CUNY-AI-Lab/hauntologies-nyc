@@ -16,6 +16,7 @@ import { createWorkflowStore } from '../server/workflow-store.mjs';
 import { createWorkflowService } from '../server/workflow-service.mjs';
 import { parseStaticRecords } from '../server/static-targets.mjs';
 import { contributorCredits, contributorRoster, publishedEdits, publishedRecordPage, setRosterListing } from '../server/published-edits.mjs';
+import { handlePublicContributions } from '../server/public-contributions.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -47,12 +48,13 @@ const db = { prepare, batch(statements) {
 } };
 
 const read = p => readFileSync(path.join(repo, p), 'utf8');
+const staticRecords = parseStaticRecords(read('public/inventory.js'), read('public/pilot.js'));
 const service = createWorkflowService({
   publicationMode: 'direct',
   store: createWorkflowStore(db),
   taskSeeds: JSON.parse(read('public/data/contribution-tasks.json')),
   geography: { boundaries: JSON.parse(read('public/data/nyc-borough-boundaries.geojson')), gazetteer: JSON.parse(read('server/gazetteer.json')) },
-  staticRecords: parseStaticRecords(read('public/inventory.js'), read('public/pilot.js')),
+  staticRecords,
   authorization: { reviewers: [], publishers: [], everyone: true },
 });
 
@@ -96,13 +98,14 @@ async function contributions(req, url) {
 }
 
 function file404(pathname) {
-  const target = pathname === '/' ? path.join(repo, 'web/index.html') : pathname === '/register' ? path.join(repo, 'web/registration.html') : path.join(repo, 'public', decodeURIComponent(pathname));
+  const target = pathname === '/' ? path.join(repo, 'web/index.html') : pathname === '/contributors' ? path.join(repo, 'web/contributors.html') : pathname === '/register' ? path.join(repo, 'web/registration.html') : path.join(repo, 'public', decodeURIComponent(pathname));
   if (!target.startsWith(repo) || !existsSync(target) || statSync(target).isDirectory()) return new Response('Not found', { status: 404 });
   return new Response(readFileSync(target), { headers: { 'Content-Type': types[path.extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' } });
 }
 
 async function route(req) {
   const url = new URL(req.url, `http://127.0.0.1:${port}`), p = url.pathname;
+  if (['/api/contributors-summary','/api/place-completeness'].includes(p)) return handlePublicContributions(new Request(url, {method:req.method}), {db,staticRecords});
   if (p.startsWith('/api/auth/')) return auth(req, p.slice('/api/auth/'.length));
   if (p === '/api/access-status') return json({ enabled: true, sign_in_url: '/api/contributions/sign-in', account_mode: 'map', dashboard_enabled: false });
   if (p === '/api/registration-policy') return json({ restricted: false });

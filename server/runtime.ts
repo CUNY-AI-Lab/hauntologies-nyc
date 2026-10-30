@@ -13,12 +13,16 @@ import inventoryText from '../public/inventory.js?raw';
 import pilotText from '../public/pilot.js?raw';
 import { parseStaticRecords } from './static-targets.mjs';
 import { reviewAuthorization } from './review-authorization.mjs';
+import { handlePublicContributions } from './public-contributions.mjs';
 const staticRecords=parseStaticRecords(inventoryText,pilotText);
 const boundaries=JSON.parse(boundaryText);
 
 export function handleRequest(request:Request){
   const e=env as Record<string,any>;
   const geography={boundaries,gazetteer};
+  if (['/api/contributors-summary', '/api/place-completeness'].includes(new URL(request.url).pathname)) {
+    return handlePublicContributions(request, { db: e.DB, staticRecords });
+  }
   if(new URL(request.url).pathname.startsWith('/api/contributions/')){
     // Explicit role lists control privileged data; open review adds bounded peer review/publication.
     return createWorkflowService({publicationMode:'direct',store:e.DB?createWorkflowStore(e.DB):null,taskSeeds,geography,staticRecords,authorization:reviewAuthorization(e.CONTRIBUTIONS_REVIEWER_IDS,e.CONTRIBUTIONS_PUBLISHER_IDS,e.CONTRIBUTIONS_ADMIN_IDS,e.CONTRIBUTIONS_OPEN_REVIEW)}).handle(request);

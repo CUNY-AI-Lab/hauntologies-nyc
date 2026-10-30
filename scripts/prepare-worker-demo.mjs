@@ -30,4 +30,10 @@ await fs.copyFile(new URL('../server/registration.mjs',import.meta.url),new URL(
 await fs.copyFile(new URL('../server/registration-eligibility.mjs',import.meta.url),new URL('../dist/server/registration-eligibility.mjs',import.meta.url));
 await fs.writeFile(new URL('../dist/server/demo-worker.mjs',import.meta.url),"import handler from './index.js';\nimport {createDemoWorker} from './demo-gate.mjs';\nimport {handleRegistration} from './registration.mjs';\nexport default createDemoWorker(handler,handleRegistration);\n");
 await fs.writeFile(new URL('../dist/server/wrangler.demo.json',import.meta.url),JSON.stringify(config,null,2)+'\n');
+// These public handlers are bundled through server/runtime.ts by Vinext. Keep
+// their browser assets in the no-bundle release and verify the shipped modules
+// with tests/contributors-prepared.runtime.test.mjs (no production connection).
+for (const asset of ['contributor-page.js','contributor-page.css','place-link.js']) {
+  await fs.access(new URL('../dist/client/'+asset,import.meta.url));
+}
 console.log('Prepared hauntologies-nyc with DB binding and registration; contribution/review APIs blocked, public and preview routes disabled.');

@@ -1,0 +1,89 @@
+/* Scoped normal document flow; the map's viewport rules do not apply here. */
+html.contributors-page, .contributors-page body { height:auto; min-height:100%; overflow:auto; }
+.contributors-page body { background:var(--night); }
+.contributors-page .skip-link:not(:focus) { clip-path:inset(50%); width:1px; height:1px; overflow:hidden; padding:0; white-space:nowrap; }
+.contributors-page :is(button,input,select,textarea) { border-radius:0; }
+.directory-header { display:flex; align-items:center; justify-content:space-between; gap:20px; max-width:1200px; margin:auto; padding:24px 32px; border-bottom:1px solid var(--line); }
+.directory-brand { font:400 25px/1.25 var(--serif); color:var(--ink); text-decoration:none; }
+.directory-back { display:inline-flex; align-items:center; min-height:44px; padding:8px 0 8px 20px; }
+.contributors-page main { max-width:1200px; margin:auto; padding:30px 32px 64px; }
+.directory-heading,.section-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.directory-heading h1 { font-size:32px; }
+.directory-intro { margin:8px 0 16px; color:var(--muted); max-width:65ch; }
+#directoryStatus { color:var(--muted); font-size:12px; min-height:18px; margin-bottom:14px; }
+.directory-stats dl { display:grid; grid-template-columns:repeat(4,1fr); margin:0; border-block:1px solid var(--line); }
+.directory-stats dl>div { padding:14px 20px; border-left:1px solid var(--line); }
+.directory-stats dl>div:first-child { padding-left:0; border-left:0; }
+.directory-stats dt { color:var(--muted); font-size:12px; }
+.directory-stats dd { margin:5px 0 0; font-size:25px; line-height:1.2; font-variant-numeric:tabular-nums; }
+.directory-definitions { margin-bottom:24px; border-bottom:1px solid var(--line); }
+.directory-definitions>summary { min-height:44px; padding:12px 0; cursor:pointer; color:var(--sun); font-size:12px; }
+.directory-definitions>summary span { margin-left:10px; color:var(--muted); }
+.definition-body { max-width:80ch; padding:4px 0 20px; font-size:13px; }
+.definition-body dt { margin-top:12px; color:var(--ink); font-weight:600; }
+.definition-body dd { margin:4px 0 0; color:var(--muted); }
+.directory-columns { display:grid; grid-template-columns:minmax(240px,.8fr) minmax(0,1.6fr); gap:36px; }
+.directory-columns section { min-width:0; }
+.directory-columns h2 { font:400 20px/1.3 var(--serif); }
+.section-heading { margin-bottom:16px; }
+.section-heading>span { font-size:12px; color:var(--muted); }
+.directory-help { color:var(--muted); font-size:12px; margin:9px 0 14px; }
+.people-list { list-style:none; padding:0; margin:0; border-top:1px solid var(--line); max-height:540px; overflow:auto; }
+.people-list button { display:block; text-align:left; width:100%; padding:13px 12px; border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--ink); }
+.people-list button:hover { background:#24241c; }
+.people-list button[aria-pressed=true] { background:#30291d; box-shadow:inset 3px 0 var(--orange); }
+.person-name { display:block; overflow-wrap:anywhere; font-size:14px; }
+.person-counts,.person-identity { display:block; color:var(--muted); font-size:12px; margin-top:4px; }
+.person-identity { color:var(--sun); font-size:11px; }
+.directory-collaborators { margin-top:24px; color:var(--muted); font-size:12px; }
+.directory-collaborators summary { min-height:44px; padding:10px 0; cursor:pointer; }
+.directory-collaborators ul { padding-left:18px; }
+.directory-collaborators li { margin-bottom:5px; }
+.directory-filters { display:grid; grid-template-columns:1.2fr 1fr; gap:12px; }
+.needs-details { grid-column:1/-1; display:flex; align-items:center; gap:8px; min-height:44px; font-weight:400; }
+.needs-details input { margin:0; width:18px; height:18px; }
+.place-selector { margin:6px 0 18px; }
+.contributor-filter { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:-6px 0 12px; border-bottom:1px solid var(--line); }
+.contributor-filter p { margin:0; overflow-wrap:anywhere; color:var(--sun); }
+.contributor-filter button { flex-shrink:0; }
+#placeInspector { border-top:1px solid var(--line); padding-top:20px; }
+#placeInspector h3 { font:400 27px/1.25 var(--serif); margin:0 0 8px; overflow-wrap:anywhere; }
+.place-context { color:var(--muted); font-size:12px; margin-bottom:12px; }
+.place-links { display:flex; flex-wrap:wrap; gap:8px 22px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+.place-links a { display:inline-flex; align-items:center; min-height:44px; }
+.place-gap-summary { margin:18px 0 10px; font-size:13px; }
+.field-list { list-style:none; margin:0; padding:0; }
+.field-list li { display:flex; gap:14px; justify-content:space-between; padding:9px 0; border-bottom:1px solid #282820; font-size:13px; }
+.field-list .field-name { min-width:0; overflow-wrap:anywhere; }
+.field-list small { display:block; color:var(--muted); font-size:11px; }
+.field-state { flex-shrink:0; color:var(--sun); }
+.field-state[data-state=unknown] { color:#d7c2e6; }
+.field-state:is([data-state=optional],[data-state=not_applicable],[data-state=present]) { color:var(--muted); }
+.place-field-details { margin-top:12px; }
+.place-field-details summary { cursor:pointer; padding:12px 0; min-height:44px; color:var(--muted); font-size:12px; }
+.directory-empty { color:var(--muted); padding:16px 0; }
+.directory-mobile-views { display:none; }
+@media(max-width:720px) {
+  .directory-header { padding:14px 16px; gap:12px; }
+  .directory-brand { font-size:21px; max-width:240px; }
+  .contributors-page main { padding:22px 16px 40px; }
+  .directory-heading h1 { font-size:29px; }
+  .directory-stats dl { grid-template-columns:1fr 1fr; }
+  .directory-stats dl>div { padding:12px 14px; }
+  .directory-stats dl>div:nth-child(3) { padding-left:0; border-left:0; }
+  .directory-stats dl>div:nth-child(n+3) { border-top:1px solid var(--line); }
+  .directory-stats dd { font-size:23px; }
+  .directory-definitions>summary span { display:block; margin:4px 0 0 14px; }
+  .directory-mobile-views { display:flex; border-bottom:1px solid var(--line); margin:0 0 24px; }
+  .directory-mobile-views button { flex:1; color:var(--muted); background:transparent; border:0; border-bottom:2px solid transparent; padding:10px; }
+  .directory-mobile-views button[aria-pressed=true] { color:var(--ink); border-bottom-color:var(--orange); }
+  .directory-columns { display:block; }
+  .directory-columns[data-view=contributors] #placesSection,.directory-columns[data-view=places] #contributorsSection { display:none; }
+  .people-list { max-height:none; }
+  .directory-filters { grid-template-columns:1fr 1fr; gap:10px; }
+  .contributors-page :is(input,select) { font-size:16px; }
+  .directory-filters label:first-child { grid-column:1/-1; }
+  .needs-details { grid-column:auto; align-self:end; }
+  .field-list li { font-size:12px; }
+  #placeInspector h3 { font-size:25px; }
+}
