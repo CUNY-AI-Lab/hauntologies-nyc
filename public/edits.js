@@ -94,7 +94,7 @@
   async function refreshFeed(){const version=++feedGeneration;if(!lastFeed)feedStatus.textContent='Loading…';
     try{const data=await get('/api/published-edits');await window.HauntologiesPublic?.refresh();if(version!==feedGeneration||!feed.open)return;const signature=JSON.stringify(data.items);feedStatus.textContent=data.items.length?'':'0 published edits';
       if(signature===lastFeed)return;lastFeed=signature;
-      const rows=data.items.map(item=>{const row=node('li');for(const target of item.targets){row.append(button(target.title,()=>{setFeed(false);window.dispatchEvent(new CustomEvent('edits-place-requested',{detail:{recordId:target.record_id}}));}));}row.append(node('p',date(item.published_at)+(item.credit?' · '+item.credit:'')));return row;});
+      const rows=data.items.map(item=>{const row=node('li');for(const target of item.targets){row.append(button(target.title||'View place',()=>{setFeed(false);window.dispatchEvent(new CustomEvent('edits-place-requested',{detail:{recordId:target.record_id}}));}));}row.append(node('p',date(item.published_at)+(item.credit?' · '+item.credit:'')));return row;});
       // A list that arrives after the card unfolds grows in the same motion.
       const fill=()=>feedList.replaceChildren(...rows);window.HauntologiesDisclosure?window.HauntologiesDisclosure.resize(feed,fill):fill();
     }catch{if(version===feedGeneration&&feed.open)feedStatus.textContent='Published edits are temporarily unavailable.';}

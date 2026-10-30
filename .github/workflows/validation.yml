@@ -22,6 +22,8 @@ jobs:
           node-version: '22'
       - name: Install locked dependencies
         run: npm run install:ci
+      - name: Lint
+        run: npm run lint
       - name: Build
         run: npm run build
       - name: Prepare the release without deploying

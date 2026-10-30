@@ -41,8 +41,16 @@
     }
     invalid();
   }
-  function jpeg(bytes,view){
-    if(bytes.length<4||bytes[0]!==255||bytes[1]!==216||bytes.at(-2)!==255||bytes.at(-1)!==217)invalid();
+  // Phone cameras often append data after the end-of-image marker (Motion Photo video, Samsung
+  // trailers). A chosen file may carry such a trailer as long as its image data ends with EOI; the
+  // re-encoded derivative must end exactly at EOI, and the server checks it again.
+  function endsImageData(bytes,start){
+    for(let i=start;i<bytes.length-1;i++)if(bytes[i]===255&&bytes[i+1]===217)return true;
+    return false;
+  }
+  function jpeg(bytes,view,allowTrailer=false){
+    if(bytes.length<4||bytes[0]!==255||bytes[1]!==216)invalid();
+    if(!allowTrailer&&(bytes.at(-2)!==255||bytes.at(-1)!==217))invalid();
     let offset=2,size;
     while(offset<bytes.length-2){
       if(bytes[offset++]!==255)invalid();
@@ -55,7 +63,7 @@
         if(length<8||length!==8+3*bytes[offset+7]||size)invalid();
         size=dimensions(view.getUint16(offset+5),view.getUint16(offset+3));
       }
-      if(marker===218){if(!size||end>=bytes.length-2)invalid();return size;}
+      if(marker===218){if(!size||end>=bytes.length-2||allowTrailer&&!endsImageData(bytes,end))invalid();return size;}
       offset=end;
     }
     invalid();
@@ -94,10 +102,10 @@
     if(canvas&&image&&(canvas.width!==image.width||canvas.height!==image.height))invalid();
     return canvas||image;
   }
-  function inspect(bytes,type){
+  function inspect(bytes,type,source=false){
     const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
     if(type==='image/png')return png(bytes,view);
-    if(type==='image/jpeg')return jpeg(bytes,view);
+    if(type==='image/jpeg')return jpeg(bytes,view,source);
     if(type==='image/webp')return webp(bytes,view);
     fail('unsupported_image_type');
   }
@@ -125,7 +133,7 @@
     let bytes;
     try{bytes=new Uint8Array(await file.arrayBuffer());}catch{invalid();}
     // Encoded dimensions are bounded before allocating decoded pixels.
-    const source=inspect(bytes,file.type);
+    const source=inspect(bytes,file.type,true);
     if(typeof root.createImageBitmap!=='function'||!root.document)fail('image_processing_unavailable');
     let bitmap,canvas;
     try{

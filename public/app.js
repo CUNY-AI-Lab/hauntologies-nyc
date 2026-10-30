@@ -33,9 +33,42 @@ const sourceInventory=window.NYC_INVENTORY||{records:[],audits:[]};
 pilot.category='pilot';pilot.borough='Manhattan';
 let hostedRecords=[],publishedPlaces=[];
 const allRecords=()=>[...new Map([...drafts,pilot,...sourceInventory.records,...publishedPlaces].map(record=>[record.id,record])).values()];
-let publishedRequest=0,publishedSignature='';
-async function loadPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const page=await publicReads.json('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''));if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
-const refreshPublishedPlaces=publicReads.singleFlight(loadPublishedPlaces);
+let publishedRequest=0,publishedSignature='',publishedRefreshDeferred=false,publishedResumeTimer=0,publishedFlight=null,publishedReadAgain=false;
+async function loadPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const page=await publicReads.json('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''));if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){if(placeCardFormOpen()){publishedRefreshDeferred=true;return true;}publishedRefreshDeferred=false;publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop,cards=placeCardState();populateFacets();renderRecords();restorePlaceCardState(cards);panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+// Rebuilding cards must not discard an Undo draft, a pending save or its retry controls.
+// Wait for the form to be published, cancelled or cleared by an account change, regardless
+// of keyboard focus. Read again afterward rather than applying an older retained response.
+const placeCardFormOpen=()=>$('casePanel').querySelector('.place-card form');
+function resumePublishedPlaces(){
+ if(!publishedRefreshDeferred||placeCardFormOpen()||publishedResumeTimer)return;
+ publishedResumeTimer=setTimeout(()=>{
+  publishedResumeTimer=0;
+  if(publishedRefreshDeferred&&!placeCardFormOpen()){publishedRefreshDeferred=false;refreshPublishedPlaces({afterForm:true});}
+ },0);
+}
+const cardFor=id=>[...$('casePanel').querySelectorAll('.place-card')].find(card=>card.dataset.placeId===id);
+function placeCardState(){
+ const open=[...$('casePanel').querySelectorAll('.place-card > details[open]')].map(d=>({id:d.parentElement.dataset.placeId,cls:d.className}));
+ const active=document.activeElement,card=active?.closest?.('.place-card');let focus=null;
+ if(card&&$('casePanel').contains(card)){const d=active.closest('details');if(active.tagName==='SUMMARY'&&d?.parentElement===card)focus={id:card.dataset.placeId,cls:d.className};else if(active.classList.contains('place-select'))focus={id:card.dataset.placeId,cls:null};}
+ return{open,focus};
+}
+function restorePlaceCardState({open,focus}){
+ const section=(card,cls)=>[...card.children].find(child=>child.tagName==='DETAILS'&&child.className===cls);
+ for(const item of open){const card=cardFor(item.id),details=card&&section(card,item.cls);if(details)details.open=true;}
+ const card=focus&&cardFor(focus.id),target=card&&(focus.cls===null?card.querySelector('.place-select'):section(card,focus.cls)?.querySelector(':scope > summary'));target?.focus({preventScroll:true});
+}
+function refreshPublishedPlaces({afterForm=false}={}){
+ // A completed form needs a read started after that completion. Joining an older
+ // in-flight read alone could otherwise restore the pre-Undo snapshot.
+ if(afterForm){publishedReadAgain=true;if(publishedFlight)publishedRequest++;}
+ if(!publishedFlight)publishedFlight=Promise.resolve().then(async()=>{
+  try{let result;do{publishedReadAgain=false;result=await loadPublishedPlaces();}while(publishedReadAgain);return result;}
+  finally{publishedFlight=null;}
+ });
+ return publishedFlight;
+}
+new MutationObserver(resumePublishedPlaces).observe($('casePanel'),{childList:true,subtree:true});
 window.HauntologiesPublic=Object.freeze({refresh:refreshPublishedPlaces});
 window.addEventListener('focus',refreshPublishedPlaces);
 function setHostedRecords(records){hostedRecords=records;populateFacets();renderRecords()}
@@ -546,7 +579,7 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&selectingCo
  // The visible place field replaced the old picker button, which is now hidden.
  ($('contributionPlace')||$('chooseExistingPlace')).focus();}});
 
-window.addEventListener('contributions-records-changed',event=>{if(!event.detail?.publicRefresh)refreshPublishedPlaces();});
+window.addEventListener('contributions-records-changed',event=>{if(!event.detail?.publicRefresh)refreshPublishedPlaces({afterForm:true});});
 
 // Keep the visible reading position while browser chrome, text or orientation changes.
 function setupPlaceLayout(){

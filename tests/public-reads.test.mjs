@@ -86,3 +86,38 @@ test('actual pending refresh coalesces bursts and preserves current records on f
     assert.equal(h.context.pendingUnavailable,false);
   }
 });
+
+for(const deferred of [false,true])test(`a completed form fences an older public read and queues one fresh read (${deferred?'already deferred':'still in flight'})`,async()=>{
+ const pending=[],h=setup(()=>new Promise(resolve=>pending.push(resolve)));let form=false,observe;
+ const panel={scrollTop:0,querySelector:()=>form?{}:null,querySelectorAll:()=>[],contains:()=>false};
+ Object.assign(h.context,{$:()=>panel,document:{activeElement:null},publicReads:h.api,publishedPlaces:[],populateFacets(){},renderRecords(){h.context.rendered=h.context.records();},CustomEvent:class{},MutationObserver:class{constructor(fn){observe=fn;}observe(){}}});
+ h.context.window.dispatchEvent=()=>{};
+ const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ vm.runInContext(app.slice(app.indexOf('let publishedRequest='),app.indexOf("window.addEventListener('focus',refreshPublishedPlaces);"))+';globalThis.records=()=>publishedPlaces;',h.context);
+ const refresh=h.context.window.HauntologiesPublic.refresh;
+ let run=refresh();await flush();pending.shift()(response(200,{records:[{id:'place',title:'Before'}]}));await run;
+ form=true;
+ if(deferred){run=refresh();await flush();pending.shift()(response(200,{records:[{id:'place',title:'Intermediate'}]}));await run;}
+ const old=refresh();await flush();assert.equal(pending.length,1);form=false;
+ // A successful Undo fires a local change event even when no previous read was deferred.
+ const fresh=refresh({afterForm:true});assert.equal(old,fresh);observe();
+ pending.shift()(response(200,{records:[{id:'place',title:'Stale before Undo'}]}));await flush();
+ assert.equal(h.context.rendered[0].title,'Before','the obsolete result must not be applied');assert.equal(pending.length,1,'one trailing read starts');
+ pending.shift()(response(200,{records:[{id:'place',title:'After Undo'}]}));await fresh;
+ assert.equal(h.context.rendered[0].title,'After Undo');
+});
+
+test('a publication arriving during refresh completion is never swallowed by flight finalization',async()=>{
+ for(const delay of [0,1,2,3,4]){
+  const pending=[],h=setup(()=>new Promise(resolve=>pending.push(resolve)));let once=true;
+  const panel={scrollTop:0,querySelector:()=>null,querySelectorAll:()=>[],contains:()=>false};
+  Object.assign(h.context,{$:()=>panel,document:{activeElement:null},publicReads:h.api,publishedPlaces:[],populateFacets(){},renderRecords(){
+   if(!once)return;once=false;let schedule=()=>h.context.window.HauntologiesPublic.refresh({afterForm:true});
+   for(let i=0;i<delay;i++){const next=schedule;schedule=()=>Promise.resolve().then(next);}schedule();
+  },CustomEvent:class{},MutationObserver:class{observe(){}}});h.context.window.dispatchEvent=()=>{};
+  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+  vm.runInContext(app.slice(app.indexOf('let publishedRequest='),app.indexOf("window.addEventListener('focus',refreshPublishedPlaces);"))+';globalThis.records=()=>publishedPlaces;',h.context);
+  const initial=h.context.window.HauntologiesPublic.refresh();await flush();pending.shift()(response(200,{records:[{id:'place',title:'Before'}]}));await flush();
+  assert.equal(pending.length,1,'a new read starts after '+delay+' microtasks');pending.shift()(response(200,{records:[{id:'place',title:'After'}]}));await initial;await flush();assert.equal(h.context.records()[0].title,'After');
+ }
+});

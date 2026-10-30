@@ -98,10 +98,14 @@ async function contributions(req, url) {
   return service.handle(new Request(url, { method: req.method, headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : await body(req) }));
 }
 
+const publicRoot = path.join(repo, 'public') + path.sep;
+const pages = { '/': 'web/index.html', '/activity': 'web/activity.html', '/guide': 'web/guide.html', '/register': 'web/registration.html' };
 function file404(pathname) {
   if (pathname === '/contributors') return new Response(null, {status:302,headers:{location:'/#contributors'}});
-  const target = pathname === '/' ? path.join(repo, 'web/index.html') : pathname === '/activity' ? path.join(repo, 'web/activity.html') : pathname === '/guide' ? path.join(repo, 'web/guide.html') : pathname === '/register' ? path.join(repo, 'web/registration.html') : path.join(repo, 'public', decodeURIComponent(pathname));
-  if (!target.startsWith(repo) || !existsSync(target) || statSync(target).isDirectory()) return new Response('Not found', { status: 404 });
+  // Only the pages and files under public/ are served; encoded "../" cannot reach .local/ or other data.
+  let target;
+  try { target = pages[pathname] ? path.join(repo, pages[pathname]) : path.join(publicRoot, decodeURIComponent(pathname)); } catch { return new Response('Not found', { status: 404 }); }
+  if ((!pages[pathname] && !target.startsWith(publicRoot)) || !existsSync(target) || statSync(target).isDirectory()) return new Response('Not found', { status: 404 });
   return new Response(readFileSync(target), { headers: { 'Content-Type': types[path.extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' } });
 }
 

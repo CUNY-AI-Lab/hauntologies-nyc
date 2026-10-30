@@ -188,3 +188,11 @@ test('Undo a note keeps later notes and its inverse cannot resurrect revoked not
  await undo(inverse.receipt.result.event_id);assert.equal((await publishedRecords(h.db))[0].notes.length,2);
  ok(await call(h,'revoke',body(a.submission)),200);assert.deepEqual((await publishedRecords(h.db))[0].notes.map(n=>n.text),['Independent later note']);assert.ok(!JSON.stringify(await directHistory(h.db,place.id)).includes('Withdrawn note text'));
 });
+
+test('owner mutations require the revision they act on, and Undo requires a valid event ID',async t=>{
+ const h=harness(t),published=await publish(h,proposal('Guarded place')),s=published.submission;
+ for(const action of ['revoke','delete']){const missing=await call(h,action,{idempotency_key:key(),submission_id:s.id});assert.equal(missing.status,409,action);assert.equal(missing.body.error,'revision_conflict');}
+ assert.equal((await call(h,'submission?id='+s.id)).body.submission.status,'published');
+ const resolved=await getTarget(h,published.receipt.result.record_id);
+ for(const event_id of [undefined,'',' bad id ']){const undo=await call(h,'undo',{idempotency_key:key(),...(event_id===undefined?{}:{event_id}),expected_version:resolved.expected_version,expected_hash:resolved.expected_hash,moniker,change_summary:'Undo without a valid event'});assert.equal(undo.status,400,JSON.stringify(undo.body));assert.equal(undo.body.error,'invalid_event_id');}
+});

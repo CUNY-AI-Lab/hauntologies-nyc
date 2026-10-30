@@ -14,6 +14,60 @@ function edit(resolved, changes={title:'Lantern house corrected',description:'Sy
 const note = resolved => ({...proposal('Note'),summary:'An independently owned note',targets:[{record_id:resolved.record_id,expected_version:resolved.expected_version,expected_hash:resolved.expected_hash}],payload:{explanation:'An independently owned note',sources_text:'A synthetic citation'}});
 const output = h => readPublicContributions(h.db,h.staticRecords);
 
+async function releaseLegacy(h,envelope) {
+ const submitted=await h.call('submit',{idempotency_key:crypto.randomUUID(),submission_json:JSON.stringify(envelope)});assert.equal(submitted.status,201);
+ const s=submitted.body.submission;
+ const approved=await h.call('review',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,payload_hash:s.payload_hash,diff_hash:s.diff_hash,checks:Object.fromEntries(CHECKS.map(key=>[key,'pass'])),rationale:'Synthetic historical release'},'reviewer');assert.equal(approved.status,200);
+ const staged=await h.call('apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:approved.body.submission.approval.approval_hash},'publisher');assert.equal(staged.status,201);
+ const verified=await h.call('verify',{idempotency_key:crypto.randomUUID(),job_id:staged.body.job.id,map_list_check:{status:'pass',evidence:'Synthetic historical map verification'}},'publisher');assert.equal(verified.status,200);
+ return verified.body.job;
+}
+
+test('retroactive create and field edit combine with four direct publications without writing synthetic events',async t=>{
+ const h=contributorsHarness(t,{publicationMode:'legacy',authorization:{reviewers:['reviewer'],publishers:['publisher']}});
+ const created=await releaseLegacy(h,proposal('Earlier house')),id=created.manifest.targets[0].record_id;
+ const edited=await releaseLegacy(h,edit(await target(h,id),{title:'Earlier house corrected',description:'Five fields in one edit',place_type:'house',borough:'Manhattan',source_citation:'Archive box 2'}));
+ const direct=contributorsHarness(null,{db:h.db,initialize:false});
+ const one=await publish(direct,proposal('Later house A')),two=await publish(direct,proposal('Later house B'));
+ assert.equal(one.status,200);assert.equal(two.status,200);
+ await publish(direct,note(await target(direct,one.body.receipt.result.record_id)));
+ await publish(direct,note(await target(direct,id)));
+ h.db.native.prepare("UPDATE workflow_jobs SET created_at='2000-01-01T00:00:00.000Z'").run();
+ const count=()=>h.db.native.prepare('SELECT count(*) n FROM workflow_events').get().n,before=count();
+ const result=await output(h),again=await output(h);
+ assert.deepEqual(result.totals,{published:6,added:3,edits:1,notes:2,undo:0,unclassified:0,legacy:2,unique_places_edited:1,unattributed:0,unattributed_legacy:0,places:4});
+ assert.deepEqual(again.totals,result.totals);assert.equal(count(),before,'public reads never manufacture events');
+ assert.equal(result.contributors[0].published,6);assert.equal(result.contributors[0].added,3);assert.equal(result.contributors[0].edits,1);
+ assert.equal(result.places.find(p=>p.id===id).contributions.published.value,3);
+ assert.equal(result.activity.length,6);assert.equal(result.activity.find(e=>e.kind==='edit').at,edited.verification.checked_at);
+ assert.ok(!result.activity.some(e=>e.at==='2000-01-01T00:00:00.000Z'));
+ h.db.native.prepare("DELETE FROM workflow_events WHERE job_id=? AND kind='verified'").run(edited.id);
+ assert.equal((await output(h)).activity.find(e=>e.kind==='edit').at,edited.verification.checked_at,'successful verification receipt is a timestamp fallback');
+ h.db.native.prepare("UPDATE workflow_jobs SET verification_json=json_remove(verification_json,'$.checked_at') WHERE id=?").run(edited.id);
+ assert.equal((await output(h)).activity.find(e=>e.kind==='edit').at,null,'missing publication dates are never inferred from job creation');
+});
+
+test('legacy note operations count as notes rather than edits and disappear on revocation',async t=>{
+ const h=contributorsHarness(t,{publicationMode:'legacy',authorization:{reviewers:['reviewer'],publishers:['publisher']}});
+ const job=await releaseLegacy(h,note(await target(h,basePlace.id)));
+ let result=await output(h);assert.equal(result.totals.published,1);assert.equal(result.totals.notes,1);assert.equal(result.totals.edits,0);assert.equal(result.totals.added,0);assert.equal(result.activity[0].kind,'note');
+ assert.equal((await h.call('revoke',{idempotency_key:crypto.randomUUID(),submission_id:job.submission_id,expected_revision:job.revision})).status,200);
+ result=await output(h);assert.equal(result.totals.published,0);assert.equal(result.totals.notes,0);assert.deepEqual(result.activity,[]);
+});
+
+test('legacy bundles count one release and distinct added places; imports and unsupported classifications never inflate types',()=>{
+ const second={...basePlace,id:'second_base',title:'Second synthetic place'},target=id=>({record_id:id,after:1,operation:'create_entry',before_type:'null'});
+ const legacy={section:'legacy',id:'bundle',actor_id:'private_actor',credit_json:'{}',manifest_json:JSON.stringify({submission_type:'entry_bundle',targets:[target(basePlace.id),target(second.id),target(basePlace.id)]})};
+ let result=projectPublicContributions({staticRecords:[basePlace,second],rows:[legacy,legacy]});
+ assert.equal(result.totals.published,1);assert.equal(result.totals.added,2);assert.equal(result.activity.length,1);assert.equal(result.activity[0].place_count,2);assert.equal(result.totals.unattributed,1);assert.equal(result.totals.unattributed_legacy,1);
+ const missing={...legacy,manifest_json:JSON.stringify({submission_type:'entry_bundle',targets:[{record_id:basePlace.id,after:1}]})};
+ result=projectPublicContributions({staticRecords:[basePlace],rows:[missing]});assert.equal(result.totals.unclassified,1);assert.equal(result.metrics.added.coverage,'partial');assert.equal(result.activity[0].kind,'publication');assert.equal(result.activity[0].at,null);
+ const imported={...legacy,manifest_json:JSON.stringify({submission_type:'bulk_import',targets:[target(basePlace.id)]})};
+ assert.equal(projectPublicContributions({staticRecords:[basePlace],rows:[imported]}).totals.published,0);
+ const correction={...legacy,manifest_json:JSON.stringify({submission_type:'citation_correction',targets:[{record_id:basePlace.id,after:1,operation:'citation_correction',before_type:'object'}]})};
+ assert.equal(projectPublicContributions({staticRecords:[basePlace],rows:[correction]}).totals.edits,1);
+});
+
 test('real SQLite publication, five-field edit, note, undo and retry use event units',async t=>{
  const h=contributorsHarness(t),key=crypto.randomUUID(),created=await publish(h,proposal(),undefined,{idempotency_key:key});assert.equal(created.status,200);
  const retry=await publish(h,proposal(),undefined,{idempotency_key:key});assert.equal(retry.body.reused,true);assert.deepEqual(retry.body.receipt,created.body.receipt);
@@ -65,7 +119,7 @@ test('legacy jobs deduplicate separately and unknown event kinds stay partial',(
  const legacy={section:'legacy',id:'legacy_one',actor_id:'private_legacy_actor',credit_json:JSON.stringify({public_credit:{consent:true,label:'Older Owl',identity:'moniker'}}),manifest_json:JSON.stringify({targets:[{record_id:record.id,after:{}}]})};
  const unknown={section:'event',id:'event_unknown',actor_id:'private_unknown',credit_json:'{}',event_json:JSON.stringify({kind:'unknown_legacy_kind',record_id:record.id,moniker:'Unused'})};
  const result=projectPublicContributions({rows:[record,legacy,legacy,unknown,unknown]});
- assert.equal(result.totals.legacy,1);assert.equal(result.totals.unclassified,1);assert.equal(result.totals.published,1);assert.equal(result.metrics.edits.coverage,'partial');assert.equal(result.contributors[0].published,0);assert.equal(result.contributors[0].legacy,1);
+ assert.equal(result.totals.legacy,1);assert.equal(result.totals.unclassified,2);assert.equal(result.totals.published,2);assert.equal(result.metrics.edits.coverage,'partial');assert.equal(result.contributors[0].published,1);assert.equal(result.contributors[0].legacy,1);assert.equal(result.contributors[0].metrics.edits.coverage,'partial');
 });
 
 test('roster hidden is the stricter outcome even for explicit moniker consent',async t=>{
@@ -83,8 +137,8 @@ test('verified legacy SQL requires live authorized publication and excludes its 
  const staged=await h.call('apply',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision,approval_hash:approval.body.submission.approval.approval_hash},'publisher');assert.equal(staged.status,201);
  assert.equal((await output(h)).totals.legacy,0);
  const verified=await h.call('verify',{idempotency_key:crypto.randomUUID(),job_id:staged.body.job.id,map_list_check:{status:'pass',evidence:'Synthetic map check'}},'publisher');assert.equal(verified.status,200);
- let result=await output(h);assert.equal(result.totals.legacy,1);assert.equal(result.totals.published,0);assert.equal(result.contributors[0].name,'Night Owl');assert.equal(result.contributors[0].metrics.legacy.unit,'releases');
- assert.deepEqual(result.activity,[],'legacy job creation is not a direct-publication timestamp or event');
+ let result=await output(h);assert.equal(result.totals.legacy,1);assert.equal(result.totals.published,1);assert.equal(result.totals.edits,1);assert.equal(result.contributors[0].name,'Night Owl');assert.equal(result.contributors[0].metrics.legacy.unit,'releases');
+ assert.equal(result.activity[0].kind,'edit');assert.equal(result.activity[0].at,verified.body.job.verification.checked_at,'actual verification time supplies the publication date');
  const revoked=await h.call('revoke',{idempotency_key:crypto.randomUUID(),submission_id:s.id,expected_revision:s.revision});assert.equal(revoked.status,200);
  result=await output(h);assert.equal(result.totals.legacy,0);assert.equal(result.contributors.length,0);assert.ok(!JSON.stringify(result).includes('Older edited place'));
 });
