@@ -34,7 +34,22 @@ pilot.category='pilot';pilot.borough='Manhattan';
 let hostedRecords=[],publishedPlaces=[];
 const allRecords=()=>[...new Map([...drafts,pilot,...sourceInventory.records,...publishedPlaces].map(record=>[record.id,record])).values()];
 let publishedRequest=0,publishedSignature='';
-async function loadPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const page=await publicReads.json('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''));if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop;populateFacets();renderRecords();panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+async function loadPublishedPlaces(){const request=++publishedRequest;try{const data={records:[]};let cursor='',seen=new Set();do{const page=await publicReads.json('/api/published-records'+(cursor?'?after='+encodeURIComponent(cursor):''));if(request!==publishedRequest||!Array.isArray(page.records))return false;data.records.push(...page.records);cursor=page.next_cursor||'';if(cursor&&seen.has(cursor))return false;seen.add(cursor);}while(cursor);const signature=JSON.stringify(data.records);if(signature!==publishedSignature){if(typingInPlaceCard())return true;publishedSignature=signature;publishedPlaces=data.records;const panel=$('casePanel'),scroll=panel.scrollTop,cards=placeCardState();populateFacets();renderRecords();restorePlaceCardState(cards);panel.scrollTop=scroll;window.dispatchEvent(new CustomEvent('contributions-records-changed',{detail:{publicRefresh:true}}));}return true;}catch{return false;}}
+// Background refreshes rebuild every card. Someone typing an Undo waits for the next refresh,
+// and open History, Notes and Record sections reopen with focus where it was.
+function typingInPlaceCard(){const active=document.activeElement;return Boolean(active?.matches?.('input,textarea,select')&&active.closest('.place-card form')&&$('casePanel').contains(active));}
+const cardFor=id=>[...$('casePanel').querySelectorAll('.place-card')].find(card=>card.dataset.placeId===id);
+function placeCardState(){
+ const open=[...$('casePanel').querySelectorAll('.place-card > details[open]')].map(d=>({id:d.parentElement.dataset.placeId,cls:d.className}));
+ const active=document.activeElement,card=active?.closest?.('.place-card');let focus=null;
+ if(card&&$('casePanel').contains(card)){const d=active.closest('details');if(active.tagName==='SUMMARY'&&d?.parentElement===card)focus={id:card.dataset.placeId,cls:d.className};else if(active.classList.contains('place-select'))focus={id:card.dataset.placeId,cls:null};}
+ return{open,focus};
+}
+function restorePlaceCardState({open,focus}){
+ const section=(card,cls)=>[...card.children].find(child=>child.tagName==='DETAILS'&&child.className===cls);
+ for(const item of open){const card=cardFor(item.id),details=card&&section(card,item.cls);if(details)details.open=true;}
+ const card=focus&&cardFor(focus.id),target=card&&(focus.cls===null?card.querySelector('.place-select'):section(card,focus.cls)?.querySelector(':scope > summary'));target?.focus({preventScroll:true});
+}
 const refreshPublishedPlaces=publicReads.singleFlight(loadPublishedPlaces);
 window.HauntologiesPublic=Object.freeze({refresh:refreshPublishedPlaces});
 window.addEventListener('focus',refreshPublishedPlaces);

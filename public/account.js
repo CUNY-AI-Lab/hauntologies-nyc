@@ -15,7 +15,9 @@
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
-      const value = await response.json();
+      // A proxy or platform error page is not JSON; report the service as unavailable, not a parser message.
+      let value;
+      try { value = await response.json(); } catch { throw Object.assign(new Error(messages.account_unavailable), { status: response.status, code: 'account_unavailable' }); }
       if (!response.ok) throw Object.assign(new Error(messages[value.error] || 'Please try again.'), { status: response.status, code: value.error });
       return value;
     } finally { clearTimeout(timer); }
@@ -119,7 +121,11 @@
       if (check !== checks) return;
       // A temporary service failure does not prove the retained account signed out.
       // Keep its private controls unavailable and retry on focus or the next interval.
-      if (pausedSession() && error.status !== 401 && error.status !== 403) return;
+      // A signed-in account pauses instead, so a dropped request on shared Wi-Fi does not end the
+      // session, clear the open form or close the editors; a quick retry restores it.
+      const transient = error.status !== 401 && error.status !== 403;
+      if (transient && window.HauntologiesAccount?.snapshot().status === 'signed_in') { window.HauntologiesAccount.pause(); setTimeout(reconcilePaused, 5000); return; }
+      if (pausedSession() && transient) return;
       const currentDialog = version === generation; identity(null);
       if (!currentDialog) return;
       if (error.status === 401) window.dispatchEvent(new CustomEvent('contributions-session-ended'));

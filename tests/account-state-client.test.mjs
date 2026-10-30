@@ -139,3 +139,18 @@ test('ambiguous sign-out fails closed without claiming a confirmed logout or del
  const control=h.node('accountActions').children.find(n=>n.textContent==='Sign out'),leaving=control.emit('click');await h.settle();assert.equal(h.requests[2].path,'/api/auth/sign-out');h.answer(h.requests[2],{error:'account_unavailable'},503);await leaving;
  assert.equal(h.api.canContribute(),false);assert.equal(h.controls[0].hidden,true);assert.match(h.node('accountStatus').textContent,/Sign-out could not be confirmed/);assert.equal(h.saved.has('hauntologies-signed-out:actor-a'),false);
 });
+test('a signed-in poll that fails on a dropped connection pauses and retries instead of signing out',async()=>{
+ const h=accountFixture(),timers=[];h.context.setTimeout=(fn,delay)=>{if(delay===5000)timers.push(fn);return 1;};
+ const ended=()=>h.events.filter(e=>e.type==='contributions-session-ended').length,session={actor_id:'actor-a',password_required:false,email:'synthetic@example.test'};
+ h.answer(h.requests[0],session);await h.settle();assert.equal(h.api.snapshot().status,'signed_in');
+ h.intervals[0]();assert.equal(h.requests.length,2);h.answer(h.requests[1],{error:'unavailable'},503);await h.settle();
+ assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.api.snapshot().actor,'actor-a');assert.equal(h.api.canContribute(),false);assert.equal(ended(),0);assert.equal(h.node('accountButton').textContent,'Account');
+ assert.equal(timers.length,1,'a quick retry is scheduled');timers[0]();assert.equal(h.requests.length,3);h.answer(h.requests[2],session);await h.settle();
+ assert.equal(h.api.snapshot().status,'signed_in');assert.equal(ended(),0);
+ // A platform error page is not JSON; it pauses the account and never surfaces a parser message.
+ h.intervals[0]();h.requests[3].resolve({ok:false,status:502,json:async()=>{throw new SyntaxError('Unexpected token <');}});await h.settle();
+ assert.equal(h.api.snapshot().status,'unknown');assert.equal(h.api.snapshot().actor,'actor-a');assert.equal(ended(),0);assert.doesNotMatch(h.node('accountStatus').textContent,/Unexpected token/);
+ // An expired session still ends the account.
+ h.window.dispatchEvent({type:'focus'});h.answer(h.requests[4],{error:'sign_in_required'},401);await h.settle();
+ assert.equal(h.api.snapshot().status,'signed_out');assert.equal(h.api.snapshot().actor,null);assert.ok(ended()>=1);
+});
