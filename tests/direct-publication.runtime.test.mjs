@@ -24,3 +24,9 @@ test('actual account gate and Workers/D1 publish, replay, revoke and delete with
  const publishLegacy=await h.call('/api/contributions/publish',{idempotency_key:key(),submission_id:legacy.body.submission.id,expected_revision:1,moniker:'night.owl',change_summary:'Explicitly publish my saved work'},owner);assert.equal(publishLegacy.status,200,JSON.stringify(publishLegacy.body));assert.equal((await h.call('/api/published-records')).body.records.length,1);
  for(const action of ['review','apply','verify','rollback'])assert.equal((await h.call('/api/contributions/'+action,{idempotency_key:key()},owner)).status,404);
 });
+
+test('place History rejects a malformed record ID as a client error, not an outage',async t=>{
+ const h=await harness(t,{publicationMode:'direct'});
+ for(const id of ['bad%20id','%2E%2E','x'.repeat(200)]){const response=await h.call('/api/place-history?id='+id);assert.equal(response.status,400,id);assert.equal(response.body.error,'invalid_record_id');}
+ const known=await h.call('/api/place-history?id=synthetic_unknown_place');assert.equal(known.status,200);assert.deepEqual(known.body.items,[]);
+});
