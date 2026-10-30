@@ -69,7 +69,7 @@ export function createDirectPublisher({store,resolveTarget,preview,audit,receipt
     else{
      const c=envelope.payload?.geometry?.coordinates;if(envelope.type!=='open_proposal'||!Array.isArray(c)||c.length!==2)fail('place_or_point_required',409);
      recordId='place_'+id.slice(3);state=await stateFor(recordId);if(state.stored)fail('record_exists',409);
-     const record={id:recordId,title:envelope.title,description:envelope.payload.explanation,location_text:envelope.payload.location_text||'',latitude:c[1],longitude:c[0],geo_status:'approximate',category:'reported_haunting',sources:envelope.sources.map((s,i)=>({...s,source_id:'source_'+i}))};
+     const record={id:recordId,title:envelope.title,description:envelope.payload.explanation,location_text:envelope.payload.location_text||'',latitude:c[1],longitude:c[0],geo_status:'approximate',sources:envelope.sources.map((s,i)=>({...s,source_id:'source_'+i}))};
      if(envelope.payload.sources_text)record.sources.push({source_id:'source_freeform',title:envelope.payload.sources_text});
      if(envelope.payload.attributes?.length)record.attributes=envelope.payload.attributes;
      changes=difference(normalizedRecord({}),normalizedRecord(record));kind='create';
