@@ -2,6 +2,8 @@
 (() => {
   const byId=id=>document.getElementById(id), list=byId('activityList'), status=byId('activityStatus');
   const verbs={create:'added a place',edit:'edited a place',note:'updated a place',undo:'published an undo',publication:'published a contribution'};
+  // Omit the requested older Thomas Shoe Factory feed entry; retain its Place and audit history.
+  const hiddenEntry=event=>event.place.id==='wf_HNY-4ECE1F1584C3' && event.kind==='create' && event.at==='2026-10-25T03:16:07.618Z';
   let events=[], shown=0, generation=0;
   const node=(tag,text,className)=>{const element=document.createElement(tag);if(text!==undefined)element.textContent=text;if(className)element.className=className;return element;};
   function valid(data) {
@@ -35,7 +37,7 @@
       const data=await window.HauntologiesPublicReads.json('/api/activity');
       if(request!==generation || document.hidden)return;
       if(!valid(data))throw new Error('Invalid public activity');
-      events=data.events;more();byId('activityEmpty').hidden=!!events.length;
+      events=data.events.filter(event=>!hiddenEntry(event));more();byId('activityEmpty').hidden=!!events.length;
       status.textContent='';
     } catch {if(request===generation)status.textContent='Public activity is unavailable. Select Refresh to try again.';}
     finally {if(request===generation){byId('refreshActivity').disabled=false;list.setAttribute('aria-busy','false');}}
