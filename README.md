@@ -60,3 +60,13 @@ The existing D1 binding is `DB`. Do not put participant data, credentials or pri
 ## Questions
 
 Write to Zach Muhlbauer at zmuhlbauer@gc.cuny.edu with questions about the event or to ask for a guest access code. Problems with the site itself can be opened as issues in this repository; keep attendee names, email addresses and submission details out of them.
+
+## License
+
+Copyright © 2026 CUNY AI Lab, The Graduate Center, City University of New York.
+
+This software is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (AGPL-3.0-or-later). You may use, study, change, and share it, including for commercial purposes. If you distribute a modified version, or run one as a network service that other people use, you must make its complete source code available to them under the same license.
+
+This license applies to every version of this repository, including earlier commits. Third-party components keep their own licenses: `public/vendor/markercluster/` is Leaflet.markercluster under its own license (see its `LICENSE`).
+
+Questions about licensing: [ailab@gc.cuny.edu](mailto:ailab@gc.cuny.edu). See CAIL's [licensing page](https://ailab.gc.cuny.edu/license/).
