@@ -6,7 +6,7 @@ These instructions follow the source on `main`. The live map can trail `main` un
 
 ## Two sign-ups
 
-Event registration records a name and email address and shows a receipt on the screen. It does not create a map account or send a confirmation email. A map account is the email-and-password login used to save and submit contributions. The two sign-ups are independent, and an event registration made on another device or browser will not appear in this browser's Account dialog.
+Event registration records a name and email address and shows a receipt on the screen. It does not create a map account or send a confirmation email. The form tells registrants that the name and email are used only for event registration, are deleted after the event, and that questions go to ailab@gc.cuny.edu. A map account is the email-and-password login used to save and submit contributions. The two sign-ups are independent, and an event registration made on another device or browser will not appear in this browser's Account dialog.
 
 The registration page at https://hauntologies-nyc.ailab-452.workers.dev/register links to account creation. Once signed in, the Account dialog has a collapsed Registration section with the receipt this browser remembers or a link to register for the event.
 
