@@ -10,6 +10,8 @@ p { margin: 0 0 16px; }
 .event-details { margin-bottom: 24px; }
 .programs { color: #bbb5a9; font-size: 13px; }
 #registrationForm { display: grid; gap: 6px; }
+.registration-privacy { margin: 0 0 10px; color: #bbb5a9; font-size: 13px; line-height: 1.45; }
+.registration-privacy a { color: #ebc395; text-underline-offset: 3px; }
 label { font-size: 14px; }
 input { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 12px; padding: 8px 10px; border: 1px solid #827563; border-radius: 0; background: #161916; color: #e9e3d7; font: inherit; }
 input[readonly] { color: #bbb5a9; }
